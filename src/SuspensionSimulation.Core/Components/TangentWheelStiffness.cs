@@ -77,8 +77,8 @@ public static class TangentWheelStiffnessCalculator
         var p = bar.Properties;
         // Recover geometry only through an explicit local geometric contract, never infer it from link length.
         var g = bar.Geometry;
-        var aLeft = g.Left.WheelToEndLinkVerticalMotionRatio / g.Left.LeverArmM;
-        var aRight = g.Right.WheelToEndLinkVerticalMotionRatio / g.Right.LeverArmM;
+        var aLeft = g.Left.WheelToEndLinkVerticalMotionRatio * Math.Pow(Math.Cos(g.Left.EndLinkAngleFromVerticalRad), 2) / g.Left.LeverArmM;
+        var aRight = g.Right.WheelToEndLinkVerticalMotionRatio * Math.Pow(Math.Cos(g.Right.EndLinkAngleFromVerticalRad), 2) / g.Right.LeverArmM;
         var diagnostics = new List<ComponentTangentDiagnostic>();
         AddAngleDiagnostic(g.Left.EndLinkAngleFromVerticalRad, "left", diagnostics);
         AddAngleDiagnostic(g.Right.EndLinkAngleFromVerticalRad, "right", diagnostics);

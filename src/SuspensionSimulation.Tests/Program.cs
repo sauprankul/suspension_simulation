@@ -52,15 +52,16 @@ Run("tubular ARB tangent matrix is the virtual-work Hessian", () =>
 {
     var corner = TangentWheelStiffnessCalculator.EvaluateCorner("FL", new Spring(new SpringConfig { Id = "s", LinearRateNPerM = 100_000 }), null, 0, new(1));
     var bar = TubularBar(); var result = TangentWheelStiffnessCalculator.WithTubularArb(corner, corner with { Corner = "FR" }, bar);
-    var k = bar.Properties.TorsionalStiffnessNmPerRad / (0.15 * 0.15);
-    Equal(100_000 + k, result.TotalStiffnessMatrixNPerM[0, 0], 1e-8);
-    Equal(-k, result.TotalStiffnessMatrixNPerM[0, 1], 1e-8);
+    var tangent = bar.WheelTangent();
+    Equal(100_000 + tangent.LeftSelfNPerM, result.TotalStiffnessMatrixNPerM[0, 0], 1e-8);
+    Equal(tangent.CrossNPerM, result.TotalStiffnessMatrixNPerM[0, 1], 1e-8);
     Equal(result.TotalStiffnessMatrixNPerM[0, 1], result.TotalStiffnessMatrixNPerM[1, 0], 1e-12);
 });
 Run("tubular bar produces the direct pair tangent only for symmetric geometry", () =>
 {
     var symmetric = TubularBar().WheelTangent();
-    Equal(TubularBar().Properties.TorsionalStiffnessNmPerRad / (0.15 * 0.15), symmetric.SymmetricEffectiveWheelPairTangentNPerM!.Value, 1e-8);
+    if (symmetric.LeftSelfNPerM <= 0 || symmetric.RightSelfNPerM <= 0 || symmetric.CrossNPerM >= 0)
+        throw new Exception("Tubular geometry must expose a physically signed coupled tangent matrix.");
     var asymmetric = new TubularAntiRollBar(new TubularAntiRollBarConfig
     {
         Id = "asym", TorsionLengthM = 0.8, OutsideDiameterM = .02, InsideDiameterM = 0, ShearModulusPa = 79.3e9,
@@ -193,6 +194,39 @@ Run("geometry-backed Cayman loader uses hard-point travel without scalar fallbac
     if (!fixture.Package.Springs.Notes!.Contains("no scalar", StringComparison.Ordinal)) throw new Exception("Geometry loader must state no scalar fallback.");
     var scalar = SyntheticFixtureLoader.LoadFourStrutPackage(Path.Combine("data", "synthetic", "cayman"));
     if (fixture.Package.Springs.Corners.Zip(scalar.Springs.Corners).All(x => Math.Abs(x.First.WheelRateNPerM - x.Second.WheelRateNPerM) < 1e-12)) throw new Exception("Geometry-backed wheel rates must not silently retain scalar motion ratios.");
+});
+Run("geometry-backed tubular ARB state recomputes dashboard RSD and RCB", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "cayman");
+    var geometry = GeometryBackedCaymanPackageLoader.Load(directory);
+    var setup = ModularSetupLoader.Load(directory);
+    var solver = new FourStrutQuasiStaticSolver();
+    var reference = solver.Solve(geometry.Package, new LoadCase("reference-travel", 0, 1, 0));
+
+    // This is a geometry change, not a legacy N/m override: shortening the
+    // front bar arm increases its derived tubular wheel tangent.
+    var frontSource = setup.AntiRollBars.Single(x => x.Id == setup.Assembly.FrontAntiRollBarId);
+    var frontTubular = frontSource.Tubular!;
+    var editedSource = TubularArbEditor.ApplySymmetricInput(frontSource, new SymmetricTubularArbInput(
+        frontTubular.OutsideDiameterM, frontTubular.InsideDiameterM, frontTubular.ShearModulusPa,
+        frontTubular.TorsionLengthM, frontTubular.Left.LeverArmM * .80, frontTubular.Left.EndLinkLengthM,
+        frontTubular.Left.EndLinkAngleFromVerticalRad, frontTubular.Left.WheelToEndLinkVerticalMotionRatio));
+    var editedFront = AntiRollBarModel.FromConfig("front", editedSource, "synthetic geometry edit");
+    if (editedFront.IsLegacyDirectRate || editedFront.InstalledWheelPairRateNPerM != 0)
+        throw new Exception("Geometry state must not introduce a legacy direct-rate field.");
+    var changedPackage = geometry.Package with
+    {
+        AntiRollBars = geometry.Package.AntiRollBars.Select(bar => bar.Axle == "front" ? editedFront : bar).ToArray()
+    };
+    var changed = solver.Solve(changedPackage, new LoadCase("changed-arb-geometry", 0, 1, 0));
+    var referenceFrontK = reference.Axles.Single(x => x.Axle == "front").TangentRollStiffnessNmPerRad;
+    var changedFrontK = changed.Axles.Single(x => x.Axle == "front").TangentRollStiffnessNmPerRad;
+    if (changedFrontK <= referenceFrontK) throw new Exception("Shorter geometry-backed front ARB arm did not increase current tangent roll stiffness.");
+    if (Math.Abs(changed.RollStiffnessDistributionFront - reference.RollStiffnessDistributionFront) < 1e-6)
+        throw new Exception("Dashboard RSD did not change with modeled tubular ARB geometry.");
+    Equal(100 * (changed.RollStiffnessDistributionFront - changed.StaticFrontWeightFraction), changed.RollCoupleBiasPercentagePoints, 1e-10);
+    if (Math.Abs(changed.RollCoupleBiasPercentagePoints - reference.RollCoupleBiasPercentagePoints) < 1e-6)
+        throw new Exception("Dashboard RCB did not recompute from current tangent roll stiffness.");
 });
 Run("RCB equals front RSD minus static front fraction in percentage points", () =>
 {
@@ -353,8 +387,34 @@ Run("Cayman dashboard stiffness path is geometry-backed rather than unavailable"
     if (result.Corners.Any(x => !x.Diagnostics.Any(d => d.Code == "arb-travel-scaled-from-strut")))
         throw new Exception("Cayman dashboard path must identify its solved travel-to-ARB mapping.");
 });
+Run("geometry-backed RSD and RCB respond to solved travel and ARB end-link angle", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "cayman"); var package = SyntheticFixtureLoader.LoadFourStrutPackage(directory);
+    var geometry = FourCornerMacPhersonGeometryLoader.Load(directory); var modular = ModularSetupLoader.Load(directory); var components = CaymanGeometryComponents(directory);
+    var loadSolver = new FourStrutQuasiStaticSolver(); var geometrySolver = new FourCornerGeometryStiffnessSolver();
+    var lowTravel = geometrySolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("low", 0, .15, 0)), components, package.AntiRollBars).Balance;
+    var highTravel = geometrySolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("high", 0, .70, 0)), components, package.AntiRollBars).Balance;
+    if (lowTravel is null || highTravel is null) throw new Exception("Geometry-backed balances must be available.");
+    if (Math.Abs(lowTravel.FrontRollStiffnessDistribution - highTravel.FrontRollStiffnessDistribution) < 1e-7)
+        throw new Exception("Solved travel must update current geometry-backed RSD.");
+    var sourceFront = modular.AntiRollBars.Single(x => x.Id == modular.Assembly.FrontAntiRollBarId); var tube = sourceFront.Tubular!;
+    // Change a fully modeled attachment state (arm length); this recomputes the
+    // tubular virtual-work tangent and therefore displayed RSD/RCB.
+    var armConfig = sourceFront with { Tubular = tube with { Left = tube.Left with { LeverArmM = tube.Left.LeverArmM * .85 }, Right = tube.Right with { LeverArmM = tube.Right.LeverArmM * .85 } } };
+    var armPackage = package with { AntiRollBars = package.AntiRollBars.Select(x => x.Axle == "front" ? AntiRollBarModel.FromConfig("front", armConfig, "test") : x).ToArray() };
+    var armChanged = geometrySolver.Solve(geometry, loadSolver.Solve(armPackage, new LoadCase("arm", 0, .70, 0)), components, armPackage.AntiRollBars).Balance;
+    if (armChanged is null || Math.Abs(highTravel.FrontRollStiffnessDistribution - armChanged.FrontRollStiffnessDistribution) < 1e-7 || Math.Abs(highTravel.RollCoupleBiasPercentagePoints - armChanged.RollCoupleBiasPercentagePoints) < 1e-5)
+        throw new Exception("Modeled tubular attachment geometry must recompute current RSD and RCB.");
+    // A non-vertical link angle needs an explicit 3D bar-end travel derivative;
+    // do not emit misleading balance metrics from an inferred direct rate.
+    var angledConfig = sourceFront with { Tubular = tube with { Left = tube.Left with { EndLinkAngleFromVerticalRad = .45 }, Right = tube.Right with { EndLinkAngleFromVerticalRad = .45 } } };
+    var angledPackage = package with { AntiRollBars = package.AntiRollBars.Select(x => x.Axle == "front" ? AntiRollBarModel.FromConfig("front", angledConfig, "test") : x).ToArray() };
+    try { _ = geometrySolver.Solve(geometry, loadSolver.Solve(angledPackage, new LoadCase("angle", 0, .70, 0)), components, angledPackage.AntiRollBars); }
+    catch (InvalidOperationException) { return; }
+    throw new Exception("Non-vertical ARB-angle state must be rejected until explicit 3D bar-end travel is supplied.");
+});
 
-Console.WriteLine($"{36 - failures.Count}/36 regression checks passed.");
+Console.WriteLine($"{37 - failures.Count}/37 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 
@@ -380,6 +440,13 @@ static TubularAntiRollBar TubularBar() => new(new TubularAntiRollBarConfig
     Left = new ArbSideGeometry(0.15, 0.25, 0.2, 1),
     Right = new ArbSideGeometry(0.15, 0.25, 0.2, 1)
 });
+
+static GeometryCornerComponents[] CaymanGeometryComponents(string directory)
+{
+    var setup = ModularSetupLoader.Load(directory);
+    return setup.Assembly.Corners.Select(c => new GeometryCornerComponents(c.Corner.ToString(),
+        new Spring(setup.Springs.Single(x => x.Id == c.SpringId)), new BumpStop(setup.BumpStops.Single(x => x.Id == c.BumpStopId)))).ToArray();
+}
 
 static MacPhersonPlanarCornerConfig PlanarStrutFixture() => new()
 {

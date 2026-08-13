@@ -183,8 +183,23 @@ public partial class MainWindow : Window
         if (Lltd.IsChecked == true) selected.Add("lltd"); if (Rsd.IsChecked == true) selected.Add("rsd"); if (Rcb.IsChecked == true) selected.Add("rcb"); if (Loads.IsChecked == true) selected.Add("loads"); if (AxleSummary.IsChecked == true) selected.Add("summary"); if (Attitude.IsChecked == true) selected.Add("attitude"); if (Stiffness.IsChecked == true) selected.Add("stiffness");
         var metrics = new List<DashboardMetric>();
         if (selected.Contains("lltd")) metrics.Add(new("lltd", "Front LLTD", "%", Percent(_result.LoadTransferDistributionFront), true, "estimated"));
-        if (selected.Contains("rsd")) metrics.Add(new("rsd", "Front RSD", "%", Percent(_result.RollStiffnessDistributionFront), true, "estimated"));
-        if (selected.Contains("rcb")) metrics.Add(new("rcb", "RCB: RSD − static front fraction", "percentage points", _result.RollCoupleBiasPercentagePoints.ToString("F2", CultureInfo.InvariantCulture), "estimated"));
+        var balance = _geometryStiffness.Balance;
+        if (selected.Contains("rsd"))
+        {
+            var validity = balance?.Validity.ToString().ToLowerInvariant() ?? "unavailable";
+            var rsd = balance is null ? "Geometry tangent balance unavailable" : Percent(balance.FrontRollStiffnessDistribution);
+            metrics.Add(new("rsd", "Front RSD (current geometry/travel tangent)", "%", rsd, true, validity));
+            if (balance is not null)
+            {
+                AddAxleTangentMetrics(metrics, balance.Front); AddAxleTangentMetrics(metrics, balance.Rear);
+            }
+        }
+        if (selected.Contains("rcb"))
+        {
+            var validity = balance?.Validity.ToString().ToLowerInvariant() ?? "unavailable";
+            var rcb = balance is null ? "Geometry tangent balance unavailable" : balance.RollCoupleBiasPercentagePoints.ToString("F2", CultureInfo.InvariantCulture);
+            metrics.Add(new("rcb", "RCB: geometry RSD − static front fraction", "percentage points", rcb, true, validity));
+        }
         if (selected.Contains("loads")) foreach (var c in _result.Corners) metrics.Add(new($"load-{c.Corner}", $"{c.Corner} normal load", "N", c.NormalLoadN.ToString("F0", CultureInfo.InvariantCulture) + (c.IsLifted ? " (lift)" : ""), true, "estimated"));
         if (selected.Contains("summary"))
         {
@@ -238,6 +253,14 @@ public partial class MainWindow : Window
     private static double ReadNonNegative(TextBox box, string name) { var n = Read(box, name); return n >= 0 ? n : throw new InvalidOperationException($"{name} must be non-negative."); }
     private static double Read(TextBox box, string name) => double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && double.IsFinite(n) ? n : throw new InvalidOperationException($"{name} must be a finite number using . as decimal separator.");
     private static void Set(TextBox box, double value) => box.Text = value.ToString("G", CultureInfo.InvariantCulture);
+    private static void AddAxleTangentMetrics(ICollection<DashboardMetric> metrics, GeometryAxleTangentRollStiffness axle)
+    {
+        var validity = axle.Validity.ToString().ToLowerInvariant();
+        metrics.Add(new($"{axle.Axle}-roll-spring", $"{axle.Axle} spring tangent roll stiffness", "N·m/rad", axle.SpringNmPerRad.ToString("F0", CultureInfo.InvariantCulture), validity));
+        metrics.Add(new($"{axle.Axle}-roll-arb", $"{axle.Axle} ARB tangent roll stiffness", "N·m/rad", axle.ArbNmPerRad.ToString("F0", CultureInfo.InvariantCulture), validity));
+        metrics.Add(new($"{axle.Axle}-roll-stop", $"{axle.Axle} bump-stop tangent roll stiffness", "N·m/rad", axle.BumpStopNmPerRad.ToString("F0", CultureInfo.InvariantCulture), validity));
+        metrics.Add(new($"{axle.Axle}-roll-total", $"{axle.Axle} total tangent roll stiffness", "N·m/rad", axle.TotalNmPerRad.ToString("F0", CultureInfo.InvariantCulture), validity));
+    }
     private static string Percent(double value) => double.IsNaN(value) ? "undefined" : (100 * value).ToString("F2", CultureInfo.InvariantCulture);
     private static string Degrees(double radians) => (radians * 180 / Math.PI).ToString("F3", CultureInfo.InvariantCulture);
     private static void Add(Canvas canvas, UIElement item, double x, double y) { Canvas.SetLeft(item, x); Canvas.SetTop(item, y); canvas.Children.Add(item); }

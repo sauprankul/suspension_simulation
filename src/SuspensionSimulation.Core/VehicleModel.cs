@@ -76,11 +76,10 @@ public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRate
             return new(InstalledWheelPairRateNPerM, -InstalledWheelPairRateNPerM,
                 -InstalledWheelPairRateNPerM, InstalledWheelPairRateNPerM);
         if (Tubular is null) throw new InvalidOperationException($"Tubular ARB '{Axle}' has no geometry.");
-        var geometry = Tubular.Geometry; var torsion = Tubular.Properties.TorsionalStiffnessNmPerRad;
-        var left = geometry.Left.WheelToEndLinkVerticalMotionRatio / geometry.Left.LeverArmM;
-        var right = geometry.Right.WheelToEndLinkVerticalMotionRatio / geometry.Right.LeverArmM;
-        return new(torsion * left * left, -torsion * left * right,
-            -torsion * left * right, torsion * right * right);
+        var tangent = Tubular.WheelTangent();
+        if (string.Equals(tangent.Validity, "invalid", StringComparison.Ordinal))
+            throw new InvalidOperationException($"Tubular ARB '{Axle}' wheel tangent is unavailable: {string.Join(" ", tangent.Warnings)}");
+        return new(tangent.LeftSelfNPerM, tangent.CrossNPerM, tangent.CrossNPerM, tangent.RightSelfNPerM);
     }
 }
 

@@ -24,7 +24,9 @@ public sealed record TubularAntiRollBarConfig : Configuration.IVersionedConfigur
 /// <summary>
 /// `WheelToEndLinkVerticalMotionRatio` is d(end-link lower-joint vertical position)/d(wheel jounce).
 /// It must come from measured/solved suspension geometry; end-link length and angle cannot derive it.
-/// Angle is from vertical at ride height: zero is vertical and only converts vertical to axial link force.
+/// Angle is from vertical at ride height. The first-order axial-link projection maps lower-joint vertical
+/// motion to bar-end vertical motion by cos²(angle), so it affects wheel tangent and becomes singular
+/// as the link approaches horizontal.
 /// </summary>
 public sealed record ArbSideGeometry(
     double LeverArmM,
@@ -37,7 +39,8 @@ public sealed record TubularAntiRollBarProperties(
     double TorsionalStiffnessNmPerRad);
 
 public sealed record TubularArbWheelTangent(double LeftSelfNPerM, double RightSelfNPerM, double CrossNPerM,
-    double? SymmetricEffectiveWheelPairTangentNPerM, string Validity, IReadOnlyList<string> Warnings);
+    double? SymmetricEffectiveWheelPairTangentNPerM, string Validity, IReadOnlyList<string> Warnings,
+    double LeftAxialLinkExtensionPerWheelJounce = double.NaN, double RightAxialLinkExtensionPerWheelJounce = double.NaN);
 
 public sealed record TubularAntiRollBarEvaluation(
     double BarTwistRad,
@@ -82,14 +85,22 @@ public sealed class TubularAntiRollBar
     {
         if (!double.IsFinite(leftWheelToEndLinkVerticalMotionRatio) || !double.IsFinite(rightWheelToEndLinkVerticalMotionRatio))
             throw new ArgumentOutOfRangeException(nameof(leftWheelToEndLinkVerticalMotionRatio), "Travel derivatives must be finite.");
-        var aL = leftWheelToEndLinkVerticalMotionRatio / _config.Left.LeverArmM;
-        var aR = rightWheelToEndLinkVerticalMotionRatio / _config.Right.LeverArmM;
+        // A link angle alone does not determine how its upper attachment moves: that requires full
+        // 3D hard-point continuation. Refuse an alleged geometry-derived wheel Hessian when the
+        // supplied derivative is only lower-joint vertical motion and the link is materially angled.
+        if (Math.Abs(Math.Sin(_config.Left.EndLinkAngleFromVerticalRad)) > 1e-3 || Math.Abs(Math.Sin(_config.Right.EndLinkAngleFromVerticalRad)) > 1e-3)
+            return new(double.NaN, double.NaN, double.NaN, null, "invalid",
+                ["End-link angle is non-vertical. Lower-joint vertical motion plus link angle cannot determine bar-end motion; provide a solved bar-end travel derivative from 3D kinematics."],
+                leftWheelToEndLinkVerticalMotionRatio * Math.Cos(_config.Left.EndLinkAngleFromVerticalRad), rightWheelToEndLinkVerticalMotionRatio * Math.Cos(_config.Right.EndLinkAngleFromVerticalRad));
+        var aL = EffectiveBarEndMotionRatio(leftWheelToEndLinkVerticalMotionRatio, _config.Left) / _config.Left.LeverArmM;
+        var aR = EffectiveBarEndMotionRatio(rightWheelToEndLinkVerticalMotionRatio, _config.Right) / _config.Right.LeverArmM;
         var left = _properties.TorsionalStiffnessNmPerRad * aL * aL;
         var right = _properties.TorsionalStiffnessNmPerRad * aR * aR;
         var cross = -_properties.TorsionalStiffnessNmPerRad * aL * aR;
         var symmetric = Math.Abs(aL - aR) <= 1e-10 * Math.Max(1, Math.Max(Math.Abs(aL), Math.Abs(aR)));
         return new(left, right, cross, symmetric ? left : null, symmetric ? "valid" : "warning",
-            symmetric ? [] : ["Asymmetric side geometry: retain the coupled stiffness matrix; a single direct wheel-pair rate is not exact."]);
+            symmetric ? [] : ["Asymmetric side geometry: retain the coupled stiffness matrix; a single direct wheel-pair rate is not exact."],
+            leftWheelToEndLinkVerticalMotionRatio, rightWheelToEndLinkVerticalMotionRatio);
     }
 
     /// <summary>
@@ -99,8 +110,10 @@ public sealed class TubularAntiRollBar
     public TubularAntiRollBarEvaluation Evaluate(double leftWheelJounceM, double rightWheelJounceM)
     {
         if (!double.IsFinite(leftWheelJounceM) || !double.IsFinite(rightWheelJounceM)) throw new ArgumentOutOfRangeException(nameof(leftWheelJounceM));
-        var leftArmAngle = _config.Left.WheelToEndLinkVerticalMotionRatio * leftWheelJounceM / _config.Left.LeverArmM;
-        var rightArmAngle = _config.Right.WheelToEndLinkVerticalMotionRatio * rightWheelJounceM / _config.Right.LeverArmM;
+        var leftEffective = EffectiveBarEndMotionRatio(_config.Left.WheelToEndLinkVerticalMotionRatio, _config.Left);
+        var rightEffective = EffectiveBarEndMotionRatio(_config.Right.WheelToEndLinkVerticalMotionRatio, _config.Right);
+        var leftArmAngle = leftEffective * leftWheelJounceM / _config.Left.LeverArmM;
+        var rightArmAngle = rightEffective * rightWheelJounceM / _config.Right.LeverArmM;
         var twist = leftArmAngle - rightArmAngle;
         var torque = _properties.TorsionalStiffnessNmPerRad * twist;
         // -d(1/2*k*twist^2)/d(end-link vertical displacement), one side per arm.
@@ -109,8 +122,8 @@ public sealed class TubularAntiRollBar
         var leftAxial = AxialForce(leftVertical, _config.Left.EndLinkAngleFromVerticalRad);
         var rightAxial = AxialForce(rightVertical, _config.Right.EndLinkAngleFromVerticalRad);
         return new(twist, torque, leftVertical, rightVertical, leftAxial, rightAxial,
-            leftVertical * _config.Left.WheelToEndLinkVerticalMotionRatio,
-            rightVertical * _config.Right.WheelToEndLinkVerticalMotionRatio,
+            leftVertical * leftEffective,
+            rightVertical * rightEffective,
             0.5 * _properties.TorsionalStiffnessNmPerRad * twist * twist);
     }
 
@@ -121,6 +134,12 @@ public sealed class TubularAntiRollBar
         if (!double.IsFinite(side.EndLinkAngleFromVerticalRad) || Math.Abs(Math.Cos(side.EndLinkAngleFromVerticalRad)) < 1e-6)
             throw new ArgumentOutOfRangeException(name, "End-link angle must be finite and not horizontal.");
         if (!double.IsFinite(side.WheelToEndLinkVerticalMotionRatio)) throw new ArgumentOutOfRangeException(name, "Wheel-to-link vertical motion ratio must be finite.");
+    }
+    private static double EffectiveBarEndMotionRatio(double wheelToLowerLinkVerticalMotionRatio, ArbSideGeometry side)
+    {
+        // This bounded planar component evaluator remains available for force inspection. WheelTangent
+        // above refuses to promote an angled-link result to geometry-backed wheel stiffness.
+        return wheelToLowerLinkVerticalMotionRatio;
     }
     private static double AxialForce(double verticalForceN, double angleFromVerticalRad) => verticalForceN / Math.Cos(angleFromVerticalRad);
 }

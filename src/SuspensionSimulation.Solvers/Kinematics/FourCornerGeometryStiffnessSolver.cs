@@ -6,9 +6,27 @@ namespace SuspensionSimulation.Solvers.Kinematics;
 
 public sealed record GeometryCornerComponents(string Corner, Spring Spring, BumpStop? BumpStop);
 
+public sealed record GeometryAxleTangentRollStiffness(
+    string Axle,
+    double SpringNmPerRad,
+    double ArbNmPerRad,
+    double BumpStopNmPerRad,
+    double TotalNmPerRad,
+    ComponentTangentValidity Validity,
+    IReadOnlyList<ComponentTangentDiagnostic> Diagnostics);
+
+public sealed record GeometryBackedBalance(
+    GeometryAxleTangentRollStiffness Front,
+    GeometryAxleTangentRollStiffness Rear,
+    double FrontRollStiffnessDistribution,
+    double StaticFrontWeightFraction,
+    double RollCoupleBiasPercentagePoints,
+    ComponentTangentValidity Validity);
+
 public sealed record GeometryBackedStiffnessResult(
     IReadOnlyList<ComponentCornerTangentWheelStiffness> Corners,
     IReadOnlyDictionary<string, MacPhersonPlanarPose> Poses,
+    GeometryBackedBalance? Balance,
     IReadOnlyList<KinematicDiagnostic> Diagnostics,
     bool IsGeometryBacked);
 
@@ -82,7 +100,33 @@ public sealed class FourCornerGeometryStiffnessSolver
         var all = geometry.Corners.Keys.Select(corner => baseStiffness.TryGetValue(corner, out var item)
             ? item : Unavailable(corner, poses.TryGetValue(corner, out var pose) ? pose : null, "No stiffness result was produced.")).ToArray();
         var geometryBacked = all.All(x => x.Validity != ComponentTangentValidity.Invalid) && all.All(x => !double.IsNaN(x.TotalSelfNPerM));
-        return new(all, poses, diagnostics, geometryBacked);
+        var balance = geometryBacked ? Balance(geometry, all, poses, loadState.StaticFrontWeightFraction) : null;
+        return new(all, poses, balance, diagnostics, geometryBacked && balance is not null);
+    }
+
+    /// <summary>
+    /// Roll tangent is q'Kq at the solved pose, q = [-yL, -yR] for unit body roll.
+    /// ARB cross terms are retained rather than treating its diagonal as two independent springs.
+    /// </summary>
+    private static GeometryBackedBalance Balance(FourCornerMacPhersonGeometry geometry,
+        IReadOnlyList<ComponentCornerTangentWheelStiffness> all, IReadOnlyDictionary<string, MacPhersonPlanarPose> poses, double staticFrontWeightFraction)
+    {
+        var byCorner = all.ToDictionary(x => x.Corner, StringComparer.OrdinalIgnoreCase);
+        GeometryAxleTangentRollStiffness Axle(string axle)
+        {
+            var attachment = geometry.ArbAttachments[axle]; var left = byCorner[attachment.LeftCorner]; var right = byCorner[attachment.RightCorner];
+            var yLeft = poses[attachment.LeftCorner].WheelCentreM.Y; var yRight = poses[attachment.RightCorner].WheelCentreM.Y;
+            var spring = left.SpringOnlyNPerM * yLeft * yLeft + right.SpringOnlyNPerM * yRight * yRight;
+            var stop = left.BumpStopOnlyNPerM * yLeft * yLeft + right.BumpStopOnlyNPerM * yRight * yRight;
+            var arb = left.ArbSelfNPerM * yLeft * yLeft + (left.ArbCrossToOppositeWheelNPerM + right.ArbCrossToOppositeWheelNPerM) * yLeft * yRight + right.ArbSelfNPerM * yRight * yRight;
+            var diagnostics = left.Diagnostics.Concat(right.Diagnostics).ToArray();
+            var validity = diagnostics.Any(x => x.Validity == ComponentTangentValidity.Invalid) ? ComponentTangentValidity.Invalid : ComponentTangentValidity.Warning;
+            return new(axle, spring, arb, stop, spring + arb + stop, validity, diagnostics);
+        }
+        var front = Axle("front"); var rear = Axle("rear"); var sum = front.TotalNmPerRad + rear.TotalNmPerRad;
+        var rsd = sum > 0 ? front.TotalNmPerRad / sum : double.NaN;
+        var validity = !double.IsFinite(rsd) || front.Validity == ComponentTangentValidity.Invalid || rear.Validity == ComponentTangentValidity.Invalid ? ComponentTangentValidity.Invalid : ComponentTangentValidity.Warning;
+        return new(front, rear, rsd, staticFrontWeightFraction, 100 * (rsd - staticFrontWeightFraction), validity);
     }
 
     private static ComponentCornerTangentWheelStiffness WithArb(ComponentCornerTangentWheelStiffness source, double self, double cross, ComponentTangentDiagnostic diagnostic)

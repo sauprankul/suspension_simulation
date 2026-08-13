@@ -1,5 +1,6 @@
 using SuspensionSimulation.Core;
 using SuspensionSimulation.Components;
+using SuspensionSimulation.Metrics;
 
 namespace SuspensionSimulation.Solvers;
 
@@ -17,7 +18,8 @@ public sealed record QuasiStaticResult(
     double RollStiffnessDistributionFront, double LoadTransferDistributionFront,
     double StaticFrontWeightFraction, double RollCoupleBiasPercentagePoints, IReadOnlyList<string> Warnings,
     double VerticalResidualN, double RollResidualNm, double PitchResidualNm,
-    int SolverIterations, bool Converged);
+    int SolverIterations, bool Converged,
+    IReadOnlyList<TangentRollStiffnessDecomposition>? TangentRollStiffnesses = null);
 
 /// <summary>
 /// Small-displacement, flat-road, rigid-body elastic equilibrium. It deliberately predicts
@@ -62,14 +64,15 @@ public sealed class FourStrutQuasiStaticSolver
         var cornerStiffnesses = geometry.Select((g, i) => CornerTangent(g, i, force, springByCorner, bars, cornerResults[i], solve.Converged)).ToList();
         var front = Axle("front", [geometry[0], geometry[1]], [0, 1], force, springByCorner, bars);
         var rear = Axle("rear", [geometry[2], geometry[3]], [2, 3], force, springByCorner, bars);
-        var kSum = front.TangentRollStiffnessNmPerRad + rear.TangentRollStiffnessNmPerRad;
+        var decompositions = new[] { RollDecomposition("front", [geometry[0], geometry[1]], [0, 1], force, springByCorner, bars), RollDecomposition("rear", [geometry[2], geometry[3]], [2, 3], force, springByCorner, bars) };
+        var balance = BalanceMetrics.Create(decompositions[0].TotalNmPerRad, decompositions[1].TotalNmPerRad, front.LoadTransferN, rear.LoadTransferN, package.Chassis.StaticFrontWeightFraction);
         var ltSum = front.LoadTransferN + rear.LoadTransferN;
         return new(loadCase, state[0], state[1], state[2], cornerResults, cornerStiffnesses, [front, rear],
-            kSum == 0 ? double.NaN : front.TangentRollStiffnessNmPerRad / kSum,
-            Math.Abs(ltSum) < 1e-8 ? double.NaN : front.LoadTransferN / ltSum,
+            balance.RollStiffnessDistributionFront,
+            balance.LoadTransferDistributionFront,
             package.Chassis.StaticFrontWeightFraction,
-            100 * ((kSum == 0 ? double.NaN : front.TangentRollStiffnessNmPerRad / kSum) - package.Chassis.StaticFrontWeightFraction), warnings,
-            resultants[0] - target[0], resultants[1] - target[1], resultants[2] - target[2], solve.Iterations, solve.Converged);
+            100 * balance.RollStiffnessMinusMassFraction, warnings,
+            resultants[0] - target[0], resultants[1] - target[1], resultants[2] - target[2], solve.Iterations, solve.Converged, decompositions);
     }
 
     private static NewtonSolution SolveNewton(IReadOnlyList<CornerGeometry> g, IReadOnlyDictionary<string, CornerSpring> springs,
@@ -146,6 +149,18 @@ public sealed class FourStrutQuasiStaticSolver
         var stopLt = force.BumpStopForces[left] - force.BumpStopForces[right];
         var arbLt = force.ArbDeltaLoads[left] - force.ArbDeltaLoads[right];
         return new(axle, tangent, -(force.TotalDeltaLoads[left] - force.TotalDeltaLoads[right]), -springLt, -arbLt, -stopLt);
+    }
+
+    private static TangentRollStiffnessDecomposition RollDecomposition(string axle, IReadOnlyList<CornerGeometry> g, IReadOnlyList<int> indices,
+        ForceAssembly force, IReadOnlyDictionary<string, CornerSpring> springs, IReadOnlyDictionary<string, AntiRollBarModel> bars)
+    {
+        var left = indices[0]; var right = indices[1]; var matrix = bars[axle].TangentMatrix();
+        var l = springs[g[0].Corner]; var r = springs[g[1].Corner];
+        return TangentRollStiffnessCalculator.FromWheelPlane(axle, g[0].Y, g[1].Y,
+            l.WheelRateNPerM, r.WheelRateNPerM,
+            force.ActiveBumpStops[left] ? l.BumpStopRateNPerM : 0, force.ActiveBumpStops[right] ? r.BumpStopRateNPerM : 0,
+            matrix.LeftSelfNPerM, matrix.LeftCrossNPerM, matrix.RightCrossNPerM, matrix.RightSelfNPerM,
+            "current quasi-static equilibrium tangent", ["ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."]);
     }
 
     private static ComponentCornerTangentWheelStiffness CornerTangent(CornerGeometry geometry, int index, ForceAssembly force,

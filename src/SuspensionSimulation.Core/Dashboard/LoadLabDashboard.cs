@@ -44,6 +44,30 @@ public static class GCircleMapper
 
 public sealed record GCirclePoint(double X, double Y, double DisplayLongitudinalG, double DisplayLateralG, bool WasClamped);
 
+/// <summary>
+/// Local tangent stiffness display for a corner. The ARB term is the derivative
+/// for one-wheel motion while its opposite wheel is held fixed; it is not an
+/// independent wheel spring because the bar force couples both corners.
+/// </summary>
+public sealed record CornerWheelStiffness(double SpringWheelRateNPerM,
+    double ArbDifferentialContributionNPerM, double ActiveBumpStopRateNPerM,
+    double TotalLocalTangentNPerM, string Validity, string Warning);
+
+public static class CornerStiffnessCalculator
+{
+    public static CornerWheelStiffness Evaluate(double springWheelRateNPerM,
+        double arbDifferentialContributionNPerM, double bumpStopRateNPerM, bool bumpStopActive)
+    {
+        if (!double.IsFinite(springWheelRateNPerM) || springWheelRateNPerM < 0) throw new ArgumentOutOfRangeException(nameof(springWheelRateNPerM));
+        if (!double.IsFinite(arbDifferentialContributionNPerM) || arbDifferentialContributionNPerM < 0) throw new ArgumentOutOfRangeException(nameof(arbDifferentialContributionNPerM));
+        if (!double.IsFinite(bumpStopRateNPerM) || bumpStopRateNPerM < 0) throw new ArgumentOutOfRangeException(nameof(bumpStopRateNPerM));
+        var activeStop = bumpStopActive ? bumpStopRateNPerM : 0;
+        return new(springWheelRateNPerM, arbDifferentialContributionNPerM, activeStop,
+            springWheelRateNPerM + arbDifferentialContributionNPerM + activeStop,
+            "estimated", "ARB contribution is a coupled differential local tangent (opposite wheel held fixed).");
+    }
+}
+
 public sealed record DashboardMetric(string Id, string Label, string Unit, string Value, bool IsSelected, string Validity)
 {
     // Solver-backed metric callers do not need a selection state; tables own it.

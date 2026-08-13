@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private double _ax, _ay;
     private string? _setupDirectory;
     private ModularSetup? _source;
+    private VehiclePackage? _package;
     private QuasiStaticResult? _result;
 
     public MainWindow()
@@ -71,7 +72,8 @@ public partial class MainWindow : Window
         MagnitudeReadout.Text = $"Magnitude: {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {totalGCap:0.00} G" + (point.WasClamped ? " (capped)" : "");
         try
         {
-            _result = new FourStrutQuasiStaticSolver().Solve(BuildPackage(), new LoadCase("dashboard", _ax, _ay, 0));
+            _package = BuildPackage();
+            _result = new FourStrutQuasiStaticSolver().Solve(_package, new LoadCase("dashboard", _ax, _ay, 0));
             var activeWarning = _result.Warnings.FirstOrDefault(w => w.StartsWith("Active bump-stop branch", StringComparison.Ordinal) || w.Contains("non-positive normal load", StringComparison.Ordinal));
             StatusText.Text = $"Solver residuals: Fz {_result.VerticalResidualN:E2} N; roll {_result.RollResidualNm:E2} Nm; pitch {_result.PitchResidualNm:E2} Nm. Input fingerprint: {_source.InputFingerprintSha256[..12]}." + (activeWarning is null ? "" : $" Warning: {activeWarning}");
             DrawG(point, radius); DrawCar(_result); RenderMetrics();
@@ -110,9 +112,9 @@ public partial class MainWindow : Window
 
     private void RenderMetrics()
     {
-        if (_result is null) return;
+        if (_result is null || _package is null) return;
         var selected = new HashSet<string>(StringComparer.Ordinal);
-        if (Lltd.IsChecked == true) selected.Add("lltd"); if (Rsd.IsChecked == true) selected.Add("rsd"); if (Rcb.IsChecked == true) selected.Add("rcb"); if (Loads.IsChecked == true) selected.Add("loads"); if (AxleSummary.IsChecked == true) selected.Add("summary"); if (Attitude.IsChecked == true) selected.Add("attitude");
+        if (Lltd.IsChecked == true) selected.Add("lltd"); if (Rsd.IsChecked == true) selected.Add("rsd"); if (Rcb.IsChecked == true) selected.Add("rcb"); if (Loads.IsChecked == true) selected.Add("loads"); if (AxleSummary.IsChecked == true) selected.Add("summary"); if (Attitude.IsChecked == true) selected.Add("attitude"); if (Stiffness.IsChecked == true) selected.Add("stiffness");
         var metrics = new List<DashboardMetric>();
         if (selected.Contains("lltd")) metrics.Add(new("lltd", "Front LLTD", "%", Percent(_result.LoadTransferDistributionFront), true, "estimated"));
         if (selected.Contains("rsd")) metrics.Add(new("rsd", "Front RSD", "%", Percent(_result.RollStiffnessDistributionFront), true, "estimated"));
@@ -130,6 +132,18 @@ public partial class MainWindow : Window
             metrics.Add(new("pitch", "Pitch angle (0 = flat)", "deg", Degrees(_result.PitchRad), "estimated"));
             foreach (var c in _result.Corners)
                 metrics.Add(new($"ride-{c.Corner}", $"{c.Corner} reference wheel-center height delta", "mm", (-c.RelativeCompressionM * 1000).ToString("F2", CultureInfo.InvariantCulture), "estimated"));
+        }
+        if (selected.Contains("stiffness"))
+        {
+            foreach (var stiffness in _result.CornerTangentStiffnesses)
+            {
+                var validity = stiffness.Validity.ToString().ToLowerInvariant();
+                var warning = string.Join(" ", stiffness.Diagnostics.Select(d => d.Message));
+                metrics.Add(new($"stiff-{stiffness.Corner}-total", $"{stiffness.Corner} total local tangent wheel stiffness", "N/mm", (stiffness.TotalSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-spring", $"{stiffness.Corner} spring-only tangent wheel stiffness", "N/mm", (stiffness.SpringOnlyNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-arb", $"{stiffness.Corner} ARB-only local tangent", "N/mm", (stiffness.ArbSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-travel", $"{stiffness.Corner} tangent travel state", "mm / note", $"{stiffness.ReferenceRelativeCompressionM * 1000:F2}; {warning}", validity));
+            }
         }
         MetricsGrid.ItemsSource = metrics;
     }

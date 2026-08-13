@@ -63,6 +63,8 @@ public sealed class TubularAntiRollBar
     }
 
     public TubularAntiRollBarProperties Properties => _properties;
+    /// <summary>Immutable declared local geometry; callers must not substitute inferred chassis kinematics.</summary>
+    public (ArbSideGeometry Left, ArbSideGeometry Right) Geometry => (_config.Left, _config.Right);
 
     /// <summary>
     /// Evaluates ideal reactions for wheel jounce in metres. Equal wheel jounce causes zero twist only

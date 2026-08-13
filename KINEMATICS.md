@@ -37,3 +37,20 @@ Only after these gates will the branch add toe, camber, track, motion-ratio, or 
 ## Relationship to travel and ARB work
 
 Geometry-derived spring/damper/bump-stop travel and geometry-backed ARB installation ratios are a later coupling layer. The exact virtual-work mapping, bump-stop active-set requirements, and ARB stiffness convention are documented in [docs/next-travel-and-arb-plan.md](docs/next-travel-and-arb-plan.md). In particular, the current direct ARB rate remains defined as force at one wheel per `(left wheel jounce - right wheel jounce)` and is not silently reinterpreted as a bar torsional rate.
+
+## Local tangent wheel-stiffness contract
+
+At every solved operating point the four-corner solver publishes one explicitly local stiffness record for `FL`, `FR`, `RL`, and `RR`. All stiffness values are in N/m internally (the Load Lab displays N/mm); travel is reference-relative wheel-centre compression in metres, positive for jounce.
+
+Each record reports:
+
+- spring-only tangent wheel stiffness;
+- bump-stop-only tangent wheel stiffness (zero until the current active branch engages);
+- ARB self term and its cross derivative to the opposite wheel on the same axle; and
+- the total self tangent, plus validity and diagnostic messages.
+
+The direct installed ARB pair is the local matrix `K [[k, -k], [-k, k]]`. Therefore the displayed ARB-only value is the diagonal `+k` for a perturbation where the opposite wheel is held fixed, while the exported cross term is `-k`. It is not an extra independent corner spring, and corner totals must not be summed to derive axle roll stiffness.
+
+The total self tangent is exactly `spring + active bump stop + ARB diagonal`. Bump-stop force and its tangent are evaluated on the same active branch, so an engaged stop is included once only. A non-converged equilibrium is invalid; non-positive normal load is marked as a pre-lift tangent warning because tire contact is not yet an active constraint. ARB coupling always carries a warning that identifies the local perturbation convention.
+
+The reusable component calculator also supports travel-dependent motion ratio and its derivative, so the geometry coupling layer can add the virtual-work curvature term without changing the report contract. Tests cover the direct ARB matrix, tubular-bar virtual-work Hessian, motion-ratio/bump-stop tangent, four-corner solver export, and single inclusion of an active bump stop.

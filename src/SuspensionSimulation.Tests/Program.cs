@@ -36,6 +36,22 @@ Run("tubular ARB wheel reactions satisfy virtual work", () =>
     Equal(-e.LeftEndLinkVerticalForceN, e.RightEndLinkVerticalForceN, 1e-9);
     Equal(e.LeftEndLinkVerticalForceN / Math.Cos(0.2), e.LeftEndLinkAxialForceN, 1e-9);
 });
+Run("corner tangent stiffness includes motion-ratio curvature and bump stop", () =>
+{
+    var spring = new Spring(new SpringConfig { Id = "s", LinearRateNPerM = 100_000 });
+    var stop = new BumpStop(new BumpStopConfig { Id = "bs", EngagementGapM = 0.01, ForceCurve = [new(0, 0), new(0.01, 20_000)] });
+    var stiffness = TangentWheelStiffnessCalculator.EvaluateCorner("FL", spring, stop, 0.02, new TravelDependentMotionRatio(0.8, 0.5));
+    Equal(65_000, stiffness.SpringOnlyNPerM, 1e-9); Equal(1_290_000, stiffness.BumpStopOnlyNPerM, 1e-9);
+});
+Run("tubular ARB tangent matrix is the virtual-work Hessian", () =>
+{
+    var corner = TangentWheelStiffnessCalculator.EvaluateCorner("FL", new Spring(new SpringConfig { Id = "s", LinearRateNPerM = 100_000 }), null, 0, new(1));
+    var bar = TubularBar(); var result = TangentWheelStiffnessCalculator.WithTubularArb(corner, corner with { Corner = "FR" }, bar);
+    var k = bar.Properties.TorsionalStiffnessNmPerRad / (0.15 * 0.15);
+    Equal(100_000 + k, result.TotalStiffnessMatrixNPerM[0, 0], 1e-8);
+    Equal(-k, result.TotalStiffnessMatrixNPerM[0, 1], 1e-8);
+    Equal(result.TotalStiffnessMatrixNPerM[0, 1], result.TotalStiffnessMatrixNPerM[1, 0], 1e-12);
+});
 Run("symmetric linear axle split is 50/50", () =>
 {
     var p = SymmetricPackage();
@@ -56,6 +72,38 @@ Run("static attitude and relative ride heights are zero", () =>
     var r = new FourStrutQuasiStaticSolver().Solve(SymmetricPackage(), new LoadCase("static", 0, 0, 0));
     Equal(0, r.RollRad, 1e-12); Equal(0, r.PitchRad, 1e-12);
     foreach (var corner in r.Corners) Equal(0, corner.RelativeCompressionM, 1e-12);
+});
+Run("corner stiffness separates spring, coupled ARB, and active stop", () =>
+{
+    var inactive = CornerStiffnessCalculator.Evaluate(80_000, 15_000, 50_000, false);
+    Equal(95_000, inactive.TotalLocalTangentNPerM, 1e-10);
+    var active = CornerStiffnessCalculator.Evaluate(80_000, 15_000, 50_000, true);
+    Equal(145_000, active.TotalLocalTangentNPerM, 1e-10);
+    if (!active.Warning.Contains("coupled", StringComparison.Ordinal)) throw new Exception("ARB coupling warning must remain visible.");
+});
+Run("solver exports four local tangent wheel-stiffness decompositions", () =>
+{
+    var result = new FourStrutQuasiStaticSolver().Solve(SymmetricPackage(), new LoadCase("one-g", 0, 1, 0));
+    if (result.CornerTangentStiffnesses.Count != 4) throw new Exception("Exactly one local tangent record per corner is required.");
+    foreach (var corner in result.CornerTangentStiffnesses)
+    {
+        Equal(100_000, corner.SpringOnlyNPerM, 1e-10);
+        Equal(20_000, corner.ArbSelfNPerM, 1e-10);
+        Equal(-20_000, corner.ArbCrossToOppositeWheelNPerM, 1e-10);
+        Equal(0, corner.BumpStopOnlyNPerM, 1e-10);
+        Equal(120_000, corner.TotalSelfNPerM, 1e-10);
+        if (!corner.PerturbationConvention.Contains("opposite wheel", StringComparison.Ordinal)) throw new Exception("ARB tangent convention must be exported.");
+        if (corner.Diagnostics.Count == 0) throw new Exception("Coupled-ARB diagnostic must be exported.");
+    }
+});
+Run("solver includes active bump-stop tangent once", () =>
+{
+    var source = SymmetricPackage();
+    var package = source with { Springs = source.Springs with { Corners = source.Springs.Corners.Select(c => c with { BumpStopGapM = 0, BumpStopRateNPerM = 50_000 }).ToArray() } };
+    var result = new FourStrutQuasiStaticSolver().Solve(package, new LoadCase("one-g", 0, 1, 0));
+    var active = result.CornerTangentStiffnesses.Single(c => c.Corner == "FR");
+    Equal(50_000, active.BumpStopOnlyNPerM, 1e-10);
+    Equal(170_000, active.TotalSelfNPerM, 1e-10);
 });
 Run("G-circle maps axes and clamps at two G", () =>
 {
@@ -194,7 +242,7 @@ Run("synthetic Cayman bump-stop placeholders are zero-rate", () =>
     if (result.Corners.Any(c => c.BumpStopForceN != 0)) throw new Exception("Zero-rate placeholder must generate zero bump-stop force.");
 });
 
-Console.WriteLine($"{20 - failures.Count}/20 regression checks passed.");
+Console.WriteLine($"{24 - failures.Count}/24 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 

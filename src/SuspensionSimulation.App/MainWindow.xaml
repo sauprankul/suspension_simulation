@@ -28,6 +28,7 @@
       <CheckBox x:Name="Loads" Content="Four tire normal loads" IsChecked="True" Checked="MetricChanged" Unchecked="MetricChanged"/>
       <CheckBox x:Name="AxleSummary" Content="Front/rear and left/right totals" IsChecked="True" Checked="MetricChanged" Unchecked="MetricChanged"/>
       <CheckBox x:Name="Attitude" Content="Roll, pitch and delta ride heights" IsChecked="True" Checked="MetricChanged" Unchecked="MetricChanged"/>
+      <CheckBox x:Name="Stiffness" Content="Corner wheel stiffness and ARB coupling" IsChecked="True" Checked="MetricChanged" Unchecked="MetricChanged"/>
       <TextBlock Text="Ride-height values are wheel-center delta from the uncalibrated static reference; negative means jounce/lower. They are not chassis datum-to-ground heights until the kinematics phase. Synthetic bump stops have zero rate; the gap is retained only as a future travel input. Assumptions: flat road, rigid chassis, ideal components. No tire grip, aero, kinematics, damping or transient effects." TextWrapping="Wrap" Foreground="#FFE0AF" Margin="0,18,0,0"/>
     </StackPanel></ScrollViewer>
     <Grid Grid.Column="1"><Grid.RowDefinitions><RowDefinition Height="300"/><RowDefinition Height="*"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

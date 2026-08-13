@@ -1,0 +1,1 @@
+{"id":"piecewise-spring","validity":"verified-analytic","force_curve":[[0,0],[0.01,1000],[0.02,3000]],"compression_m":0.015,"expected_force_n":2000,"expected_tangent_n_per_m":200000}

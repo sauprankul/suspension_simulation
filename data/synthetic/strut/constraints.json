@@ -1,0 +1,19 @@
+{
+  "schema": "suspension-sim/strut-constraints/v1",
+  "validity": "synthetic-geometry-fixture",
+  "travel_range_m": [-0.04, 0.04],
+  "constraint_tolerance_m": 0.000001,
+  "branch_predicates": ["wheel center remains outboard of lower-arm axis", "upright quaternion stays continuous from prior jounce step"],
+  "geometry_backed_components": {
+    "spring_motion_ratio_target": 0.8,
+    "tubular_arb": {
+      "rate_mode": "tubular_geometry",
+      "outside_diameter_m": 0.025,
+      "inside_diameter_m": 0.015,
+      "shear_modulus_pa": 80000000000.0,
+      "torsion_length_m": 1.0,
+      "left": { "lever_arm_m": 0.15, "end_link_length_m": 0.25, "end_link_angle_from_vertical_rad": 0.2, "wheel_to_end_link_vertical_motion_ratio": 0.8 },
+      "right": { "lever_arm_m": 0.15, "end_link_length_m": 0.25, "end_link_angle_from_vertical_rad": 0.2, "wheel_to_end_link_vertical_motion_ratio": 0.8 }
+    }
+  }
+}

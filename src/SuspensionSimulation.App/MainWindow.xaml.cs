@@ -37,8 +37,10 @@ public partial class MainWindow : Window
         var rear = _source.Assembly.Corners.First(c => c.Corner is Corner.RL or Corner.RR);
         FrontSpring.Text = (_source.Springs.Single(s => s.Id == front.SpringId).LinearRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
         RearSpring.Text = (_source.Springs.Single(s => s.Id == rear.SpringId).LinearRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
-        FrontArb.Text = (_source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId).DirectInstalledWheelPairRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
-        RearArb.Text = (_source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId).DirectInstalledWheelPairRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
+        var frontBar = AntiRollBarModel.FromConfig("front", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), "Synthetic");
+        var rearBar = AntiRollBarModel.FromConfig("rear", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), "Synthetic");
+        FrontArb.Text = (frontBar.TangentMatrix().LeftSelfNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
+        RearArb.Text = (rearBar.TangentMatrix().LeftSelfNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
         CgHeight.Text = _source.Chassis.CgHeightM.ToString("G", CultureInfo.InvariantCulture);
         Wheelbase.Text = _source.Chassis.WheelbaseM.ToString("G", CultureInfo.InvariantCulture);
         FrontTrack.Text = _source.Chassis.FrontTrackM.ToString("G", CultureInfo.InvariantCulture);
@@ -89,8 +91,6 @@ public partial class MainWindow : Window
         if (_source is null) throw new InvalidOperationException("Setup was not loaded.");
         var frontSpring = ReadPositive(FrontSpring, "front spring") * 1000;
         var rearSpring = ReadPositive(RearSpring, "rear spring") * 1000;
-        var frontArb = ReadNonNegative(FrontArb, "front ARB") * 1000;
-        var rearArb = ReadNonNegative(RearArb, "rear ARB") * 1000;
         var bumpStopGapM = ReadNonNegative(BumpStopGap, "bump-stop gap") / 1000;
         var chassis = _source.Chassis with { CgHeightM = ReadNonNegative(CgHeight, "CG height"), WheelbaseM = ReadPositive(Wheelbase, "wheelbase"), FrontTrackM = ReadPositive(FrontTrack, "front track"), RearTrackM = ReadPositive(RearTrack, "rear track") };
         var springs = _source.Assembly.Corners.Select(c =>
@@ -105,9 +105,10 @@ public partial class MainWindow : Window
         return new VehiclePackage(
             new ChassisModel(chassis.Id, chassis.TotalMassKg, chassis.WheelbaseM, chassis.FrontTrackM, chassis.RearTrackM, chassis.CgHeightM, chassis.StaticFrontWeightFraction, "Mixed public/source + user-adjusted", chassis.SourceNote),
             new SpringsModel(springs, "User-adjusted", "Input is raw spring rate; solver maps it to wheel rate using the fixed configured motion ratio."),
-            [new AntiRollBarModel("front", frontArb, "User-adjusted", "Direct installed differential wheel-pair rate."), new AntiRollBarModel("rear", rearArb, "User-adjusted", "Direct installed differential wheel-pair rate.")],
+            [AntiRollBarModel.FromConfig("front", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), "Synthetic geometry"),
+             AntiRollBarModel.FromConfig("rear", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), "Synthetic geometry")],
             new DampingModel("Loaded, excluded", "Static solver does not use damper force."),
-            new ModelScope("load-lab/0.2", ["flat road", "rigid body", "small angles", "quasi-static acceleration", "fixed motion ratio", "first bump-stop tangent after engagement"], ["tire force/grip", "kinematic roll centers and jacking", "transient damping", "chassis/bushing compliance", "full bump-stop curve", "calibrated static bump-stop state"]));
+            new ModelScope("load-lab/0.3", ["flat road", "rigid body", "small angles", "quasi-static acceleration", "fixed motion ratio", "tubular ARB virtual-work stiffness", "first bump-stop tangent after engagement"], ["tire force/grip", "kinematic roll centers and jacking", "transient damping", "chassis/bushing compliance", "full bump-stop curve", "calibrated static bump-stop state"]));
     }
 
     private void RenderMetrics()

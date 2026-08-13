@@ -1,0 +1,19 @@
+{
+  "schema": "suspension-sim/tubular-arb/v1",
+  "validity": "synthetic-geometry-fixture",
+  "purpose": "Supplemental geometry-backed backend validation fixture; not a Porsche part or a vehicle baseline.",
+  "bars": [
+    {
+      "id": "synthetic-front-tubular",
+      "rate_mode": "tubular_geometry",
+      "outside_diameter_m": 0.025,
+      "inside_diameter_m": 0.015,
+      "shear_modulus_pa": 80000000000.0,
+      "torsion_length_m": 1.0,
+      "left": { "lever_arm_m": 0.15, "end_link_length_m": 0.25, "end_link_angle_from_vertical_rad": 0.2, "wheel_to_end_link_vertical_motion_ratio": 1.0 },
+      "right": { "lever_arm_m": 0.15, "end_link_length_m": 0.25, "end_link_angle_from_vertical_rad": 0.2, "wheel_to_end_link_vertical_motion_ratio": 1.0 },
+      "expected_polar_second_moment_m4": 3.337942194439156e-08
+    }
+  ],
+  "rejection_rule": "A geometry-backed consumer must reject this record if a direct installed wheel-pair rate is substituted or inferred."
+}

@@ -14,6 +14,12 @@ The first slice is one **MacPherson strut corner** at a time, with the chassis f
 
 The solver continues from the previous jounce point but independently validates each solution. It adapts travel step size on failure and stops at the reachable boundary rather than connecting across a branch jump.
 
+### Implemented planar hard-point gate
+
+The first executable gate is deliberately narrower than the future 3D solver: `MacPhersonPlanarSolver` solves a rigid upright in the Y-Z front-view plane from lower-arm length, strut length, and prescribed wheel-centre jounce. It reproduces the reference hard points, exports strut compression plus its local geometry-derived motion ratio and derivative, and can feed the component virtual-work tangent calculation.
+
+Tie-rod length is exported as a residual only; it does **not** claim toe or bump steer. The solver also exports a projected lower-arm/strut instant-centre force-line construction and a vertical-per-lateral-force jacking ratio. Both are explicitly **estimated** and are not fed into the four-corner load solver: full axle roll-centre, tire-force and 3D steering constraints remain unavailable until their validation gates pass.
+
 ## Hard-point schema and fixture files
 
 Initial files will live beside the existing modular setup data:
@@ -54,3 +60,7 @@ The direct installed ARB pair is the local matrix `K [[k, -k], [-k, k]]`. Theref
 The total self tangent is exactly `spring + active bump stop + ARB diagonal`. Bump-stop force and its tangent are evaluated on the same active branch, so an engaged stop is included once only. A non-converged equilibrium is invalid; non-positive normal load is marked as a pre-lift tangent warning because tire contact is not yet an active constraint. ARB coupling always carries a warning that identifies the local perturbation convention.
 
 The reusable component calculator also supports travel-dependent motion ratio and its derivative, so the geometry coupling layer can add the virtual-work curvature term without changing the report contract. Tests cover the direct ARB matrix, tubular-bar virtual-work Hessian, motion-ratio/bump-stop tangent, four-corner solver export, and single inclusion of an active bump stop.
+
+## ARB model selection
+
+The stitched vehicle package now uses tubular geometry as its normal ARB representation: ID/OD, shear modulus, torsion length, arm lengths, end-link length/angle, and wheel-to-link local motion ratios. The solver gets wheel reactions and the local stiffness matrix directly from virtual work. The former `InstalledWheelPairRateNPerM` is retained only for explicit legacy/test packages; attempting to override a geometry-backed bar by N/m is rejected rather than silently discarding its physical geometry.

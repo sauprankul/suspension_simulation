@@ -6,8 +6,13 @@ using SuspensionSimulation.Core.Dashboard;
 using SuspensionSimulation.Metrics;
 using SuspensionSimulation.Results;
 using SuspensionSimulation.Core.RuntimeParameters;
+using SuspensionSimulation.Kinematics;
+using SuspensionSimulation.Solvers.Kinematics;
+using System.Numerics;
+using SuspensionSimulation.Core.Kinematics;
 
 var failures = new List<string>();
+Run("committed synthetic analytic fixture catalogue validates", () => SuspensionSimulation.Tests.TestdataFixtureHarness.Verify());
 Run("ideal ARB rejects equal heave", () =>
 {
     var bar = new AntiRollBar(new AntiRollBarConfig { Id = "test", DirectInstalledWheelPairRateNPerM = 10_000 });
@@ -51,6 +56,28 @@ Run("tubular ARB tangent matrix is the virtual-work Hessian", () =>
     Equal(100_000 + k, result.TotalStiffnessMatrixNPerM[0, 0], 1e-8);
     Equal(-k, result.TotalStiffnessMatrixNPerM[0, 1], 1e-8);
     Equal(result.TotalStiffnessMatrixNPerM[0, 1], result.TotalStiffnessMatrixNPerM[1, 0], 1e-12);
+});
+Run("tubular bar produces the direct pair tangent only for symmetric geometry", () =>
+{
+    var symmetric = TubularBar().WheelTangent();
+    Equal(TubularBar().Properties.TorsionalStiffnessNmPerRad / (0.15 * 0.15), symmetric.SymmetricEffectiveWheelPairTangentNPerM!.Value, 1e-8);
+    var asymmetric = new TubularAntiRollBar(new TubularAntiRollBarConfig
+    {
+        Id = "asym", TorsionLengthM = 0.8, OutsideDiameterM = .02, InsideDiameterM = 0, ShearModulusPa = 79.3e9,
+        Left = new(.15, .25, 0, 1), Right = new(.15, .25, 0, .8)
+    }).WheelTangent();
+    if (asymmetric.SymmetricEffectiveWheelPairTangentNPerM is not null || asymmetric.Validity != "warning") throw new Exception("Asymmetric geometry must retain the coupled matrix.");
+});
+Run("geometry-derived spring tangent follows virtual work", () =>
+{
+    var tangent = GeometryDerivedSpringCalculator.Evaluate(new SpringGeometryDerivative(new(0, 0, 2), new(0, 0, .8)), 1000, 50_000, .2);
+    Equal(.8, tangent.MotionRatio, 1e-12); Equal(32_200, tangent.WheelTangentNPerM, 1e-9);
+});
+Run("planar roll-center force path preserves moment closure", () =>
+{
+    var result = PlanarRollCenterForcePathCalculator.Evaluate(.05, 4000, 1.6);
+    Equal(200, result.GeometricRollMomentNm, 1e-12); Equal(250, result.PlanarEquivalentLeftRightLoadDifferenceN, 1e-12);
+    if (!result.Validity.Contains("planar")) throw new Exception("Force-path limitation must be explicit.");
 });
 Run("symmetric linear axle split is 50/50", () =>
 {
@@ -241,8 +268,42 @@ Run("synthetic Cayman bump-stop placeholders are zero-rate", () =>
     var result = new FourStrutQuasiStaticSolver().Solve(package, new LoadCase("high-lateral", 0, 2, 0));
     if (result.Corners.Any(c => c.BumpStopForceN != 0)) throw new Exception("Zero-rate placeholder must generate zero bump-stop force.");
 });
+Run("synthetic Cayman package uses tubular ARB geometry rather than primary direct rates", () =>
+{
+    var package = SyntheticFixtureLoader.LoadFourStrutPackage(Path.Combine("data", "synthetic", "cayman"));
+    if (package.AntiRollBars.Any(bar => bar.IsLegacyDirectRate || bar.Tubular is null)) throw new Exception("Synthetic vehicle package must stitch tubular ARB geometry.");
+    foreach (var bar in package.AntiRollBars)
+    {
+        var tangent = bar.TangentMatrix();
+        if (tangent.LeftSelfNPerM <= 0 || tangent.RightSelfNPerM <= 0 || tangent.LeftCrossNPerM >= 0) throw new Exception("Tubular ARB tangent matrix was not physical.");
+    }
+});
+Run("geometry-backed ARBs reject a misleading direct-rate runtime override", () =>
+{
+    var package = SyntheticFixtureLoader.LoadFourStrutPackage(Path.Combine("data", "synthetic", "cayman"));
+    try { _ = VehiclePackageOverrides.Apply(package, new RuntimeParameterOverrides(FrontArbWheelPairRateNPerM: 20_000)); }
+    catch (InvalidOperationException) { return; }
+    throw new Exception("A tubular ARB must not silently accept a direct N/m override.");
+});
+Run("planar MacPherson hard points reproduce reference pose and derive travel motion ratio", () =>
+{
+    var config = PlanarStrutFixture(); var solver = new MacPhersonPlanarSolver();
+    var reference = solver.Solve(config, 0); if (!reference.Converged) throw new Exception("Reference hard-point pose did not converge.");
+    Equal(0, reference.StrutCompressionM, 1e-8);
+    var bump = solver.Solve(config, 0.01); if (!bump.Converged || bump.StrutMotionRatio is null) throw new Exception("Bump pose or local motion ratio was unavailable.");
+    if (bump.StrutMotionRatio.MotionRatio <= 0) throw new Exception("Strut compression must increase with positive wheel jounce in this fixture.");
+    if (bump.RollCentre.Validity == KinematicValidity.Invalid) throw new Exception("Roll-centre diagnostic must not be invalid for a converged fixture.");
+    var stiffness = GeometryTravelStiffness.Evaluate("FL", new Spring(new SpringConfig { Id = "spring", LinearRateNPerM = 100_000 }), null, bump);
+    Equal(100_000 * bump.StrutMotionRatio.MotionRatio * bump.StrutMotionRatio.MotionRatio, stiffness.SpringOnlyNPerM, 2);
+});
+Run("planar MacPherson marks tie-rod and jacking scope instead of inventing a 3D result", () =>
+{
+    var pose = new MacPhersonPlanarSolver().Solve(PlanarStrutFixture(), 0.01);
+    if (!pose.Diagnostics.Any(d => d.Code == "tie-rod-residual")) throw new Exception("Tie rod must remain an explicit residual in the planar slice.");
+    if (pose.Jacking.Validity == KinematicValidity.Valid) throw new Exception("Jacking must not be presented as a fully validated chassis force result.");
+});
 
-Console.WriteLine($"{24 - failures.Count}/24 regression checks passed.");
+Console.WriteLine($"{31 - failures.Count}/31 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 
@@ -268,3 +329,16 @@ static TubularAntiRollBar TubularBar() => new(new TubularAntiRollBarConfig
     Left = new ArbSideGeometry(0.15, 0.25, 0.2, 1),
     Right = new ArbSideGeometry(0.15, 0.25, 0.2, 1)
 });
+
+static MacPhersonPlanarCornerConfig PlanarStrutFixture() => new()
+{
+    Id = "planar-fixture",
+    LowerArmInnerPivotM = new Vector3(0, 0.00f, 0.20f),
+    LowerBallJointReferenceM = new Vector3(0, 0.70f, 0.30f),
+    StrutLowerReferenceM = new Vector3(0, 0.65f, 0.65f),
+    UpperStrutMountM = new Vector3(0, 0.40f, 1.30f),
+    WheelCentreReferenceM = new Vector3(0, 0.78f, 0.50f),
+    TieRodInnerM = new Vector3(0, 0.20f, 0.65f),
+    TieRodOuterReferenceM = new Vector3(0, 0.70f, 0.55f),
+    GroundPlaneZM = 0
+};

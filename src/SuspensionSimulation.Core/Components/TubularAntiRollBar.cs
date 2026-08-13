@@ -4,9 +4,10 @@ namespace SuspensionSimulation.Components;
 /// Small-deflection torsion-only ARB geometry. The torsion section is a circular tube;
 /// arm bending, bearing compliance, link bending, and suspension kinematics are excluded.
 /// </summary>
-public sealed record TubularAntiRollBarConfig
+public sealed record TubularAntiRollBarConfig : Configuration.IVersionedConfiguration
 {
-    public required string Id { get; init; }
+    /// <summary>Required only for standalone use; an enclosing ARB component supplies it when nested.</summary>
+    public string Id { get; init; } = "";
     public string SchemaVersion { get; init; } = "1.0";
     public DataProvenance Provenance { get; init; } = DataProvenance.Estimated;
     public string? SourceNote { get; init; }
@@ -34,6 +35,9 @@ public sealed record ArbSideGeometry(
 public sealed record TubularAntiRollBarProperties(
     double PolarSecondMomentM4,
     double TorsionalStiffnessNmPerRad);
+
+public sealed record TubularArbWheelTangent(double LeftSelfNPerM, double RightSelfNPerM, double CrossNPerM,
+    double? SymmetricEffectiveWheelPairTangentNPerM, string Validity, IReadOnlyList<string> Warnings);
 
 public sealed record TubularAntiRollBarEvaluation(
     double BarTwistRad,
@@ -65,6 +69,19 @@ public sealed class TubularAntiRollBar
     public TubularAntiRollBarProperties Properties => _properties;
     /// <summary>Immutable declared local geometry; callers must not substitute inferred chassis kinematics.</summary>
     public (ArbSideGeometry Left, ArbSideGeometry Right) Geometry => (_config.Left, _config.Right);
+
+    /// <summary>Wheel-plane energy Hessian. A single pair rate is exact only for symmetric local side geometry.</summary>
+    public TubularArbWheelTangent WheelTangent()
+    {
+        var aL = _config.Left.WheelToEndLinkVerticalMotionRatio / _config.Left.LeverArmM;
+        var aR = _config.Right.WheelToEndLinkVerticalMotionRatio / _config.Right.LeverArmM;
+        var left = _properties.TorsionalStiffnessNmPerRad * aL * aL;
+        var right = _properties.TorsionalStiffnessNmPerRad * aR * aR;
+        var cross = -_properties.TorsionalStiffnessNmPerRad * aL * aR;
+        var symmetric = Math.Abs(aL - aR) <= 1e-10 * Math.Max(1, Math.Max(Math.Abs(aL), Math.Abs(aR)));
+        return new(left, right, cross, symmetric ? left : null, symmetric ? "valid" : "warning",
+            symmetric ? [] : ["Asymmetric side geometry: retain the coupled stiffness matrix; a single direct wheel-pair rate is not exact."]);
+    }
 
     /// <summary>
     /// Evaluates ideal reactions for wheel jounce in metres. Equal wheel jounce causes zero twist only

@@ -2,7 +2,7 @@
 
 ## Objective
 
-Replace the current fixed motion-ratio, direct installed ARB rate inputs with auditable travel-dependent component models. Preserve the present four-corner quasi-static solver as the outer equilibrium layer.
+Replace the remaining fixed motion-ratio inputs with auditable travel-dependent component models. Preserve the present four-corner quasi-static solver as the outer equilibrium layer. The normal ARB path is now geometry-backed tubular torsion; direct installed rate is explicitly legacy/test-only.
 
 ## Travel implementation
 
@@ -22,11 +22,11 @@ The public UI must name the convention in every field. The first direct-rate mod
 
 Thus `Fleft = -kpair*(xL-xR)` and `Fright = +kpair*(xL-xR)` for a reaction-force convention. It has zero ideal equal-wheel heave force, stores `U = 0.5*kpair*(xL-xR)^2`, and gives axle roll stiffness `Kphi,arb = kpair * track^2` for small roll. This is already the convention used by the first solver.
 
-For a physical tubular bar, add a separate geometry-backed component:
+For a physical tubular bar, use the geometry-backed component:
 
 `J = pi*(Do^4-Di^4)/32`, `kt = GJ/L`, `T = kt*theta`.
 
-Each side maps wheel jounce to blade/bar rotation through its own lever arm and end-link geometry. Wheel reactions come from virtual work, not a factor-of-two shortcut. The generated direct `kpair` is an operating-point output, not a permanent replacement for the geometry model.
+Each side maps wheel jounce to blade/bar rotation through its own lever arm and end-link geometry. Wheel reactions come from virtual work, not a factor-of-two shortcut. The generated direct `kpair` is an operating-point output, not a permanent replacement for the geometry model. The solver retains the full 2x2 local matrix for asymmetric geometry.
 
 Tests: equal heave makes zero bar twist/reaction; swapping left/right travel reverses force signs and preserves energy; bar/wheel virtual work agrees; solid and hollow `J` match closed form; geometry-derived direct rate matches a finite-difference wheel-pair test.
 

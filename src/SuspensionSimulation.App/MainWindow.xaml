@@ -11,8 +11,8 @@
       <Grid Margin="0,4,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="84"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
         <TextBlock Text="Front spring (N/mm)"/><TextBox x:Name="FrontSpring" Grid.Column="1" Text="80" LostFocus="SetupChanged"/>
         <TextBlock Grid.Row="1" Text="Rear spring (N/mm)"/><TextBox x:Name="RearSpring" Grid.Row="1" Grid.Column="1" Text="90" LostFocus="SetupChanged"/>
-        <TextBlock Grid.Row="2" Text="Front ARB pair rate (N/mm)"/><TextBox x:Name="FrontArb" Grid.Row="2" Grid.Column="1" Text="18" LostFocus="SetupChanged"/>
-        <TextBlock Grid.Row="3" Text="Rear ARB pair rate (N/mm)"/><TextBox x:Name="RearArb" Grid.Row="3" Grid.Column="1" Text="15" LostFocus="SetupChanged"/>
+        <TextBlock Grid.Row="2" Text="Front ARB local tangent (N/mm)"/><TextBox x:Name="FrontArb" Grid.Row="2" Grid.Column="1" IsReadOnly="True" ToolTip="Derived from tubular bar ID/OD, torsion length, shear modulus, arms and end-link geometry in anti-roll-bars.json."/>
+        <TextBlock Grid.Row="3" Text="Rear ARB local tangent (N/mm)"/><TextBox x:Name="RearArb" Grid.Row="3" Grid.Column="1" IsReadOnly="True" ToolTip="Derived from tubular bar ID/OD, torsion length, shear modulus, arms and end-link geometry in anti-roll-bars.json."/>
         <TextBlock Grid.Row="4" Text="CG height (m)"/><TextBox x:Name="CgHeight" Grid.Row="4" Grid.Column="1" Text="0.48" LostFocus="SetupChanged"/>
         <TextBlock Grid.Row="5" Text="Wheelbase (m)"/><TextBox x:Name="Wheelbase" Grid.Row="5" Grid.Column="1" Text="2.484" LostFocus="SetupChanged"/>
         <TextBlock Grid.Row="6" Text="Front track (m)"/><TextBox x:Name="FrontTrack" Grid.Row="6" Grid.Column="1" Text="1.539" LostFocus="SetupChanged"/>

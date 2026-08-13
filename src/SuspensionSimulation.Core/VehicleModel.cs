@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SuspensionSimulation.Components;
 
 namespace SuspensionSimulation.Core;
 
@@ -23,11 +24,65 @@ public sealed record CornerSpring(
 
 public sealed record SpringsModel(IReadOnlyList<CornerSpring> Corners, string DataClassification, string? Notes);
 
+public sealed record ArbTangentMatrix(double LeftSelfNPerM, double LeftCrossNPerM,
+    double RightCrossNPerM, double RightSelfNPerM);
+
 /// <summary>
-/// Installed wheel-pair rate: force at one wheel divided by left-minus-right wheel compression.
-/// It represents only differential motion and contributes no ideal heave stiffness.
+/// An axle ARB model. Geometry-backed tubular bars are the normal package representation.
+/// <see cref="InstalledWheelPairRateNPerM"/> is retained solely for explicit legacy/test imports.
 /// </summary>
-public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRateNPerM, string DataClassification, string? Notes);
+public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRateNPerM, string DataClassification, string? Notes)
+{
+    public AntiRollBarModelKind ModelKind { get; init; } = AntiRollBarModelKind.LegacyDirectWheelPairRate;
+    public TubularAntiRollBar? Tubular { get; init; }
+    public bool IsLegacyDirectRate => ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate;
+
+    public static AntiRollBarModel FromConfig(string axle, AntiRollBarConfig config, string dataClassification)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(axle); ArgumentNullException.ThrowIfNull(config);
+        if (config.ModelKind == AntiRollBarModelKind.TubularGeometry)
+            return new AntiRollBarModel(axle, 0, dataClassification, config.SourceNote)
+            {
+                ModelKind = AntiRollBarModelKind.TubularGeometry,
+                Tubular = AntiRollBar.CreateTubular(config)
+            };
+        if (config.ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate)
+            return new AntiRollBarModel(axle, config.DirectInstalledWheelPairRateNPerM, dataClassification,
+                $"LEGACY direct wheel-pair rate: {config.SourceNote}")
+            { ModelKind = AntiRollBarModelKind.LegacyDirectWheelPairRate };
+        throw new InvalidDataException($"ARB '{config.Id}' has an unknown model kind.");
+    }
+
+    /// <summary>Returns the resisting wheel-load increment for the supplied wheel compressions.</summary>
+    public (double LeftN, double RightN) ResistingWheelForces(double leftCompressionM, double rightCompressionM)
+    {
+        if (!double.IsFinite(leftCompressionM) || !double.IsFinite(rightCompressionM)) throw new ArgumentOutOfRangeException(nameof(leftCompressionM));
+        if (ModelKind == AntiRollBarModelKind.TubularGeometry)
+        {
+            if (Tubular is null) throw new InvalidOperationException($"Tubular ARB '{Axle}' has no geometry.");
+            var reaction = Tubular.Evaluate(leftCompressionM, rightCompressionM);
+            // The component reaction is force on the wheel. The chassis solver stores the opposing
+            // suspension load increment, hence the sign reversal here.
+            return (-reaction.LeftWheelReactionN, -reaction.RightWheelReactionN);
+        }
+        var differential = leftCompressionM - rightCompressionM;
+        return (InstalledWheelPairRateNPerM * differential, -InstalledWheelPairRateNPerM * differential);
+    }
+
+    /// <summary>Local K where resisting wheel force is K times [left, right] compression.</summary>
+    public ArbTangentMatrix TangentMatrix()
+    {
+        if (ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate)
+            return new(InstalledWheelPairRateNPerM, -InstalledWheelPairRateNPerM,
+                -InstalledWheelPairRateNPerM, InstalledWheelPairRateNPerM);
+        if (Tubular is null) throw new InvalidOperationException($"Tubular ARB '{Axle}' has no geometry.");
+        var geometry = Tubular.Geometry; var torsion = Tubular.Properties.TorsionalStiffnessNmPerRad;
+        var left = geometry.Left.WheelToEndLinkVerticalMotionRatio / geometry.Left.LeverArmM;
+        var right = geometry.Right.WheelToEndLinkVerticalMotionRatio / geometry.Right.LeverArmM;
+        return new(torsion * left * left, -torsion * left * right,
+            -torsion * left * right, torsion * right * right);
+    }
+}
 
 public sealed record DampingModel(string DataClassification, string? Notes);
 

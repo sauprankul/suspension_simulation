@@ -4,7 +4,7 @@ All numeric values use SI units. Every JSON file is a separately loadable compon
 
 `DataProvenance` is mandatory in practice: `synthetic` data is tutorial input only, `publicSource` needs a source note, and `estimated` must never be presented as a measurement.
 
-Conventions: vehicle +X forward, +Y left, +Z up. Wheel jounce and component compression are positive upward/into compression. An ARB's `directInstalledWheelPairRateNPerM` is the signed reaction at one wheel per metre of `(left jounce - right jounce)` and has zero ideal heave reaction. A motion ratio is always `component displacement / wheel jounce`.
+Conventions: vehicle +X forward, +Y left, +Z up. Wheel jounce and component compression are positive upward/into compression. A motion ratio is always `component displacement / wheel jounce`. Vehicle packages normally use a tubular ARB with ID/OD, `G`, torsion length, arm and end-link geometry; its wheel reactions and local 2x2 tangent are derived by virtual work. `directInstalledWheelPairRateNPerM` is retained solely for an explicit legacy/test import and has zero ideal heave reaction.
 
 `Damper` is deliberately a linear dynamic placeholder; it produces zero force in static equilibrium.
 

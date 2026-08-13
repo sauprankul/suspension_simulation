@@ -1,0 +1,10 @@
+{
+  "schema": "suspension-sim/strut-expected-results/v1",
+  "validity": "verified-analytic-or-reference-pose",
+  "reference_jounce_m": 0.0,
+  "maximum_constraint_residual_m": 0.000001,
+  "expected_component_motion_ratio": 0.8,
+  "expected_planar_roll_center_height_m": 0.10,
+  "expected_jacking_force_per_unit_lateral_force": 0.125,
+  "notes": "Roll-centre and jacking targets define the future planar fixture convention: jacking = RC height / half track (0.10 / 0.80). They must not be reported as a real vehicle result."
+}

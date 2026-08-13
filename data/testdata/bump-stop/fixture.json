@@ -1,0 +1,1 @@
+{"id":"bump-stop","validity":"verified-analytic","engagement_gap_m":0.02,"force_curve":[[0,0],[0.01,1000]],"test_compression_m":0.025,"expected_force_n":500,"expected_tangent_n_per_m":100000}

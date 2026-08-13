@@ -102,10 +102,10 @@ public sealed class FourStrutQuasiStaticSolver
         }
         foreach (var axle in new[] { ("front", 0, 1), ("rear", 2, 3) })
         {
-            var k = bars[axle.Item1].InstalledWheelPairRateNPerM;
-            var differential = Compression(g[axle.Item2], q) - Compression(g[axle.Item3], q); // left - right
-            arb[axle.Item2] = k * differential;
-            arb[axle.Item3] = -k * differential;
+            var wheelForces = bars[axle.Item1].ResistingWheelForces(
+                Compression(g[axle.Item2], q), Compression(g[axle.Item3], q));
+            arb[axle.Item2] = wheelForces.LeftN;
+            arb[axle.Item3] = wheelForces.RightN;
             delta[axle.Item2] += arb[axle.Item2];
             delta[axle.Item3] += arb[axle.Item3];
         }
@@ -138,7 +138,10 @@ public sealed class FourStrutQuasiStaticSolver
             var activeStop = force.ActiveBumpStops[indices[i]] ? s.BumpStopRateNPerM : 0;
             tangent += (s.WheelRateNPerM + activeStop) * g[i].Y * g[i].Y;
         }
-        tangent += bars[axle].InstalledWheelPairRateNPerM * Math.Pow(g[0].Y - g[1].Y, 2);
+        var arbTangent = bars[axle].TangentMatrix();
+        tangent += arbTangent.LeftSelfNPerM * g[0].Y * g[0].Y
+            + (arbTangent.LeftCrossNPerM + arbTangent.RightCrossNPerM) * g[0].Y * g[1].Y
+            + arbTangent.RightSelfNPerM * g[1].Y * g[1].Y;
         var springLt = force.SpringOnlyDeltaLoads[left] - force.SpringOnlyDeltaLoads[right];
         var stopLt = force.BumpStopForces[left] - force.BumpStopForces[right];
         var arbLt = force.ArbDeltaLoads[left] - force.ArbDeltaLoads[right];
@@ -153,7 +156,9 @@ public sealed class FourStrutQuasiStaticSolver
         var springTangent = spring.WheelRateNPerM;
         var stopTangent = force.ActiveBumpStops[index] ? spring.BumpStopRateNPerM : 0;
         var axle = index < 2 ? "front" : "rear";
-        var arbTangent = bars[axle].InstalledWheelPairRateNPerM;
+        var matrix = bars[axle].TangentMatrix();
+        var arbTangent = index is 0 or 2 ? matrix.LeftSelfNPerM : matrix.RightSelfNPerM;
+        var arbCross = index is 0 or 2 ? matrix.LeftCrossNPerM : matrix.RightCrossNPerM;
         var diagnostics = new List<ComponentTangentDiagnostic>
         {
             new(ComponentTangentValidity.Warning, "arb-coupled-local-tangent", "ARB self term is dF(corner)/d(jounce at that corner); its off-diagonal derivative to the opposite wheel is the negative ARB term. Do not sum corner totals for axle roll stiffness.")
@@ -162,7 +167,7 @@ public sealed class FourStrutQuasiStaticSolver
         if (corner.IsLifted) diagnostics.Add(new(ComponentTangentValidity.Warning, "pre-lift-contact", "Pre-lift tangent only: normal load is non-positive and contact constraint is not solved."));
         if (!converged) diagnostics.Add(new(ComponentTangentValidity.Invalid, "equilibrium-not-converged", "Equilibrium did not converge."));
         var validity = diagnostics.Any(x => x.Validity == ComponentTangentValidity.Invalid) ? ComponentTangentValidity.Invalid : diagnostics.Any(x => x.Validity == ComponentTangentValidity.Warning) ? ComponentTangentValidity.Warning : ComponentTangentValidity.Valid;
-        return new(geometry.Corner, springTangent, stopTangent, arbTangent, -arbTangent,
+        return new(geometry.Corner, springTangent, stopTangent, arbTangent, arbCross,
             springTangent + arbTangent + stopTangent, validity, diagnostics, corner.RelativeCompressionM,
             "positive wheel-centre jounce; opposite wheel on same axle held fixed");
     }

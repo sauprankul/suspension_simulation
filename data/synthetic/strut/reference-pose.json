@@ -1,0 +1,23 @@
+{
+  "schema": "suspension-sim/strut-reference-pose/v1",
+  "validity": "synthetic-geometry-fixture",
+  "coordinate_frame": "+X forward, +Y left, +Z up; metres",
+  "corner": "FR",
+  "reference_jounce_m": 0.0,
+  "hard_points": {
+    "upper_strut_mount": [1.20, -0.35, 0.65],
+    "lower_arm_inboard_axis_a": [1.00, -0.20, 0.25],
+    "lower_arm_inboard_axis_b": [1.00, -0.50, 0.25],
+    "lower_ball_joint": [1.30, -0.75, 0.20],
+    "tie_rod_inner": [1.10, -0.25, 0.28],
+    "tie_rod_outer": [1.31, -0.73, 0.30],
+    "wheel_center": [1.34, -0.78, 0.30],
+    "spindle_forward_reference": [1.44, -0.78, 0.30]
+  },
+  "upright_local_points": {
+    "lower_ball_joint": [-0.04, 0.03, -0.10],
+    "tie_rod_outer": [-0.03, 0.05, 0.00],
+    "strut_lower": [-0.02, 0.02, 0.15],
+    "wheel_center": [0.0, 0.0, 0.0]
+  }
+}

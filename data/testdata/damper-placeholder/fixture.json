@@ -1,0 +1,1 @@
+{"id":"linear-damper","validity":"verified-analytic","compression_coefficient_n_per_m_per_s":2000,"rebound_coefficient_n_per_m_per_s":3000,"compression_velocity_m_per_s":0.5,"rebound_velocity_m_per_s":-0.5,"expected_compression_force_n":-1000,"expected_rebound_force_n":1500,"quasi_static_force_n":0}

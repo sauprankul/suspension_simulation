@@ -67,6 +67,7 @@ public static class ModularSetupLoader
         var bars = setup.AntiRollBars.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
         if (!bars.Contains(setup.Assembly.FrontAntiRollBarId) || !bars.Contains(setup.Assembly.RearAntiRollBarId))
             throw new InvalidDataException("Assembly references a missing anti-roll bar.");
+        foreach (var bar in setup.AntiRollBars) _ = new AntiRollBar(bar);
     }
 
     private static void RequireUnique(IEnumerable<string> ids, string label)

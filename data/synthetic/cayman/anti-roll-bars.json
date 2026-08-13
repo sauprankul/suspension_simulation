@@ -3,16 +3,30 @@
     "id": "cayman-front-arb",
     "schemaVersion": "1.0",
     "provenance": "synthetic",
-    "sourceNote": "Installed wheel-pair rate including assumed lever/link geometry; tutorial-only.",
-    "directInstalledWheelPairRateNPerM": 18000.0,
-    "preloadDifferentialTravelM": 0.0
+    "sourceNote": "Synthetic tubular front bar geometry. Tutorial-only; not Cayman measurement data.",
+    "modelKind": "tubularGeometry",
+    "tubular": {
+      "torsionLengthM": 0.80,
+      "outsideDiameterM": 0.020,
+      "insideDiameterM": 0.0,
+      "shearModulusPa": 79300000000.0,
+      "left": { "leverArmM": 0.150, "endLinkLengthM": 0.250, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.510 },
+      "right": { "leverArmM": 0.150, "endLinkLengthM": 0.250, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.510 }
+    }
   },
   {
     "id": "cayman-rear-arb",
     "schemaVersion": "1.0",
     "provenance": "synthetic",
-    "sourceNote": "Installed wheel-pair rate including assumed lever/link geometry; tutorial-only.",
-    "directInstalledWheelPairRateNPerM": 15000.0,
-    "preloadDifferentialTravelM": 0.0
+    "sourceNote": "Synthetic tubular rear bar geometry. Tutorial-only; not Cayman measurement data.",
+    "modelKind": "tubularGeometry",
+    "tubular": {
+      "torsionLengthM": 0.90,
+      "outsideDiameterM": 0.018,
+      "insideDiameterM": 0.0,
+      "shearModulusPa": 79300000000.0,
+      "left": { "leverArmM": 0.160, "endLinkLengthM": 0.250, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.650 },
+      "right": { "leverArmM": 0.160, "endLinkLengthM": 0.250, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.650 }
+    }
   }
 ]

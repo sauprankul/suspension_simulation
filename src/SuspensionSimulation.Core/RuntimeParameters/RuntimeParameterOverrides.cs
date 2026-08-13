@@ -50,6 +50,8 @@ public static class VehiclePackageOverrides
             var replacement = string.Equals(bar.Axle, "front", StringComparison.OrdinalIgnoreCase)
                 ? overrides.FrontArbWheelPairRateNPerM : string.Equals(bar.Axle, "rear", StringComparison.OrdinalIgnoreCase)
                 ? overrides.RearArbWheelPairRateNPerM : null;
+            if (replacement is not null && !bar.IsLegacyDirectRate)
+                throw new InvalidOperationException($"{bar.Axle} ARB is geometry-backed. Change its tube/arm/end-link configuration rather than overriding a direct N/m rate.");
             return replacement is null ? bar : bar with { InstalledWheelPairRateNPerM = Choose(replacement, bar.InstalledWheelPairRateNPerM, $"{bar.Axle}.arbWheelPairRate", "N/m", applied) };
         }).ToArray();
         springs = springs.Select(s =>

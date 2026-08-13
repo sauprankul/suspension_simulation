@@ -26,7 +26,7 @@ public static class SyntheticFixtureLoader
         return new VehiclePackage(
             new ChassisModel(chassis.Id, chassis.TotalMassKg, chassis.WheelbaseM, chassis.FrontTrackM, chassis.RearTrackM, chassis.CgHeightM, chassis.StaticFrontWeightFraction, chassis.Provenance.ToString(), chassis.SourceNote),
             new SpringsModel(corners, "Synthetic", "Linear wheel rates are derived from synthetic component rates and declared motion ratios."),
-            [new AntiRollBarModel("front", barById[assembly.FrontAntiRollBarId].DirectInstalledWheelPairRateNPerM, "Synthetic", barById[assembly.FrontAntiRollBarId].SourceNote), new AntiRollBarModel("rear", barById[assembly.RearAntiRollBarId].DirectInstalledWheelPairRateNPerM, "Synthetic", barById[assembly.RearAntiRollBarId].SourceNote)],
+            [AntiRollBarModel.FromConfig("front", barById[assembly.FrontAntiRollBarId], "Synthetic"), AntiRollBarModel.FromConfig("rear", barById[assembly.RearAntiRollBarId], "Synthetic")],
             new DampingModel("Synthetic", "Loaded but intentionally excluded from this static solver."),
             new ModelScope("first-milestone/0.2", ["flat road", "rigid body", "small angles", "quasi-static accelerations", "linear springs and ARBs", "incremental state about static reference", "zero-rate synthetic bump-stop placeholders"], ["tire forces and load sensitivity", "kinematic roll centers and jacking", "damper forces and transient dynamics", "chassis and bushing compliance", "full progressive bump-stop curve", "a calibrated static bump-stop operating point"]));
     }

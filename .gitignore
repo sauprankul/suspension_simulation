@@ -1,0 +1,21 @@
+# .NET build output and local IDE state
+**/bin/
+**/obj/
+.vs/
+.idea/
+
+# Local SDK/package caches and generated artifacts
+.dotnet/
+artifacts/
+*.user
+*.suo
+
+# Temporary logs and local app output
+*.log
+*.tmp
+src/**/app.log
+
+# Python/reference caches if used later
+__pycache__/
+*.py[cod]
+

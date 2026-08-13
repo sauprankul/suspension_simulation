@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cayman-front-spring",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Tutorial-only linear spring.",
+    "linearRateNPerM": 80000.0,
+    "preloadN": 0.0
+  },
+  {
+    "id": "cayman-rear-spring",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Tutorial-only linear spring.",
+    "linearRateNPerM": 90000.0,
+    "preloadN": 0.0
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cayman-front-damper",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Linear placeholder for later transient work; ignored by quasi-static solves.",
+    "compressionDampingNPerMPerS": 2500.0,
+    "reboundDampingNPerMPerS": 4000.0
+  },
+  {
+    "id": "cayman-rear-damper",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Linear placeholder for later transient work; ignored by quasi-static solves.",
+    "compressionDampingNPerMPerS": 2700.0,
+    "reboundDampingNPerMPerS": 4300.0
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "schema": "suspension-sim/load-cases/v1",
+  "sign_convention": "ax_g positive = acceleration/rearward transfer; ay_g positive = leftward acceleration/right-side transfer",
+  "cases": [
+    { "id": "static", "ax_g": 0.0, "ay_g": 0.0 },
+    { "id": "one_g_left", "ax_g": 0.0, "ay_g": 1.0 },
+    { "id": "one_g_accel", "ax_g": 1.0, "ay_g": 0.0 },
+    { "id": "combined_accel_left", "ax_g": 0.60, "ay_g": 1.10 },
+    { "id": "combined_brake_right", "ax_g": -0.80, "ay_g": -0.90 }
+  ]
+}

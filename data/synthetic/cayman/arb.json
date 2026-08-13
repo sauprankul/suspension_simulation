@@ -1,0 +1,8 @@
+{
+  "schema": "suspension-sim/arb/v1",
+  "name": "Synthetic baseline anti-roll bars",
+  "validity": "assumed",
+  "front_wheel_pair_roll_rate_n_per_m": 25000.0,
+  "rear_wheel_pair_roll_rate_n_per_m": 30000.0,
+  "notes": "Installed effective differential wheel-pair rates. No OEM bar rates are asserted."
+}

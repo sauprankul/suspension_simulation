@@ -1,0 +1,20 @@
+[
+  {
+    "id": "cayman-front-bump-stop",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Inactive tutorial placeholder. Rate is deliberately zero until travel and static bump-stop clearance are calibrated.",
+    "engagementGapM": 0.045,
+    "preloadN": 0.0,
+    "forceCurve": [{ "x": 0.0, "y": 0.0 }, { "x": 0.010, "y": 0.0 }, { "x": 0.025, "y": 0.0 }]
+  },
+  {
+    "id": "cayman-rear-bump-stop",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Inactive tutorial placeholder. Rate is deliberately zero until travel and static bump-stop clearance are calibrated.",
+    "engagementGapM": 0.040,
+    "preloadN": 0.0,
+    "forceCurve": [{ "x": 0.0, "y": 0.0 }, { "x": 0.010, "y": 0.0 }, { "x": 0.025, "y": 0.0 }]
+  }
+]

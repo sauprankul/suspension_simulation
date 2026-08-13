@@ -1,0 +1,9 @@
+{
+  "schema": "suspension-sim/bump-stops/v1",
+  "name": "Inactive placeholder bump stops",
+  "validity": "assumed",
+  "front_engagement_wheel_travel_m": 0.050,
+  "rear_engagement_wheel_travel_m": 0.050,
+  "force_curve": [[0.0, 0.0], [0.010, 0.0]],
+  "notes": "Explicitly inactive in all initial load cases because travel is not yet solved."
+}

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF><EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SuspensionSimulation.Core\SuspensionSimulation.Core.csproj" />
+    <ProjectReference Include="..\SuspensionSimulation.Solvers\SuspensionSimulation.Solvers.csproj" />
+  </ItemGroup>
+</Project>

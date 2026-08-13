@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SuspensionSimulation.App/SuspensionSimulation.App.csproj" />
+    <Project Path="src/SuspensionSimulation.Cli/SuspensionSimulation.Cli.csproj" />
+    <Project Path="src/SuspensionSimulation.Core/SuspensionSimulation.Core.csproj" />
+    <Project Path="src/SuspensionSimulation.Solvers/SuspensionSimulation.Solvers.csproj" />
+    <Project Path="src/SuspensionSimulation.Tests/SuspensionSimulation.Tests.csproj" />
+  </Folder>
+</Solution>

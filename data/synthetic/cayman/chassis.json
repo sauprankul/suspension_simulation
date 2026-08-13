@@ -1,0 +1,13 @@
+{
+  "id": "2016-981-cayman-gt4-inspired-4-strut-chassis",
+  "schemaVersion": "1.0",
+  "provenance": "publicSource",
+  "sourceNote": "Public envelope: 2016 Porsche Cayman GT4 technical specifications, Porsche Newsroom PDF (wheelbase 2484 mm; front/rear track 1539/1533 mm; curb weight 2955 lb). CG, mass state, and all suspension inputs remain estimates/synthetic.",
+  "totalMassKg": 1340.0,
+  "wheelbaseM": 2.484,
+  "frontTrackM": 1.539,
+  "rearTrackM": 1.533,
+  "cgFromRearAxleM": 1.10,
+  "cgHeightM": 0.48,
+  "staticFrontWeightFraction": 0.45
+}

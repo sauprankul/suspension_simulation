@@ -1,0 +1,12 @@
+{
+  "id": "synthetic-cayman-4-strut-assembly",
+  "schemaVersion": "1.0",
+  "frontAntiRollBarId": "cayman-front-arb",
+  "rearAntiRollBarId": "cayman-rear-arb",
+  "corners": [
+    { "corner": "FL", "springId": "cayman-front-spring", "damperId": "cayman-front-damper", "bumpStopId": "cayman-front-bump-stop", "motionRatio": 0.95 },
+    { "corner": "FR", "springId": "cayman-front-spring", "damperId": "cayman-front-damper", "bumpStopId": "cayman-front-bump-stop", "motionRatio": 0.95 },
+    { "corner": "RL", "springId": "cayman-rear-spring", "damperId": "cayman-rear-damper", "bumpStopId": "cayman-rear-bump-stop", "motionRatio": 0.92 },
+    { "corner": "RR", "springId": "cayman-rear-spring", "damperId": "cayman-rear-damper", "bumpStopId": "cayman-rear-bump-stop", "motionRatio": 0.92 }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "suspension-sim/four-strut-assembly/v1",
+  "name": "Synthetic Cayman-like four-strut baseline",
+  "chassis": "chassis.json",
+  "springs": "springs.json",
+  "arb": "arb.json",
+  "bump_stops": "bump_stops.json",
+  "dampers": "dampers.json",
+  "validity": "estimated",
+  "front_roll_stiffness_n_m_per_rad": 175000.0,
+  "rear_roll_stiffness_n_m_per_rad": 175000.0,
+  "notes": [
+    "Roll stiffnesses are direct, linear axle values selected to make the baseline RSD exactly 50%.",
+    "They are not derived from the spring/bar files yet; that integration belongs to later modules.",
+    "Static equal left/right corner split and rigid chassis are assumed."
+  ]
+}

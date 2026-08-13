@@ -37,10 +37,8 @@ public partial class MainWindow : Window
         var rear = _source.Assembly.Corners.First(c => c.Corner is Corner.RL or Corner.RR);
         FrontSpring.Text = (_source.Springs.Single(s => s.Id == front.SpringId).LinearRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
         RearSpring.Text = (_source.Springs.Single(s => s.Id == rear.SpringId).LinearRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
-        var frontBar = AntiRollBarModel.FromConfig("front", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), "Synthetic");
-        var rearBar = AntiRollBarModel.FromConfig("rear", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), "Synthetic");
-        FrontArb.Text = (frontBar.TangentMatrix().LeftSelfNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
-        RearArb.Text = (rearBar.TangentMatrix().LeftSelfNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
+        PopulateTubularInputs(_source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), true);
+        PopulateTubularInputs(_source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), false);
         CgHeight.Text = _source.Chassis.CgHeightM.ToString("G", CultureInfo.InvariantCulture);
         Wheelbase.Text = _source.Chassis.WheelbaseM.ToString("G", CultureInfo.InvariantCulture);
         FrontTrack.Text = _source.Chassis.FrontTrackM.ToString("G", CultureInfo.InvariantCulture);
@@ -53,6 +51,14 @@ public partial class MainWindow : Window
     private void CenterGClick(object sender, RoutedEventArgs e) { _ax = 0; _ay = 0; Render(); }
     private void SetupChanged(object sender, RoutedEventArgs e) => Render();
     private void GCapChanged(object sender, RoutedEventArgs e) => Render();
+    private void LegacyArbModeChanged(object sender, RoutedEventArgs e)
+    {
+        var legacy = UseLegacyDirectArb.IsChecked == true;
+        LegacyDirectArbPanel.Visibility = legacy ? Visibility.Visible : Visibility.Collapsed;
+        ArbModeBadge.Text = legacy ? "LEGACY DIRECT RATE — TEST/IMPORT ONLY" : "TUBULAR GEOMETRY (PRIMARY)";
+        ArbModeBadge.Foreground = legacy ? Brushes.Goldenrod : Brushes.LightGreen;
+        if (IsLoaded) Render();
+    }
     private void GCirclePointer(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed && e.RoutedEvent != Mouse.MouseDownEvent) return;
@@ -105,10 +111,43 @@ public partial class MainWindow : Window
         return new VehiclePackage(
             new ChassisModel(chassis.Id, chassis.TotalMassKg, chassis.WheelbaseM, chassis.FrontTrackM, chassis.RearTrackM, chassis.CgHeightM, chassis.StaticFrontWeightFraction, "Mixed public/source + user-adjusted", chassis.SourceNote),
             new SpringsModel(springs, "User-adjusted", "Input is raw spring rate; solver maps it to wheel rate using the fixed configured motion ratio."),
-            [AntiRollBarModel.FromConfig("front", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), "Synthetic geometry"),
-             AntiRollBarModel.FromConfig("rear", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), "Synthetic geometry")],
+            [BuildArb("front", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.FrontAntiRollBarId), true),
+             BuildArb("rear", _source.AntiRollBars.Single(a => a.Id == _source.Assembly.RearAntiRollBarId), false)],
             new DampingModel("Loaded, excluded", "Static solver does not use damper force."),
-            new ModelScope("load-lab/0.3", ["flat road", "rigid body", "small angles", "quasi-static acceleration", "fixed motion ratio", "tubular ARB virtual-work stiffness", "first bump-stop tangent after engagement"], ["tire force/grip", "kinematic roll centers and jacking", "transient damping", "chassis/bushing compliance", "full bump-stop curve", "calibrated static bump-stop state"]));
+            new ModelScope("load-lab/0.3", ["flat road", "rigid body", "small angles", "quasi-static acceleration", "fixed spring motion ratio", "tubular ARB virtual-work stiffness from editable geometry", "first bump-stop tangent after engagement"], ["tire force/grip", "four-corner hard-point travel", "kinematic roll centers and jacking", "transient damping", "chassis/bushing compliance", "full bump-stop curve", "calibrated static bump-stop state"]));
+    }
+
+    private AntiRollBarModel BuildArb(string axle, AntiRollBarConfig source, bool front)
+    {
+        if (UseLegacyDirectArb.IsChecked == true)
+        {
+            var rate = ReadNonNegative(front ? FrontLegacyArb : RearLegacyArb, $"{axle} legacy direct ARB") * 1000;
+            return new AntiRollBarModel(axle, rate, "Legacy user import", "Explicit direct-rate legacy/test mode.");
+        }
+        var input = ReadTubularInput(front);
+        return AntiRollBarModel.FromConfig(axle, TubularArbEditor.ApplySymmetricInput(source, input), "User-adjusted tubular geometry");
+    }
+
+    private SymmetricTubularArbInput ReadTubularInput(bool front)
+    {
+        var od = front ? FrontArbOd : RearArbOd; var id = front ? FrontArbId : RearArbId;
+        var g = front ? FrontArbG : RearArbG; var length = front ? FrontArbLength : RearArbLength;
+        var arm = front ? FrontArbArm : RearArbArm; var link = front ? FrontArbLink : RearArbLink;
+        var angle = front ? FrontArbAngle : RearArbAngle; var motion = front ? FrontArbMr : RearArbMr;
+        return new(ReadPositive(od, "ARB outside diameter") / 1000, ReadNonNegative(id, "ARB inside diameter") / 1000,
+            ReadPositive(g, "ARB shear modulus") * 1e9, ReadPositive(length, "ARB torsion length"),
+            ReadPositive(arm, "ARB lever arm") / 1000, ReadPositive(link, "ARB end-link length") / 1000,
+            Read(angle, "ARB end-link angle") * Math.PI / 180, ReadNonNegative(motion, "ARB wheel-to-link motion ratio"));
+    }
+
+    private void PopulateTubularInputs(AntiRollBarConfig bar, bool front)
+    {
+        var t = bar.Tubular ?? throw new IO.InvalidDataException($"ARB '{bar.Id}' is missing tubular geometry.");
+        var side = t.Left;
+        Set(front ? FrontArbOd : RearArbOd, t.OutsideDiameterM * 1000); Set(front ? FrontArbId : RearArbId, t.InsideDiameterM * 1000);
+        Set(front ? FrontArbG : RearArbG, t.ShearModulusPa / 1e9); Set(front ? FrontArbLength : RearArbLength, t.TorsionLengthM);
+        Set(front ? FrontArbArm : RearArbArm, side.LeverArmM * 1000); Set(front ? FrontArbLink : RearArbLink, side.EndLinkLengthM * 1000);
+        Set(front ? FrontArbAngle : RearArbAngle, side.EndLinkAngleFromVerticalRad * 180 / Math.PI); Set(front ? FrontArbMr : RearArbMr, side.WheelToEndLinkVerticalMotionRatio);
     }
 
     private void RenderMetrics()
@@ -136,14 +175,12 @@ public partial class MainWindow : Window
         }
         if (selected.Contains("stiffness"))
         {
+            const string unavailable = "Unavailable: four-corner hard-point travel has not been solved for this package; the Load Lab must not present fixed-motion-ratio values as geometry/travel tangent stiffness.";
             foreach (var stiffness in _result.CornerTangentStiffnesses)
             {
-                var validity = stiffness.Validity.ToString().ToLowerInvariant();
-                var warning = string.Join(" ", stiffness.Diagnostics.Select(d => d.Message));
-                metrics.Add(new($"stiff-{stiffness.Corner}-total", $"{stiffness.Corner} total local tangent wheel stiffness", "N/mm", (stiffness.TotalSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
-                metrics.Add(new($"stiff-{stiffness.Corner}-spring", $"{stiffness.Corner} spring-only tangent wheel stiffness", "N/mm", (stiffness.SpringOnlyNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
-                metrics.Add(new($"stiff-{stiffness.Corner}-arb", $"{stiffness.Corner} ARB-only local tangent", "N/mm", (stiffness.ArbSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture), validity));
-                metrics.Add(new($"stiff-{stiffness.Corner}-travel", $"{stiffness.Corner} tangent travel state", "mm / note", $"{stiffness.ReferenceRelativeCompressionM * 1000:F2}; {warning}", validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-total", $"{stiffness.Corner} geometry/travel total tangent", "N/mm", unavailable, "unavailable"));
+                metrics.Add(new($"stiff-{stiffness.Corner}-spring", $"{stiffness.Corner} geometry/travel spring tangent", "N/mm", unavailable, "unavailable"));
+                metrics.Add(new($"stiff-{stiffness.Corner}-arb", $"{stiffness.Corner} geometry/travel ARB tangent", "N/mm", unavailable, "unavailable"));
             }
         }
         MetricsGrid.ItemsSource = metrics;
@@ -170,6 +207,7 @@ public partial class MainWindow : Window
     private static double ReadPositive(TextBox box, string name) { var n = Read(box, name); return n > 0 ? n : throw new InvalidOperationException($"{name} must be positive."); }
     private static double ReadNonNegative(TextBox box, string name) { var n = Read(box, name); return n >= 0 ? n : throw new InvalidOperationException($"{name} must be non-negative."); }
     private static double Read(TextBox box, string name) => double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && double.IsFinite(n) ? n : throw new InvalidOperationException($"{name} must be a finite number using . as decimal separator.");
+    private static void Set(TextBox box, double value) => box.Text = value.ToString("G", CultureInfo.InvariantCulture);
     private static string Percent(double value) => double.IsNaN(value) ? "undefined" : (100 * value).ToString("F2", CultureInfo.InvariantCulture);
     private static string Degrees(double radians) => (radians * 180 / Math.PI).ToString("F3", CultureInfo.InvariantCulture);
     private static void Add(Canvas canvas, UIElement item, double x, double y) { Canvas.SetLeft(item, x); Canvas.SetTop(item, y); canvas.Children.Add(item); }

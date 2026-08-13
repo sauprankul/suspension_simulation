@@ -18,7 +18,7 @@ The solver continues from the previous jounce point but independently validates 
 
 The first executable gate is deliberately narrower than the future 3D solver: `MacPhersonPlanarSolver` solves a rigid upright in the Y-Z front-view plane from lower-arm length, strut length, and prescribed wheel-centre jounce. It reproduces the reference hard points, exports strut compression plus its local geometry-derived motion ratio and derivative, and can feed the component virtual-work tangent calculation.
 
-Tie-rod length is exported as a residual only; it does **not** claim toe or bump steer. The solver also exports a projected lower-arm/strut instant-centre force-line construction and a vertical-per-lateral-force jacking ratio. Both are explicitly **estimated** and are not fed into the four-corner load solver: full axle roll-centre, tire-force and 3D steering constraints remain unavailable until their validation gates pass.
+The planar tie-rod length closes the travel solve, but it does **not** claim toe or bump steer: those remain unavailable until the 3D steering solve. The solver also exports a projected lower-arm/strut instant-centre force-line construction and a vertical-per-lateral-force jacking ratio. Both are explicitly **estimated** and are not fed into the four-corner load solver: full axle roll-centre, tire-force and 3D steering constraints remain unavailable until their validation gates pass.
 
 ## Hard-point schema and fixture files
 
@@ -64,3 +64,5 @@ The reusable component calculator also supports travel-dependent motion ratio an
 ## ARB model selection
 
 The stitched vehicle package now uses tubular geometry as its normal ARB representation: ID/OD, shear modulus, torsion length, arm lengths, end-link length/angle, and wheel-to-link local motion ratios. The solver gets wheel reactions and the local stiffness matrix directly from virtual work. The former `InstalledWheelPairRateNPerM` is retained only for explicit legacy/test packages; attempting to override a geometry-backed bar by N/m is rejected rather than silently discarding its physical geometry.
+
+The Load Lab exposes those physical tubular inputs directly and hides direct N/m fields behind an explicit legacy/import mode badge. Its four-corner package still has no full set of hard-point travel solves, so the dashboard labels geometry/travel wheel-stiffness values as **unavailable** instead of displaying a flat fixed-motion-ratio value. Reference-relative ride-height delta remains the only attitude readout there; it is not repeated as a separate tangent-travel metric.

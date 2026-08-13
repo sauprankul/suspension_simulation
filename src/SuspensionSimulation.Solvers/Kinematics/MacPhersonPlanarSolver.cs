@@ -6,8 +6,9 @@ namespace SuspensionSimulation.Solvers.Kinematics;
 
 /// <summary>
 /// Rigid hard-point continuation for the deliberately bounded first MacPherson slice. It solves
-/// a lower-arm length, strut length, and prescribed wheel-centre jounce in the front-view plane.
-/// The unmodelled 3D tie-rod constraint is exported as a residual, never hidden by a fitted toe.
+/// a lower-arm length, tie-rod length, and prescribed wheel-centre jounce in the front-view plane.
+/// Strut length is therefore a result (and supplies component travel), while toe remains unavailable
+/// because this is not yet a 3D steering solve.
 /// </summary>
 public sealed class MacPhersonPlanarSolver
 {
@@ -41,7 +42,8 @@ public sealed class MacPhersonPlanarSolver
         else diagnostics.Add(new(KinematicValidity.Unavailable, "motion-ratio-boundary", "Motion ratio unavailable because a finite-difference neighbour did not converge."));
 
         if (config.TieRodInnerM is not null && config.TieRodOuterReferenceM is not null)
-            diagnostics.Add(new(KinematicValidity.Estimated, "tie-rod-residual", "Tie-rod length is a reported residual in this front-view slice; toe/bump steer requires the later 3D solve."));
+            diagnostics.Add(new(KinematicValidity.Estimated, "tie-rod-planar-constraint", "Tie-rod length closes this planar travel model; toe/bump steer still requires the later 3D solve."));
+        else diagnostics.Add(new(KinematicValidity.Unavailable, "tie-rod-missing", "No tie rod was supplied: strut travel cannot be derived from this under-constrained planar model."));
         diagnostics.Add(new(KinematicValidity.Estimated, "planar-rigid-model", "Hard-point result is a rigid, planar front-view estimate; compliance, steering and out-of-plane motion are unavailable."));
         return Build(config, wheelJounceM, centre, ratio, diagnostics);
     }
@@ -65,6 +67,8 @@ public sealed class MacPhersonPlanarSolver
     {
         var lowerArmLength = Distance(Yz(c.LowerArmInnerPivotM), Yz(c.LowerBallJointReferenceM));
         var strutLength = Distance(Yz(c.UpperStrutMountM), Yz(c.StrutLowerReferenceM));
+        var tieLength = c.TieRodInnerM is not null && c.TieRodOuterReferenceM is not null
+            ? Distance(Yz(c.TieRodInnerM.Value), Yz(c.TieRodOuterReferenceM.Value)) : double.NaN;
         var q = new[] { Yz(c.LowerBallJointReferenceM).Y, Yz(c.LowerBallJointReferenceM).Z, 0.0 };
         for (var iteration = 0; iteration < 32; iteration++)
         {
@@ -72,7 +76,7 @@ public sealed class MacPhersonPlanarSolver
             var residual = new[]
             {
                 Distance(Yz(c.LowerArmInnerPivotM), state.LowerBallJoint) - lowerArmLength,
-                Distance(Yz(c.UpperStrutMountM), state.StrutLower) - strutLength,
+                double.IsFinite(tieLength) ? TieResidual(c, state)!.Value : Distance(Yz(c.UpperStrutMountM), state.StrutLower) - strutLength,
                 state.WheelCentre.Z - Yz(c.WheelCentreReferenceM).Z - jounce
             };
             if (residual.Max(Math.Abs) <= c.SolverToleranceM) return state with { Converged = true };
@@ -81,7 +85,7 @@ public sealed class MacPhersonPlanarSolver
             for (var column = 0; column < 3; column++)
             {
                 var plus = (double[])q.Clone(); var minus = (double[])q.Clone(); plus[column] += steps[column]; minus[column] -= steps[column];
-                var rp = Residual(c, plus, strutLength, lowerArmLength, jounce); var rm = Residual(c, minus, strutLength, lowerArmLength, jounce);
+                var rp = Residual(c, plus, strutLength, tieLength, lowerArmLength, jounce); var rm = Residual(c, minus, strutLength, tieLength, lowerArmLength, jounce);
                 for (var row = 0; row < 3; row++) jacobian[row, column] = (rp[row] - rm[row]) / (2 * steps[column]);
             }
             try
@@ -94,11 +98,11 @@ public sealed class MacPhersonPlanarSolver
         return State(c, q, strutLength) with { Converged = false };
     }
 
-    private static double[] Residual(MacPhersonPlanarCornerConfig c, double[] q, double strutLength, double lowerArmLength, double jounce)
+    private static double[] Residual(MacPhersonPlanarCornerConfig c, double[] q, double strutLength, double tieLength, double lowerArmLength, double jounce)
     {
         var state = State(c, q, strutLength);
         return [Distance(Yz(c.LowerArmInnerPivotM), state.LowerBallJoint) - lowerArmLength,
-            Distance(Yz(c.UpperStrutMountM), state.StrutLower) - strutLength,
+            double.IsFinite(tieLength) ? TieResidual(c, state)!.Value : Distance(Yz(c.UpperStrutMountM), state.StrutLower) - strutLength,
             state.WheelCentre.Z - Yz(c.WheelCentreReferenceM).Z - jounce];
     }
 

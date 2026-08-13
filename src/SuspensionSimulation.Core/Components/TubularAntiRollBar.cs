@@ -71,10 +71,19 @@ public sealed class TubularAntiRollBar
     public (ArbSideGeometry Left, ArbSideGeometry Right) Geometry => (_config.Left, _config.Right);
 
     /// <summary>Wheel-plane energy Hessian. A single pair rate is exact only for symmetric local side geometry.</summary>
-    public TubularArbWheelTangent WheelTangent()
+    public TubularArbWheelTangent WheelTangent() => WheelTangent(_config.Left.WheelToEndLinkVerticalMotionRatio, _config.Right.WheelToEndLinkVerticalMotionRatio);
+
+    /// <summary>
+    /// Wheel-plane energy Hessian at a solved travel point. The supplied derivatives are
+    /// d(end-link vertical position)/d(wheel jounce), normally obtained from hard-point travel.
+    /// They are not inferred from link length or static angle.
+    /// </summary>
+    public TubularArbWheelTangent WheelTangent(double leftWheelToEndLinkVerticalMotionRatio, double rightWheelToEndLinkVerticalMotionRatio)
     {
-        var aL = _config.Left.WheelToEndLinkVerticalMotionRatio / _config.Left.LeverArmM;
-        var aR = _config.Right.WheelToEndLinkVerticalMotionRatio / _config.Right.LeverArmM;
+        if (!double.IsFinite(leftWheelToEndLinkVerticalMotionRatio) || !double.IsFinite(rightWheelToEndLinkVerticalMotionRatio))
+            throw new ArgumentOutOfRangeException(nameof(leftWheelToEndLinkVerticalMotionRatio), "Travel derivatives must be finite.");
+        var aL = leftWheelToEndLinkVerticalMotionRatio / _config.Left.LeverArmM;
+        var aR = rightWheelToEndLinkVerticalMotionRatio / _config.Right.LeverArmM;
         var left = _properties.TorsionalStiffnessNmPerRad * aL * aL;
         var right = _properties.TorsionalStiffnessNmPerRad * aR * aR;
         var cross = -_properties.TorsionalStiffnessNmPerRad * aL * aR;

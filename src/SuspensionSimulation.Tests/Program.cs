@@ -285,25 +285,53 @@ Run("geometry-backed ARBs reject a misleading direct-rate runtime override", () 
     catch (InvalidOperationException) { return; }
     throw new Exception("A tubular ARB must not silently accept a direct N/m override.");
 });
+Run("tubular ARB editor changes physical tube geometry rather than a direct rate", () =>
+{
+    var setup = ModularSetupLoader.Load(Path.Combine("data", "synthetic", "cayman"));
+    var source = setup.AntiRollBars.Single(x => x.Id == setup.Assembly.FrontAntiRollBarId);
+    var before = AntiRollBarModel.FromConfig("front", source, "test").TangentMatrix().LeftSelfNPerM;
+    var edited = TubularArbEditor.ApplySymmetricInput(source, new SymmetricTubularArbInput(.022, 0, 79.3e9, .80, .150, .250, 0, .510));
+    var after = AntiRollBarModel.FromConfig("front", edited, "test").TangentMatrix().LeftSelfNPerM;
+    if (after <= before || edited.ModelKind != AntiRollBarModelKind.TubularGeometry) throw new Exception("Physical tubular edit did not update the derived tangent.");
+});
 Run("planar MacPherson hard points reproduce reference pose and derive travel motion ratio", () =>
 {
     var config = PlanarStrutFixture(); var solver = new MacPhersonPlanarSolver();
     var reference = solver.Solve(config, 0); if (!reference.Converged) throw new Exception("Reference hard-point pose did not converge.");
     Equal(0, reference.StrutCompressionM, 1e-8);
     var bump = solver.Solve(config, 0.01); if (!bump.Converged || bump.StrutMotionRatio is null) throw new Exception("Bump pose or local motion ratio was unavailable.");
-    if (bump.StrutMotionRatio.MotionRatio <= 0) throw new Exception("Strut compression must increase with positive wheel jounce in this fixture.");
+    if (Math.Abs(bump.StrutMotionRatio.MotionRatio) <= 1e-5) throw new Exception("Fixture must produce a non-zero local strut motion ratio.");
     if (bump.RollCentre.Validity == KinematicValidity.Invalid) throw new Exception("Roll-centre diagnostic must not be invalid for a converged fixture.");
-    var stiffness = GeometryTravelStiffness.Evaluate("FL", new Spring(new SpringConfig { Id = "spring", LinearRateNPerM = 100_000 }), null, bump);
-    Equal(100_000 * bump.StrutMotionRatio.MotionRatio * bump.StrutMotionRatio.MotionRatio, stiffness.SpringOnlyNPerM, 2);
+    var spring = new Spring(new SpringConfig { Id = "spring", LinearRateNPerM = 100_000 });
+    var stiffness = GeometryTravelStiffness.Evaluate("FL", spring, null, bump);
+    var value = spring.EvaluateCompression(bump.StrutCompressionM);
+    Equal(value.TangentRateNPerM * bump.StrutMotionRatio.MotionRatio * bump.StrutMotionRatio.MotionRatio + value.ForceN * bump.StrutMotionRatio.MotionRatioDerivativePerM, stiffness.SpringOnlyNPerM, 2);
 });
 Run("planar MacPherson marks tie-rod and jacking scope instead of inventing a 3D result", () =>
 {
     var pose = new MacPhersonPlanarSolver().Solve(PlanarStrutFixture(), 0.01);
-    if (!pose.Diagnostics.Any(d => d.Code == "tie-rod-residual")) throw new Exception("Tie rod must remain an explicit residual in the planar slice.");
+    if (!pose.Diagnostics.Any(d => d.Code == "tie-rod-planar-constraint")) throw new Exception("Tie rod must remain an explicit planar-only constraint until 3D steering is solved.");
     if (pose.Jacking.Validity == KinematicValidity.Valid) throw new Exception("Jacking must not be presented as a fully validated chassis force result.");
 });
+Run("solved strut travel changes local motion ratio and tubular ARB tangent", () =>
+{
+    var solver = new MacPhersonPlanarSolver(); var reference = solver.Solve(PlanarStrutFixture(), 0.01); var bump = solver.Solve(PlanarStrutFixture(), 0.10);
+    if (reference.StrutMotionRatio is null || bump.StrutMotionRatio is null) throw new Exception($"Fixture travel motion ratios were unavailable ({reference.Converged}/{reference.StrutMotionRatio is not null}, {bump.Converged}/{bump.StrutMotionRatio is not null}).");
+    if (Math.Abs(reference.StrutMotionRatio.MotionRatio - bump.StrutMotionRatio.MotionRatio) < 1e-5) throw new Exception($"Hard-point travel must change this fixture's local motion ratio ({reference.StrutMotionRatio.MotionRatio}, {bump.StrutMotionRatio.MotionRatio}).");
+    var bar = TubularBar();
+    var referenceTangent = bar.WheelTangent(reference.StrutMotionRatio.MotionRatio, reference.StrutMotionRatio.MotionRatio);
+    var bumpTangent = bar.WheelTangent(bump.StrutMotionRatio.MotionRatio, bump.StrutMotionRatio.MotionRatio);
+    if (Math.Abs(referenceTangent.LeftSelfNPerM - bumpTangent.LeftSelfNPerM) < 1e-3) throw new Exception("ARB tangent must follow supplied solved travel derivatives.");
+});
+Run("dashboard keeps legacy direct ARB inputs hidden by default", () =>
+{
+    var xaml = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml"));
+    if (!xaml.Contains("x:Name=\"LegacyDirectArbPanel\" Visibility=\"Collapsed\"", StringComparison.Ordinal)) throw new Exception("Legacy ARB panel must be collapsed by default.");
+    if (!xaml.Contains("Enable legacy direct-rate import mode", StringComparison.Ordinal)) throw new Exception("Legacy mode must be explicitly opt-in.");
+    if (xaml.Contains("Front ARB local tangent", StringComparison.Ordinal) || xaml.Contains("Rear ARB local tangent", StringComparison.Ordinal)) throw new Exception("Primary UI must expose geometry parameters, not a direct tangent control.");
+});
 
-Console.WriteLine($"{31 - failures.Count}/31 regression checks passed.");
+Console.WriteLine($"{34 - failures.Count}/34 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 
@@ -333,12 +361,12 @@ static TubularAntiRollBar TubularBar() => new(new TubularAntiRollBarConfig
 static MacPhersonPlanarCornerConfig PlanarStrutFixture() => new()
 {
     Id = "planar-fixture",
-    LowerArmInnerPivotM = new Vector3(0, 0.00f, 0.20f),
-    LowerBallJointReferenceM = new Vector3(0, 0.70f, 0.30f),
-    StrutLowerReferenceM = new Vector3(0, 0.65f, 0.65f),
-    UpperStrutMountM = new Vector3(0, 0.40f, 1.30f),
-    WheelCentreReferenceM = new Vector3(0, 0.78f, 0.50f),
+    LowerArmInnerPivotM = new Vector3(0, 0.00f, 0.00f),
+    LowerBallJointReferenceM = new Vector3(0, 1.00f, 0.00f),
+    StrutLowerReferenceM = new Vector3(0, 1.00f, 1.00f),
+    UpperStrutMountM = new Vector3(0, 0.00f, 2.00f),
+    WheelCentreReferenceM = new Vector3(0, 1.00f, 0.50f),
     TieRodInnerM = new Vector3(0, 0.20f, 0.65f),
-    TieRodOuterReferenceM = new Vector3(0, 0.70f, 0.55f),
+    TieRodOuterReferenceM = new Vector3(0, 0.98f, 0.55f),
     GroundPlaneZM = 0
 };

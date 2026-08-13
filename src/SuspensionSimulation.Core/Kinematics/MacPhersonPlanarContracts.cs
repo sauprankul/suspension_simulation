@@ -14,7 +14,7 @@ public sealed record KinematicDiagnostic(KinematicValidity Validity, string Code
 /// <summary>
 /// First hard-point slice: a rigid upright in the vehicle Y-Z (front-view) plane. X coordinates
 /// are preserved for provenance but are not constrained yet. This is intentionally not a 3D
-/// steering/toe solver; the optional tie rod is reported as a residual rather than silently fitted.
+/// steering/toe solver; when present, the tie rod closes the planar travel solve but cannot produce toe.
 /// </summary>
 public sealed record MacPhersonPlanarCornerConfig
 {

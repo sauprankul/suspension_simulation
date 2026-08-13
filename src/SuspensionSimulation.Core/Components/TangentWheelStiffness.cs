@@ -74,18 +74,13 @@ public static class TangentWheelStiffnessCalculator
     public static ComponentAxleTangentWheelStiffness WithTubularArb(ComponentCornerTangentWheelStiffness left, ComponentCornerTangentWheelStiffness right, TubularAntiRollBar bar)
     {
         ArgumentNullException.ThrowIfNull(bar);
-        var p = bar.Properties;
-        // Recover geometry only through an explicit local geometric contract, never infer it from link length.
-        var g = bar.Geometry;
-        var aLeft = g.Left.WheelToEndLinkVerticalMotionRatio * Math.Pow(Math.Cos(g.Left.EndLinkAngleFromVerticalRad), 2) / g.Left.LeverArmM;
-        var aRight = g.Right.WheelToEndLinkVerticalMotionRatio * Math.Pow(Math.Cos(g.Right.EndLinkAngleFromVerticalRad), 2) / g.Right.LeverArmM;
-        var diagnostics = new List<ComponentTangentDiagnostic>();
-        AddAngleDiagnostic(g.Left.EndLinkAngleFromVerticalRad, "left", diagnostics);
-        AddAngleDiagnostic(g.Right.EndLinkAngleFromVerticalRad, "right", diagnostics);
-        var kLl = p.TorsionalStiffnessNmPerRad * aLeft * aLeft;
-        var kRr = p.TorsionalStiffnessNmPerRad * aRight * aRight;
-        var kLr = -p.TorsionalStiffnessNmPerRad * aLeft * aRight;
-        return Combine(left, right, kLl, kLr, kLr, kRr, diagnostics);
+        var tangent = bar.WheelTangent();
+        var validity = string.Equals(tangent.Validity, "invalid", StringComparison.OrdinalIgnoreCase)
+            ? ComponentTangentValidity.Invalid : ComponentTangentValidity.Warning;
+        var diagnostics = tangent.Warnings.Select(message => new ComponentTangentDiagnostic(validity, "tubular-arb-travel-contract", message)).ToArray();
+        if (validity == ComponentTangentValidity.Invalid)
+            return Combine(left, right, double.NaN, double.NaN, double.NaN, double.NaN, diagnostics);
+        return Combine(left, right, tangent.LeftSelfNPerM, tangent.CrossNPerM, tangent.CrossNPerM, tangent.RightSelfNPerM, diagnostics);
     }
 
     private static ComponentAxleTangentWheelStiffness Combine(ComponentCornerTangentWheelStiffness left, ComponentCornerTangentWheelStiffness right,

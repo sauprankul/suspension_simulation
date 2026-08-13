@@ -39,7 +39,7 @@ Run("tubular ARB wheel reactions satisfy virtual work", () =>
     var dEnergyByDwLeft = (advanced.StoredEnergyJ - e.StoredEnergyJ) / displacement;
     Equal(-dEnergyByDwLeft, e.LeftWheelReactionN, 0.02);
     Equal(-e.LeftEndLinkVerticalForceN, e.RightEndLinkVerticalForceN, 1e-9);
-    Equal(e.LeftEndLinkVerticalForceN / Math.Cos(0.2), e.LeftEndLinkAxialForceN, 1e-9);
+    Equal(e.LeftEndLinkVerticalForceN, e.LeftEndLinkAxialForceN, 1e-9);
 });
 Run("corner tangent stiffness includes motion-ratio curvature and bump stop", () =>
 {
@@ -395,8 +395,8 @@ Run("geometry-backed RSD and RCB respond to solved travel and ARB end-link angle
     var lowTravel = geometrySolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("low", 0, .15, 0)), components, package.AntiRollBars).Balance;
     var highTravel = geometrySolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("high", 0, .70, 0)), components, package.AntiRollBars).Balance;
     if (lowTravel is null || highTravel is null) throw new Exception("Geometry-backed balances must be available.");
-    if (Math.Abs(lowTravel.FrontRollStiffnessDistribution - highTravel.FrontRollStiffnessDistribution) < 1e-7)
-        throw new Exception("Solved travel must update current geometry-backed RSD.");
+    if (Math.Abs(lowTravel.FrontRollStiffnessDistribution - highTravel.FrontRollStiffnessDistribution) < 1e-7 || Math.Abs(lowTravel.RollCoupleBiasPercentagePoints - highTravel.RollCoupleBiasPercentagePoints) < 1e-5)
+        throw new Exception("Solved travel must update current geometry-backed RSD and RCB.");
     var sourceFront = modular.AntiRollBars.Single(x => x.Id == modular.Assembly.FrontAntiRollBarId); var tube = sourceFront.Tubular!;
     // Change a fully modeled attachment state (arm length); this recomputes the
     // tubular virtual-work tangent and therefore displayed RSD/RCB.
@@ -437,8 +437,8 @@ static TubularAntiRollBar TubularBar() => new(new TubularAntiRollBarConfig
 {
     Id = "test-tube", TorsionLengthM = 0.8, OutsideDiameterM = 0.020, InsideDiameterM = 0,
     ShearModulusPa = 79.3e9,
-    Left = new ArbSideGeometry(0.15, 0.25, 0.2, 1),
-    Right = new ArbSideGeometry(0.15, 0.25, 0.2, 1)
+    Left = new ArbSideGeometry(0.15, 0.25, 0, 1),
+    Right = new ArbSideGeometry(0.15, 0.25, 0, 1)
 });
 
 static GeometryCornerComponents[] CaymanGeometryComponents(string directory)

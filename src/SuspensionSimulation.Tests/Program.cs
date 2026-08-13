@@ -161,6 +161,17 @@ Run("G-circle applies separate axis sweep and total-G caps", () =>
     Equal(1.7677669529663689, point.DisplayLateralG, 1e-10);
     if (!point.WasClamped) throw new Exception("Expected both cap stages to be observable as a clamped result.");
 });
+Run("negative lateral G maps and geometry stiffness remains render-safe", () =>
+{
+    var mapped = GCircleMapper.Map(0.25, -1.25, 100, axisSweepCapG: 2, totalGCap: 2);
+    if (mapped.X >= 0 || mapped.Y <= 0) throw new Exception("Left-half G-circle mapping must retain negative lateral and positive longitudinal screen signs.");
+    var directory = Path.Combine("data", "synthetic", "cayman");
+    var package = SyntheticFixtureLoader.LoadFourStrutPackage(directory);
+    var geometry = FourCornerMacPhersonGeometryLoader.Load(directory);
+    var state = new FourStrutQuasiStaticSolver().Solve(package, new LoadCase("negative-lateral", 0.25, -1.25, 0));
+    var result = new FourCornerGeometryStiffnessSolver().Solve(geometry, state, CaymanGeometryComponents(directory), package.AntiRollBars);
+    if (result.Corners.Count != 4) throw new Exception("Negative lateral state must return all four geometry stiffness records, not crash rendering.");
+});
 Run("metric selection retains selected metrics only", () =>
 {
     var metrics = new[]
@@ -249,6 +260,19 @@ Run("linear combined cases retain constant RSD and raw negative normal loads", (
     Equal(baseCase.RollStiffnessDistributionFront, combined.RollStiffnessDistributionFront, 1e-10);
     if (!combined.Corners.Any(c => c.NormalLoadN < 0 && c.IsLifted)) throw new Exception("The pre-lift solver must retain and mark raw negative normal loads.");
     if (!combined.Converged) throw new Exception("Combined linear case should converge.");
+});
+Run("pure longitudinal acceleration preserves RSD with constant tangents", () =>
+{
+    var source = SymmetricPackage(); // Linear springs, zero-rate stops, and fixed direct ARB tangent.
+    var solver = new FourStrutQuasiStaticSolver();
+    var staticCase = solver.Solve(source, new LoadCase("static", 0, 0, 0));
+    var acceleration = solver.Solve(source, new LoadCase("pure-acceleration", 1.0, 0, 0));
+    Equal(staticCase.RollStiffnessDistributionFront, acceleration.RollStiffnessDistributionFront, 1e-12);
+    Equal(staticCase.RollCoupleBiasPercentagePoints, acceleration.RollCoupleBiasPercentagePoints, 1e-10);
+    if (Math.Abs(acceleration.PitchRad) < 1e-12) throw new Exception("Hand-check must exercise longitudinal pitch while holding tangents constant.");
+    var front = acceleration.TangentRollStiffnesses!.Single(x => x.Axle == "front");
+    var rear = acceleration.TangentRollStiffnesses!.Single(x => x.Axle == "rear");
+    Equal(0, front.BumpStopNmPerRad, 1e-12); Equal(0, rear.BumpStopNmPerRad, 1e-12);
 });
 Run("lateral transfer satisfies the hand-check roll-moment closure", () =>
 {
@@ -413,8 +437,27 @@ Run("geometry-backed RSD and RCB respond to solved travel and ARB end-link angle
     catch (InvalidOperationException) { return; }
     throw new Exception("Non-vertical ARB-angle state must be rejected until explicit 3D bar-end travel is supplied.");
 });
+Run("pure longitudinal linear no-stop geometry RSD preserves the reference roll tangent", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "cayman"); var package = SyntheticFixtureLoader.LoadFourStrutPackage(directory);
+    var geometry = FourCornerMacPhersonGeometryLoader.Load(directory); var components = CaymanGeometryComponents(directory);
+    var loadSolver = new FourStrutQuasiStaticSolver(); var tangentSolver = new FourCornerGeometryStiffnessSolver();
+    var reference = tangentSolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("reference", 0, 0, 0)), components, package.AntiRollBars);
+    var braking = tangentSolver.Solve(geometry, loadSolver.Solve(package, new LoadCase("braking", -1.2, 0, 0)), components, package.AntiRollBars);
+    if (reference.Balance is null || braking.Balance is null) throw new Exception("Reference and braking tangent balances must solve.");
+    Equal(reference.Balance.FrontRollStiffnessDistribution, braking.Balance.FrontRollStiffnessDistribution, 1e-10);
+    if (!braking.Diagnostics.Any(x => x.Code == "pure-longitudinal-reference-roll-tangent")) throw new Exception("Pure-longitudinal reference-tangent convention must be disclosed.");
+});
+Run("dashboard render failure preserves the prior plot and records a diagnostic", () =>
+{
+    var source = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
+    if (!source.Contains("previous valid plot retained", StringComparison.Ordinal) || !source.Contains("App.Log($\"Render failed", StringComparison.Ordinal)) throw new Exception("Render failure recovery must retain the prior plot and write a diagnostic.");
+    var marker = source.IndexOf("catch (Exception exception)", StringComparison.Ordinal);
+    var recovery = source[marker..Math.Min(source.Length, marker + 700)];
+    if (recovery.Contains("CarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("MetricsGrid.ItemsSource = null", StringComparison.Ordinal)) throw new Exception("Render recovery must not blank the dashboard.");
+});
 
-Console.WriteLine($"{37 - failures.Count}/37 regression checks passed.");
+Console.WriteLine($"{40 - failures.Count}/40 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 

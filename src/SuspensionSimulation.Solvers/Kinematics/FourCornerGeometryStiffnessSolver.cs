@@ -46,6 +46,8 @@ public sealed class FourCornerGeometryStiffnessSolver
         var poses = new Dictionary<string, MacPhersonPlanarPose>(StringComparer.OrdinalIgnoreCase);
         var baseStiffness = new Dictionary<string, ComponentCornerTangentWheelStiffness>(StringComparer.OrdinalIgnoreCase);
         var planar = new MacPhersonPlanarSolver();
+        var pureLongitudinalLinear = Math.Abs(loadState.LoadCase.LateralG) < 1e-10;
+        var anyStopEngaged = false;
         foreach (var (corner, config) in geometry.Corners)
         {
             if (!componentByCorner.TryGetValue(corner, out var component) || !equilibriumByCorner.TryGetValue(corner, out var state))
@@ -55,6 +57,11 @@ public sealed class FourCornerGeometryStiffnessSolver
             }
             // The load solver's reference-relative compression is the currently available wheel-jounce proxy.
             var pose = planar.Solve(config, state.RelativeCompressionM);
+            anyStopEngaged |= pose.Converged && component.BumpStop?.EvaluateCompression(pose.StrutCompressionM).IsEngaged == true;
+            // RSD is a roll-mode tangent. In a linear/no-stop pure-longitudinal case, pitch/heave
+            // is not itself a roll-mode stiffness change; use the declared reference roll tangent.
+            // Nonlinear stop engagement remains at its current operating point and is reported below.
+            if (pureLongitudinalLinear && !anyStopEngaged) pose = planar.Solve(config, geometry.Expected.ReferenceJounceM);
             poses[corner] = pose;
             if (!pose.Converged || pose.StrutMotionRatio is null)
             {
@@ -100,6 +107,10 @@ public sealed class FourCornerGeometryStiffnessSolver
         var all = geometry.Corners.Keys.Select(corner => baseStiffness.TryGetValue(corner, out var item)
             ? item : Unavailable(corner, poses.TryGetValue(corner, out var pose) ? pose : null, "No stiffness result was produced.")).ToArray();
         var geometryBacked = all.All(x => x.Validity != ComponentTangentValidity.Invalid) && all.All(x => !double.IsNaN(x.TotalSelfNPerM));
+        if (pureLongitudinalLinear && !anyStopEngaged)
+            diagnostics.Add(new(KinematicValidity.Estimated, "pure-longitudinal-reference-roll-tangent", "Pure longitudinal linear/no-stop case uses the reference roll tangent; pitch/heave is not treated as a roll-stiffness change."));
+        else if (pureLongitudinalLinear)
+            diagnostics.Add(new(KinematicValidity.Estimated, "pure-longitudinal-nonlinear-tangent", "Pure longitudinal RSD uses the current nonlinear/engaged-stop operating point."));
         var balance = geometryBacked ? Balance(geometry, all, poses, loadState.StaticFrontWeightFraction) : null;
         return new(all, poses, balance, diagnostics, geometryBacked && balance is not null);
     }

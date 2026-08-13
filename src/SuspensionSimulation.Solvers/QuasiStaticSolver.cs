@@ -65,7 +65,9 @@ public sealed class FourStrutQuasiStaticSolver
         var front = Axle("front", [geometry[0], geometry[1]], [0, 1], force, springByCorner, bars);
         var rear = Axle("rear", [geometry[2], geometry[3]], [2, 3], force, springByCorner, bars);
         var decompositions = new[] { RollDecomposition("front", [geometry[0], geometry[1]], [0, 1], force, springByCorner, bars), RollDecomposition("rear", [geometry[2], geometry[3]], [2, 3], force, springByCorner, bars) };
-        var balance = BalanceMetrics.Create(decompositions[0].TotalNmPerRad, decompositions[1].TotalNmPerRad, front.LoadTransferN, rear.LoadTransferN, package.Chassis.StaticFrontWeightFraction);
+        // Distribution is a share of transfer magnitude; its sign is determined by the requested
+        // corner direction and must not make the metric layer reject negative lateral G.
+        var balance = BalanceMetrics.Create(decompositions[0].TotalNmPerRad, decompositions[1].TotalNmPerRad, Math.Abs(front.LoadTransferN), Math.Abs(rear.LoadTransferN), package.Chassis.StaticFrontWeightFraction);
         var ltSum = front.LoadTransferN + rear.LoadTransferN;
         return new(loadCase, state[0], state[1], state[2], cornerResults, cornerStiffnesses, [front, rear],
             balance.RollStiffnessDistributionFront,

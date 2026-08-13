@@ -75,6 +75,7 @@ public partial class MainWindow : Window
         var sweepCap = ReadPositive(SweepCap, "G axis sweep cap");
         _ay = (p.X - GCircleCanvas.ActualWidth / 2) / r * sweepCap;
         _ax = (p.Y - GCircleCanvas.ActualHeight / 2) / r * sweepCap;
+        App.Log($"G-circle pointer: ax={_ax:G6}, ay={_ay:G6}, canvas=({GCircleCanvas.ActualWidth:G4},{GCircleCanvas.ActualHeight:G4}), r={r:G4}.");
         Render();
     }
     private void MetricChanged(object sender, RoutedEventArgs e) { if (IsLoaded) RenderMetrics(); }
@@ -84,6 +85,7 @@ public partial class MainWindow : Window
         if (!IsLoaded || _source is null || _hardPoints is null) return;
         var radius = Radius(); var sweepCap = ReadPositive(SweepCap, "G axis sweep cap"); var totalGCap = ReadPositive(TotalGCap, "total G cap");
         var point = GCircleMapper.Map(_ax, _ay, radius, sweepCap, totalGCap); _ax = point.DisplayLongitudinalG; _ay = point.DisplayLateralG;
+        App.Log($"Render requested: ax={_ax:G6}, ay={_ay:G6}, capped={point.WasClamped}, sweepCap={sweepCap:G4}, totalCap={totalGCap:G4}.");
         LongitudinalReadout.Text = $"Longitudinal: {_ax:+0.00;-0.00;0.00} G";
         LateralReadout.Text = $"Lateral: {_ay:+0.00;-0.00;0.00} G";
         MagnitudeReadout.Text = $"Magnitude: {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {totalGCap:0.00} G" + (point.WasClamped ? " (capped)" : "");
@@ -99,7 +101,13 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            _result = null; _geometryStiffness = null; StatusText.Text = $"Setup input error: {exception.Message}"; DrawG(point, radius); CarCanvas.Children.Clear(); MetricsGrid.ItemsSource = null;
+            // Keep the last successfully rendered car/metrics visible. An invalid
+            // state (notably an unsupported angled end-link state) must report a
+            // diagnostic, never turn the dashboard into a blank black canvas.
+            App.Log($"Render failed at ax={_ax:G6}, ay={_ay:G6}: {exception}");
+            StatusText.Text = $"Setup input error (previous valid plot retained): {exception.Message}";
+            try { DrawG(point, radius); }
+            catch (Exception drawException) { App.Log("G-circle redraw failed after solver error: " + drawException); }
         }
     }
 
@@ -136,6 +144,8 @@ public partial class MainWindow : Window
             return new AntiRollBarModel(axle, rate, "Legacy user import", "Explicit direct-rate legacy/test mode.");
         }
         var input = ReadTubularInput(front);
+        if (Math.Abs(input.EndLinkAngleFromVerticalRad) > 1e-3)
+            throw new InvalidOperationException($"{axle} ARB end-link angle is unsupported in the dashboard until a 3D bar-end travel derivative is supplied. Previous valid plot is retained.");
         return AntiRollBarModel.FromConfig(axle, TubularArbEditor.ApplySymmetricInput(source, input), "User-adjusted tubular geometry");
     }
 

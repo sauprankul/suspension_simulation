@@ -186,6 +186,14 @@ Run("modular synthetic setup loads with deterministic fingerprint", () =>
     if (setup.Assembly.Corners.Count != 4 || setup.InputFingerprintSha256.Length != 64) throw new Exception("Invalid loaded setup.");
     if (setup.Chassis.Provenance is not (DataProvenance.Synthetic or DataProvenance.PublicSource)) throw new Exception("Chassis-envelope provenance was lost.");
 });
+Run("geometry-backed Cayman loader uses hard-point travel without scalar fallback", () =>
+{
+    var fixture = GeometryBackedCaymanPackageLoader.Load(Path.Combine("data", "synthetic", "cayman"));
+    if (fixture.ReferencePoses.Count != 4 || fixture.ReferencePoses.Any(x => !x.Converged || x.StrutMotionRatio is null)) throw new Exception("Expected four converged geometry poses.");
+    if (!fixture.Package.Springs.Notes!.Contains("no scalar", StringComparison.Ordinal)) throw new Exception("Geometry loader must state no scalar fallback.");
+    var scalar = SyntheticFixtureLoader.LoadFourStrutPackage(Path.Combine("data", "synthetic", "cayman"));
+    if (fixture.Package.Springs.Corners.Zip(scalar.Springs.Corners).All(x => Math.Abs(x.First.WheelRateNPerM - x.Second.WheelRateNPerM) < 1e-12)) throw new Exception("Geometry-backed wheel rates must not silently retain scalar motion ratios.");
+});
 Run("RCB equals front RSD minus static front fraction in percentage points", () =>
 {
     var p = SymmetricPackage() with { Chassis = SymmetricPackage().Chassis with { StaticFrontWeightFraction = 0.45 } };
@@ -330,8 +338,23 @@ Run("dashboard keeps legacy direct ARB inputs hidden by default", () =>
     if (!xaml.Contains("Enable legacy direct-rate import mode", StringComparison.Ordinal)) throw new Exception("Legacy mode must be explicitly opt-in.");
     if (xaml.Contains("Front ARB local tangent", StringComparison.Ordinal) || xaml.Contains("Rear ARB local tangent", StringComparison.Ordinal)) throw new Exception("Primary UI must expose geometry parameters, not a direct tangent control.");
 });
+Run("Cayman dashboard stiffness path is geometry-backed rather than unavailable", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "cayman");
+    var package = SyntheticFixtureLoader.LoadFourStrutPackage(directory);
+    var load = new FourStrutQuasiStaticSolver().Solve(package, new LoadCase("dashboard-test", 0, 0.7, 0));
+    var hardPoints = FourCornerMacPhersonGeometryLoader.Load(directory);
+    var modular = ModularSetupLoader.Load(directory);
+    var components = modular.Assembly.Corners.Select(c => new GeometryCornerComponents(c.Corner.ToString(),
+        new Spring(modular.Springs.Single(x => x.Id == c.SpringId)), new BumpStop(modular.BumpStops.Single(x => x.Id == c.BumpStopId)))).ToArray();
+    var result = new FourCornerGeometryStiffnessSolver().Solve(hardPoints, load, components, package.AntiRollBars);
+    if (!result.IsGeometryBacked || result.Corners.Count != 4 || result.Corners.Any(x => !double.IsFinite(x.TotalSelfNPerM)))
+        throw new Exception("Cayman dashboard path must return four finite geometry-backed tangent results.");
+    if (result.Corners.Any(x => !x.Diagnostics.Any(d => d.Code == "arb-travel-scaled-from-strut")))
+        throw new Exception("Cayman dashboard path must identify its solved travel-to-ARB mapping.");
+});
 
-Console.WriteLine($"{34 - failures.Count}/34 regression checks passed.");
+Console.WriteLine($"{36 - failures.Count}/36 regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 

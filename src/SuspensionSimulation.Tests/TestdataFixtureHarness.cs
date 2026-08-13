@@ -1,6 +1,9 @@
 using System.Text.Json;
+using System.Numerics;
 using SuspensionSimulation.Components;
 using SuspensionSimulation.Configuration;
+using SuspensionSimulation.Kinematics;
+using SuspensionSimulation.Solvers.Kinematics;
 
 namespace SuspensionSimulation.Tests;
 
@@ -36,6 +39,57 @@ internal static class TestdataFixtureHarness
         var damper = new Damper(new DamperConfig { Id = "damper", CompressionDampingNPerMPerS = 2000, ReboundDampingNPerMPerS = 3000 });
         Equal(-1000, damper.EvaluateForce(.5)); Equal(1500, damper.EvaluateForce(-.5)); Equal(0, damper.EvaluateForce(0));
         VerifyGeometryBackedFixtures(root);
+        VerifyCaymanFourCornerGeometry(root);
+    }
+
+    private static void VerifyCaymanFourCornerGeometry(string root)
+    {
+        var directory = Path.Combine(root, "data", "synthetic", "cayman");
+        // This is the geometry-backed package entry point the dashboard uses;
+        // it rejects scalar assembly motion-ratio fallback by construction.
+        var dashboardPath = GeometryBackedCaymanPackageLoader.Load(directory);
+        if (dashboardPath.ReferencePoses.Count != 4) throw new Exception("Dashboard setup path did not load all four hard-point corners.");
+        using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "strut-hard-points.json")));
+        using var expected = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "strut-geometry-expected.json")));
+        var corners = fixture.RootElement.GetProperty("corners");
+        if (corners.GetArrayLength() != 4) throw new Exception("Cayman geometry fixture requires exactly FL/FR/RL/RR hard-point records.");
+        var configurations = corners.EnumerateArray().Select(ToPlanarConfig).ToArray();
+        var solver = new MacPhersonPlanarSolver(); var travel = expected.RootElement.GetProperty("travel_check_m").GetDouble();
+        var tolerance = expected.RootElement.GetProperty("max_reference_constraint_residual_m").GetDouble();
+        foreach (var configuration in configurations)
+        {
+            var reference = solver.Solve(configuration, 0); var bump = solver.Solve(configuration, travel); var rebound = solver.Solve(configuration, -travel);
+            if (!reference.Converged || !bump.Converged || !rebound.Converged) throw new Exception($"{configuration.Id} synthetic hard-point continuation did not converge.");
+            if (Math.Abs(reference.StrutCompressionM) > tolerance || Math.Abs(reference.TieRodLengthResidualM ?? double.PositiveInfinity) > tolerance)
+                throw new Exception($"{configuration.Id} did not close at its declared reference pose.");
+            if (bump.StrutMotionRatio is null || rebound.StrutMotionRatio is null || Math.Abs(bump.StrutMotionRatio.MotionRatio) < 1e-5)
+                throw new Exception($"{configuration.Id} must produce finite, non-zero geometry-backed travel motion ratios.");
+        }
+        Mirror(configurations.Single(x => x.Id == "FL"), configurations.Single(x => x.Id == "FR"));
+        Mirror(configurations.Single(x => x.Id == "RL"), configurations.Single(x => x.Id == "RR"));
+    }
+
+    private static MacPhersonPlanarCornerConfig ToPlanarConfig(JsonElement element) => new()
+    {
+        Id = element.GetProperty("id").GetString()!,
+        UpperStrutMountM = Vector(element.GetProperty("upper_strut_mount")),
+        LowerArmInnerPivotM = Vector(element.GetProperty("lower_arm_inner_pivot")),
+        LowerBallJointReferenceM = Vector(element.GetProperty("lower_ball_joint")),
+        StrutLowerReferenceM = Vector(element.GetProperty("strut_lower")),
+        WheelCentreReferenceM = Vector(element.GetProperty("wheel_center")),
+        TieRodInnerM = Vector(element.GetProperty("tie_rod_inner")),
+        TieRodOuterReferenceM = Vector(element.GetProperty("tie_rod_outer")),
+        GroundPlaneZM = 0
+    };
+
+    private static Vector3 Vector(JsonElement point) => new(point[0].GetSingle(), point[1].GetSingle(), point[2].GetSingle());
+
+    private static void Mirror(MacPhersonPlanarCornerConfig left, MacPhersonPlanarCornerConfig right)
+    {
+        foreach (var pair in new[] { (left.UpperStrutMountM, right.UpperStrutMountM), (left.LowerArmInnerPivotM, right.LowerArmInnerPivotM), (left.LowerBallJointReferenceM, right.LowerBallJointReferenceM), (left.StrutLowerReferenceM, right.StrutLowerReferenceM), (left.WheelCentreReferenceM, right.WheelCentreReferenceM), (left.TieRodInnerM!.Value, right.TieRodInnerM!.Value), (left.TieRodOuterReferenceM!.Value, right.TieRodOuterReferenceM!.Value) })
+        {
+            Equal(pair.Item1.X, pair.Item2.X); Equal(pair.Item1.Z, pair.Item2.Z); Equal(pair.Item1.Y, -pair.Item2.Y);
+        }
     }
 
     private static void VerifyGeometryBackedFixtures(string root)

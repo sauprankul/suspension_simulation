@@ -1,0 +1,11 @@
+{
+  "schema": "suspension-sim/four-corner-macpherson-expected/v1",
+  "validity": "synthetic-reference-pose",
+  "reference_jounce_m": 0.0,
+  "travel_check_m": 0.01,
+  "max_reference_constraint_residual_m": 0.000001,
+  "max_reference_tie_rod_length_residual_m": 0.000001,
+  "symmetry": "FL mirrors FR and RL mirrors RR about Y=0; X/Z values match within 1e-9 m",
+  "continuity": "At +/- travel_check_m, each corner must converge on the continuation branch and produce finite non-zero strut motion ratio; mirrored corners must agree in magnitude within 1e-4.",
+  "roll_center_and_jacking": "Planar front-view diagnostics are estimated only; do not use them as 3D vehicle roll-centre or jacking predictions."
+}

@@ -9,7 +9,9 @@ using SuspensionSimulation.Components;
 using SuspensionSimulation.Configuration;
 using SuspensionSimulation.Core;
 using SuspensionSimulation.Core.Dashboard;
+using SuspensionSimulation.Kinematics;
 using SuspensionSimulation.Solvers;
+using SuspensionSimulation.Solvers.Kinematics;
 
 namespace SuspensionSimulation.App;
 
@@ -18,8 +20,11 @@ public partial class MainWindow : Window
     private double _ax, _ay;
     private string? _setupDirectory;
     private ModularSetup? _source;
+    private GeometryBackedCaymanPackage? _geometrySource;
+    private FourCornerMacPhersonGeometry? _hardPoints;
     private VehiclePackage? _package;
     private QuasiStaticResult? _result;
+    private GeometryBackedStiffnessResult? _geometryStiffness;
 
     public MainWindow()
     {
@@ -33,6 +38,10 @@ public partial class MainWindow : Window
     {
         _setupDirectory = IO.Path.Combine(RepositoryRoot(), "data", "synthetic", "cayman");
         _source = ModularSetupLoader.Load(_setupDirectory);
+        // Fail at startup if the same fixture directory cannot supply geometry
+        // travel. The editable dashboard package still rebuilds component rates.
+        _geometrySource = GeometryBackedCaymanPackageLoader.Load(_setupDirectory);
+        _hardPoints = FourCornerMacPhersonGeometryLoader.Load(_setupDirectory);
         var front = _source.Assembly.Corners.First(c => c.Corner is Corner.FL or Corner.FR);
         var rear = _source.Assembly.Corners.First(c => c.Corner is Corner.RL or Corner.RR);
         FrontSpring.Text = (_source.Springs.Single(s => s.Id == front.SpringId).LinearRateNPerM / 1000).ToString("G", CultureInfo.InvariantCulture);
@@ -72,7 +81,7 @@ public partial class MainWindow : Window
 
     private void Render()
     {
-        if (!IsLoaded || _source is null) return;
+        if (!IsLoaded || _source is null || _hardPoints is null) return;
         var radius = Radius(); var sweepCap = ReadPositive(SweepCap, "G axis sweep cap"); var totalGCap = ReadPositive(TotalGCap, "total G cap");
         var point = GCircleMapper.Map(_ax, _ay, radius, sweepCap, totalGCap); _ax = point.DisplayLongitudinalG; _ay = point.DisplayLateralG;
         LongitudinalReadout.Text = $"Longitudinal: {_ax:+0.00;-0.00;0.00} G";
@@ -82,13 +91,15 @@ public partial class MainWindow : Window
         {
             _package = BuildPackage();
             _result = new FourStrutQuasiStaticSolver().Solve(_package, new LoadCase("dashboard", _ax, _ay, 0));
+            _geometryStiffness = new FourCornerGeometryStiffnessSolver().Solve(_hardPoints, _result, BuildGeometryComponents(), _package.AntiRollBars);
             var activeWarning = _result.Warnings.FirstOrDefault(w => w.StartsWith("Active bump-stop branch", StringComparison.Ordinal) || w.Contains("non-positive normal load", StringComparison.Ordinal));
-            StatusText.Text = $"Solver residuals: Fz {_result.VerticalResidualN:E2} N; roll {_result.RollResidualNm:E2} Nm; pitch {_result.PitchResidualNm:E2} Nm. Input fingerprint: {_source.InputFingerprintSha256[..12]}." + (activeWarning is null ? "" : $" Warning: {activeWarning}");
+            var travelStatus = _geometryStiffness.IsGeometryBacked ? "Geometry/travel stiffness: solved from Cayman synthetic hard points." : $"Geometry/travel stiffness failed: {string.Join(" ", _geometryStiffness.Diagnostics.Select(x => x.Message))}";
+            StatusText.Text = $"Solver residuals: Fz {_result.VerticalResidualN:E2} N; roll {_result.RollResidualNm:E2} Nm; pitch {_result.PitchResidualNm:E2} Nm. Input fingerprint: {_source.InputFingerprintSha256[..12]}. {travelStatus}" + (activeWarning is null ? "" : $" Warning: {activeWarning}");
             DrawG(point, radius); DrawCar(_result); RenderMetrics();
         }
         catch (Exception exception)
         {
-            _result = null; StatusText.Text = $"Setup input error: {exception.Message}"; DrawG(point, radius); CarCanvas.Children.Clear(); MetricsGrid.ItemsSource = null;
+            _result = null; _geometryStiffness = null; StatusText.Text = $"Setup input error: {exception.Message}"; DrawG(point, radius); CarCanvas.Children.Clear(); MetricsGrid.ItemsSource = null;
         }
     }
 
@@ -128,6 +139,21 @@ public partial class MainWindow : Window
         return AntiRollBarModel.FromConfig(axle, TubularArbEditor.ApplySymmetricInput(source, input), "User-adjusted tubular geometry");
     }
 
+    private IReadOnlyList<GeometryCornerComponents> BuildGeometryComponents()
+    {
+        if (_source is null) throw new InvalidOperationException("Setup was not loaded.");
+        var frontSpring = ReadPositive(FrontSpring, "front spring") * 1000;
+        var rearSpring = ReadPositive(RearSpring, "rear spring") * 1000;
+        var stopGap = ReadNonNegative(BumpStopGap, "bump-stop gap") / 1000;
+        return _source.Assembly.Corners.Select(c =>
+        {
+            var rawRate = c.Corner is Corner.FL or Corner.FR ? frontSpring : rearSpring;
+            var springConfig = _source.Springs.Single(x => x.Id == c.SpringId) with { LinearRateNPerM = rawRate, ForceCurve = null };
+            var stopConfig = _source.BumpStops.Single(x => x.Id == c.BumpStopId) with { EngagementGapM = stopGap };
+            return new GeometryCornerComponents(c.Corner.ToString(), new Spring(springConfig), new BumpStop(stopConfig));
+        }).ToArray();
+    }
+
     private SymmetricTubularArbInput ReadTubularInput(bool front)
     {
         var od = front ? FrontArbOd : RearArbOd; var id = front ? FrontArbId : RearArbId;
@@ -152,7 +178,7 @@ public partial class MainWindow : Window
 
     private void RenderMetrics()
     {
-        if (_result is null || _package is null) return;
+        if (_result is null || _package is null || _geometryStiffness is null) return;
         var selected = new HashSet<string>(StringComparer.Ordinal);
         if (Lltd.IsChecked == true) selected.Add("lltd"); if (Rsd.IsChecked == true) selected.Add("rsd"); if (Rcb.IsChecked == true) selected.Add("rcb"); if (Loads.IsChecked == true) selected.Add("loads"); if (AxleSummary.IsChecked == true) selected.Add("summary"); if (Attitude.IsChecked == true) selected.Add("attitude"); if (Stiffness.IsChecked == true) selected.Add("stiffness");
         var metrics = new List<DashboardMetric>();
@@ -175,12 +201,16 @@ public partial class MainWindow : Window
         }
         if (selected.Contains("stiffness"))
         {
-            const string unavailable = "Unavailable: four-corner hard-point travel has not been solved for this package; the Load Lab must not present fixed-motion-ratio values as geometry/travel tangent stiffness.";
-            foreach (var stiffness in _result.CornerTangentStiffnesses)
+            foreach (var stiffness in _geometryStiffness.Corners)
             {
-                metrics.Add(new($"stiff-{stiffness.Corner}-total", $"{stiffness.Corner} geometry/travel total tangent", "N/mm", unavailable, "unavailable"));
-                metrics.Add(new($"stiff-{stiffness.Corner}-spring", $"{stiffness.Corner} geometry/travel spring tangent", "N/mm", unavailable, "unavailable"));
-                metrics.Add(new($"stiff-{stiffness.Corner}-arb", $"{stiffness.Corner} geometry/travel ARB tangent", "N/mm", unavailable, "unavailable"));
+                var validity = stiffness.Validity.ToString().ToLowerInvariant();
+                var failure = string.Join(" ", stiffness.Diagnostics.Select(x => x.Message));
+                var total = double.IsFinite(stiffness.TotalSelfNPerM) ? (stiffness.TotalSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture) : failure;
+                var spring = double.IsFinite(stiffness.SpringOnlyNPerM) ? (stiffness.SpringOnlyNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture) : failure;
+                var arb = double.IsFinite(stiffness.ArbSelfNPerM) ? (stiffness.ArbSelfNPerM / 1000).ToString("F2", CultureInfo.InvariantCulture) : failure;
+                metrics.Add(new($"stiff-{stiffness.Corner}-total", $"{stiffness.Corner} geometry/travel total tangent", "N/mm", total, validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-spring", $"{stiffness.Corner} geometry/travel spring tangent", "N/mm", spring, validity));
+                metrics.Add(new($"stiff-{stiffness.Corner}-arb", $"{stiffness.Corner} geometry/travel ARB tangent", "N/mm", arb, validity));
             }
         }
         MetricsGrid.ItemsSource = metrics;

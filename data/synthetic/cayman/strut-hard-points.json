@@ -1,0 +1,18 @@
+{
+  "schema": "suspension-sim/four-corner-macpherson-hardpoints/v1",
+  "validity": "synthetic-estimated",
+  "provenance": "Synthetic teaching geometry. Axle X and track envelope are Cayman-like; every pickup, upright and attachment point is invented and must never be presented as OEM data.",
+  "coordinate_frame": "+X forward, +Y left, +Z up; metres; origin at vehicle CG ground projection",
+  "reference_jounce_m": 0.0,
+  "ground_plane_z_m": 0.0,
+  "corners": [
+    {"id":"FL","axle":"front","upper_strut_mount":[1.384,0.00,1.54],"lower_arm_inner_pivot":[1.384,0.00,0.00],"lower_ball_joint":[1.384,0.7695,0.00],"strut_lower":[1.384,0.7695,0.7695],"wheel_center":[1.384,0.7695,0.38475],"tie_rod_inner":[1.384,0.1539,0.50],"tie_rod_outer":[1.384,0.7541,0.4235]},
+    {"id":"FR","axle":"front","upper_strut_mount":[1.384,0.00,1.54],"lower_arm_inner_pivot":[1.384,0.00,0.00],"lower_ball_joint":[1.384,-0.7695,0.00],"strut_lower":[1.384,-0.7695,0.7695],"wheel_center":[1.384,-0.7695,0.38475],"tie_rod_inner":[1.384,-0.1539,0.50],"tie_rod_outer":[1.384,-0.7541,0.4235]},
+    {"id":"RL","axle":"rear","upper_strut_mount":[-1.10,0.00,1.48],"lower_arm_inner_pivot":[-1.10,0.00,0.00],"lower_ball_joint":[-1.10,0.7665,0.00],"strut_lower":[-1.10,0.7665,0.720],"wheel_center":[-1.10,0.7665,0.360],"tie_rod_inner":[-1.10,0.1533,0.47],"tie_rod_outer":[-1.10,0.7512,0.400]},
+    {"id":"RR","axle":"rear","upper_strut_mount":[-1.10,0.00,1.48],"lower_arm_inner_pivot":[-1.10,0.00,0.00],"lower_ball_joint":[-1.10,-0.7665,0.00],"strut_lower":[-1.10,-0.7665,0.720],"wheel_center":[-1.10,-0.7665,0.360],"tie_rod_inner":[-1.10,-0.1533,0.47],"tie_rod_outer":[-1.10,-0.7512,0.400]}
+  ],
+  "arb_attachments": [
+    {"axle":"front","arb_id":"cayman-front-arb","left_corner":"FL","right_corner":"FR","left_wheel_to_end_link_vertical_motion_ratio":0.510,"right_wheel_to_end_link_vertical_motion_ratio":0.510,"source":"synthetic geometry target"},
+    {"axle":"rear","arb_id":"cayman-rear-arb","left_corner":"RL","right_corner":"RR","left_wheel_to_end_link_vertical_motion_ratio":0.650,"right_wheel_to_end_link_vertical_motion_ratio":0.650,"source":"synthetic geometry target"}
+  ]
+}

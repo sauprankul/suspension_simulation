@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Text.Json;
 using IO = System.IO;
 using System.Windows;
@@ -6,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using SuspensionSimulation.Configuration;
 using SuspensionSimulation.Core;
 using SuspensionSimulation.Core.Dashboard;
@@ -24,19 +26,28 @@ public partial class MainWindow : Window
     private HeadToHeadComparisonResult? _comparison;
     private string? _packageDirectory;
     private long _renderAttempt;
+    private HeadToHeadComparisonSolver? _headToHeadSolver;
+    private readonly DispatcherTimer _renderTimer;
 
     public MainWindow()
     {
         App.Log("Constructing GR86 head-to-head MainWindow.");
         InitializeComponent();
+        _renderTimer=new DispatcherTimer(DispatcherPriority.Render) { Interval=TimeSpan.FromMilliseconds(50) };
+        _renderTimer.Tick+=(_,_)=>{ _renderTimer.Stop(); Render(); };
         Loaded += (_, _) => Initialise();
-        SizeChanged += (_, _) => Render();
+        SizeChanged += (_, _) => ScheduleRender();
     }
 
     private void Initialise()
     {
         _packageDirectory = IO.Path.Combine(RepositoryRoot(), "data", "synthetic", "gr86");
         _vehicle = ModularSetupLoader.Load(_packageDirectory);
+        var precompute=Stopwatch.StartNew();
+        _headToHeadSolver=new HeadToHeadComparisonSolver(_packageDirectory);
+        precompute.Stop();
+        App.Log(JsonSerializer.Serialize(new { eventName="geometry-precompute", elapsedMs=precompute.Elapsed.TotalMilliseconds,
+            maps=_headToHeadSolver.TravelMaps.ToDictionary(x=>x.Key,x=>new { minimumJounceM=x.Value.MinimumJounceM,maximumJounceM=x.Value.MaximumJounceM,stepM=x.Value.StepM,samples=x.Value.Samples.Count,maximumResidualM=x.Value.MaximumConstraintResidualM }) }),"GEOMETRY");
         var a = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-a.json"));
         var b = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-b.json"));
         App.Log($"Loaded GR86 package directory={_packageDirectory} fingerprint={_vehicle.InputFingerprintSha256}.");
@@ -44,7 +55,7 @@ public partial class MainWindow : Window
         Render();
     }
 
-    private void CenterGClick(object sender, RoutedEventArgs e) { _ax = 0; _ay = 0; Render(); }
+    private void CenterGClick(object sender, RoutedEventArgs e) { _ax = 0; _ay = 0; _renderTimer.Stop(); Render(); }
     private void SetupChanged(object sender, RoutedEventArgs e) { if (IsLoaded) Render(); }
     private void SharedInputChanged(object sender, RoutedEventArgs e) { if (IsLoaded) Render(); }
 
@@ -56,7 +67,15 @@ public partial class MainWindow : Window
         // lateral (leftward vehicle acceleration) is left on the displayed overhead view.
         _ay = -(p.X - GCircleCanvas.ActualWidth / 2) / radius * cap;
         _ax = -(p.Y - GCircleCanvas.ActualHeight / 2) / radius * cap;
-        Render();
+        ScheduleRender();
+    }
+
+    private void ScheduleRender()
+    {
+        if(!IsLoaded) return;
+        // Coalesce pointer events into a steady 20 Hz display refresh. Do not restart the
+        // timer for every MouseMove or a continuous drag would never reach the tick.
+        if (!_renderTimer.IsEnabled) _renderTimer.Start();
     }
 
     private void Render()
@@ -76,7 +95,8 @@ public partial class MainWindow : Window
             MagnitudeReadout.Text = $"GSUM {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {total:0.00} G" + (point.WasClamped ? "  •  capped" : "");
 
             var inputA = ReadSetup("Setup A", true); var inputB = ReadSetup("Setup B", false);
-            _comparison = new HeadToHeadComparisonSolver(_packageDirectory!).Solve(_vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
+            _comparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
+                .Solve(_vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
             DrawG(point, radius);
             DrawCar(ACarCanvas, _comparison.A.State, Brushes.DeepSkyBlue);
             DrawCar(BCarCanvas, _comparison.B.State, Brushes.Orange);

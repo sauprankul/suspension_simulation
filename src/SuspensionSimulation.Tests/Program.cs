@@ -514,6 +514,48 @@ Run("head-to-head UI has one shared controller and two independent setups", () =
         if (!xaml.Contains($"x:Name=\"{name}\"", StringComparison.Ordinal)) throw new Exception($"Missing head-to-head input {name}.");
 });
 
+Run("GR86 rigid travel is traced once into four continuous startup maps", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86");
+    var solver = new HeadToHeadComparisonSolver(directory);
+    if (!solver.HasPrecomputedGeometry || solver.TravelMaps.Count != 4)
+        throw new Exception("The head-to-head solver must own exactly four precomputed corner travel maps.");
+    foreach (var (corner, map) in solver.TravelMaps)
+    {
+        Equal(-.080, map.MinimumJounceM, 1e-12);
+        Equal(.080, map.MaximumJounceM, 1e-12);
+        if (map.Samples.Count != 161) throw new Exception($"{corner} map has {map.Samples.Count} samples instead of 161.");
+        if (map.MaximumConstraintResidualM >= 1e-4) throw new Exception($"{corner} map contains an unvalidated rigid pose ({map.MaximumConstraintResidualM:G6} m).");
+    }
+});
+
+Run("precomputed GR86 branch covers the former combined-G solver failure", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86");
+    var setup = ModularSetupLoader.Load(directory);
+    var solver = new HeadToHeadComparisonSolver(directory);
+    var frontRight = solver.TravelMaps["FR"].Evaluate(-.04658);
+    if (frontRight.Validity != "precomputed-rigid-branch" || !double.IsFinite(frontRight.SpringCompressionPerWheelJounce))
+        throw new Exception($"Former FR failure point was not covered by the precomputed branch ({frontRight.Validity}).");
+
+    var a = new HeadToHeadSetupInput("A", 45_000, 50_000, .020, 0, .016, 0);
+    var b = new HeadToHeadSetupInput("B", 50_000, 55_000, .022, .012, .017, .010);
+    var result = solver.Solve(setup, a, b, new LoadCase("former-branch-failure", -.14805797101449256, -1.982608695652174, 0));
+    if (!double.IsFinite(result.A.State.RollCoupleBiasPercentagePoints) || !double.IsFinite(result.B.State.RollCoupleBiasPercentagePoints))
+        throw new Exception("The former branch-failure load state did not produce finite A/B RCB results.");
+});
+
+Run("head-to-head pointer motion reuses startup geometry and coalesces display refreshes", () =>
+{
+    var window = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
+    if (Count(window, "new HeadToHeadComparisonSolver(") != 1)
+        throw new Exception("The 3D head-to-head solver must be constructed only once during startup.");
+    foreach (var marker in new[] { "DispatcherTimer", "ScheduleRender()", ".Solve(_vehicle" })
+        if (!window.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Pointer refresh path is missing {marker}.");
+    if (!window.Contains("if (!_renderTimer.IsEnabled) _renderTimer.Start();", StringComparison.Ordinal))
+        throw new Exception("Continuous pointer motion must be throttled, not indefinitely debounced.");
+});
+
 Run("3D MacPherson rigid constraints close and continue through travel", () =>
 {
     var solver = new RigidMechanism3DSolver(); var geometry = ThreeDimensionalStrutFixture("FL", 1);

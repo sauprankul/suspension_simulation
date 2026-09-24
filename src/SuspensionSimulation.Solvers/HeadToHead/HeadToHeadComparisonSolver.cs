@@ -45,23 +45,30 @@ public sealed record HeadToHeadComparisonResult(
     string Validity);
 
 /// <summary>
-/// Stable A/B orchestration boundary for the dashboard. This first executable slice deliberately
-/// identifies its legacy scalar motion-ratio equilibrium; the 3D GR86 mechanism solver can replace
-/// BuildPackage without changing comparison or UI semantics.
+/// Stable A/B orchestration boundary for the dashboard. Exact rigid corner mechanisms are traced
+/// once at construction into continuous travel maps. Interactive solves query those maps, so mouse
+/// motion cannot launch an independent nonlinear solve or jump to a different kinematic branch.
 /// </summary>
 public sealed class HeadToHeadComparisonSolver
 {
-    private readonly Gr86HardPointPackage3D? _geometry;
     private readonly TubularArbMechanism3DConfig? _frontBar;
     private readonly TubularArbMechanism3DConfig? _rearBar;
+    private readonly IReadOnlyDictionary<string,RigidCornerTravelMap3D>? _travelMaps;
+
+    public bool HasPrecomputedGeometry => _travelMaps is not null;
+    public IReadOnlyDictionary<string,RigidCornerTravelMap3D> TravelMaps => _travelMaps ?? throw new InvalidOperationException("No 3D package was supplied.");
 
     public HeadToHeadComparisonSolver() { }
 
     public HeadToHeadComparisonSolver(string packageDirectory)
     {
-        _geometry = Gr86HardPointPackageLoader.Load(packageDirectory);
+        var geometry = Gr86HardPointPackageLoader.Load(packageDirectory);
         _frontBar = TubularArbMechanism3DLoader.Load(Path.Combine(packageDirectory, "front-tubular-arb.json"));
         _rearBar = TubularArbMechanism3DLoader.Load(Path.Combine(packageDirectory, "rear-tubular-arb.json"));
+        var builder=new RigidCornerTravelMapBuilder3D();
+        var maps=geometry.Front.ToDictionary(x=>x.Key,x=>builder.Build(x.Value),StringComparer.OrdinalIgnoreCase);
+        foreach(var pair in geometry.Rear) maps[pair.Key]=builder.Build(pair.Value);
+        _travelMaps=maps;
     }
 
     public HeadToHeadComparisonResult Solve(ModularSetup vehicle, HeadToHeadSetupInput a, HeadToHeadSetupInput b, LoadCase sharedLoad)
@@ -86,7 +93,7 @@ public sealed class HeadToHeadComparisonSolver
         Validate(input);
         var package = BuildScalarPackage(vehicle, input);
         var state = new FourStrutQuasiStaticSolver().Solve(package, load);
-        var geometryLive = _geometry is not null && _frontBar is not null && _rearBar is not null;
+        var geometryLive = _travelMaps is not null && _frontBar is not null && _rearBar is not null;
         if (geometryLive)
         {
             // One explicit local-tangent update. Repeated fixed-point iteration is not a substitute
@@ -101,7 +108,7 @@ public sealed class HeadToHeadComparisonSolver
         {
             "Published GR86 envelope; spring, ARB and hard-point values are synthetic/estimated.",
             geometryLive
-                ? "3D front-strut and rear-multilink continuation supplies local spring derivatives; fixed-length 3D endlinks supply each ARB energy Hessian."
+                ? "Startup-precomputed 3D front-strut and rear-multilink branches supply local spring derivatives; fixed-length 3D endlinks supply each ARB energy Hessian."
                 : "PROVISIONAL FALLBACK: declared scalar spring/ARB attachment motion ratios are in use because no 3D package was supplied.",
             "PROVISIONAL: the whole-car equilibrium uses one explicit 3D local-tangent update; full nonlinear component force integration and force-path roll-center/jacking gates remain pending.",
             "Bump stops, tire physics, damping, compliance and aero are excluded."
@@ -133,15 +140,13 @@ public sealed class HeadToHeadComparisonSolver
 
     private GeometryTangentEvaluation EvaluateGeometry(ModularSetup vehicle, HeadToHeadSetupInput input, QuasiStaticResult state)
     {
-        var mechanism = new RigidMechanism3DSolver(); var byCorner = state.Corners.ToDictionary(x => x.Corner, StringComparer.OrdinalIgnoreCase);
-        var travel = new Dictionary<string, RigidCornerTravelDerivative3D>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in _geometry!.Front) travel[pair.Key] = mechanism.SolveTravel(pair.Value, byCorner[pair.Key].RelativeCompressionM);
-        foreach (var pair in _geometry.Rear) travel[pair.Key] = mechanism.SolveTravel(pair.Value, byCorner[pair.Key].RelativeCompressionM);
-        if (travel.Values.Any(x => x.Validity == "invalid" || x.Pose.MaximumConstraintResidualM >= 2e-4 || !double.IsFinite(x.SpringCompressionPerWheelJounce)))
+        var byCorner = state.Corners.ToDictionary(x => x.Corner, StringComparer.OrdinalIgnoreCase);
+        var travel = _travelMaps!.ToDictionary(x=>x.Key,x=>x.Value.Evaluate(byCorner[x.Key].RelativeCompressionM),StringComparer.OrdinalIgnoreCase);
+        if (travel.Values.Any(x => x.Validity != "precomputed-rigid-branch" || !double.IsFinite(x.SpringCompressionPerWheelJounce)))
         {
-            var failed = string.Join(", ", travel.Where(x => x.Value.Validity == "invalid" || x.Value.Pose.MaximumConstraintResidualM >= 2e-4 || !double.IsFinite(x.Value.SpringCompressionPerWheelJounce))
-                .Select(x => $"{x.Key} jounce={byCorner[x.Key].RelativeCompressionM:G4}m residual={x.Value.Pose.MaximumConstraintResidualM:G3}m ({string.Join(" ",x.Value.Diagnostics)})"));
-            throw new InvalidOperationException($"A 3D corner mechanism failed at the requested load state ({failed}); no scalar geometry fallback is permitted.");
+            var failed = string.Join(", ", travel.Where(x => x.Value.Validity != "precomputed-rigid-branch" || !double.IsFinite(x.Value.SpringCompressionPerWheelJounce))
+                .Select(x => $"{x.Key} jounce={byCorner[x.Key].RelativeCompressionM:G4}m validity={x.Value.Validity} ({string.Join(" ",x.Value.Diagnostics)})"));
+            throw new InvalidOperationException($"The requested state is outside a validated 3D travel branch ({failed}); no scalar geometry fallback is permitted.");
         }
 
         var rates = new Dictionary<string,double>(StringComparer.OrdinalIgnoreCase);
@@ -166,7 +171,7 @@ public sealed class HeadToHeadComparisonSolver
                 InsideDiameterM = front ? input.FrontArbInsideDiameterM : input.RearArbInsideDiameterM
             };
             var lj = byCorner[left].RelativeCompressionM; var rj = byCorner[right].RelativeCompressionM;
-            var lp = travel[left].Pose.SolvedPoints["arbLinkLower"]; var rp = travel[right].Pose.SolvedPoints["arbLinkLower"];
+            var lp = travel[left].ArbLowerPointM; var rp = travel[right].ArbLowerPointM;
             var ld = travel[left].ArbLowerDerivativePerWheelJounce; var rd = travel[right].ArbLowerDerivativePerWheelJounce;
             Vector3 Left(double j) => lp+ld*(float)(j-lj); Vector3 Right(double j) => rp+rd*(float)(j-rj);
             return new TubularArbMechanism3DSolver().Evaluate(configured, Left, Right, lj, rj);

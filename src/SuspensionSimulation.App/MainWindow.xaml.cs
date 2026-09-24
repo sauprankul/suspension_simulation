@@ -13,6 +13,7 @@ using SuspensionSimulation.Core;
 using SuspensionSimulation.Core.Dashboard;
 using SuspensionSimulation.Solvers;
 using SuspensionSimulation.Solvers.HeadToHead;
+using SuspensionSimulation.Reference;
 
 namespace SuspensionSimulation.App;
 
@@ -27,11 +28,14 @@ public partial class MainWindow : Window
     private string? _packageDirectory;
     private long _renderAttempt;
     private HeadToHeadComparisonSolver? _headToHeadSolver;
+    private StockReferenceDocument? _stockReference;
+    private StockSetupDerivation? _stockGr86;
+    private StockSetupDerivation? _stockBrz;
     private readonly DispatcherTimer _renderTimer;
 
     public MainWindow()
     {
-        App.Log("Constructing GR86 head-to-head MainWindow.");
+        App.Log("Constructing stock GR86 vs BRZ head-to-head MainWindow.");
         InitializeComponent();
         _renderTimer=new DispatcherTimer(DispatcherPriority.Render) { Interval=TimeSpan.FromMilliseconds(50) };
         _renderTimer.Tick+=(_,_)=>{ _renderTimer.Stop(); Render(); };
@@ -43,6 +47,10 @@ public partial class MainWindow : Window
     {
         _packageDirectory = IO.Path.Combine(RepositoryRoot(), "data", "synthetic", "gr86");
         _vehicle = ModularSetupLoader.Load(_packageDirectory);
+        _stockReference=Stock86BrzReferenceLoader.Load(IO.Path.Combine(RepositoryRoot(),"data","reference","stock-86-brz","reference-sheet.json"));
+        _stockGr86=Stock86BrzReferenceCalculator.Calculate(_stockReference,_stockReference.Setups.Single(x=>x.Id=="stock-gr86-2022"));
+        _stockBrz=Stock86BrzReferenceCalculator.Calculate(_stockReference,_stockReference.Setups.Single(x=>x.Id=="stock-brz-2022"));
+        App.Log(JsonSerializer.Serialize(new { eventName="stock-reference-derivation", gr86=_stockGr86, brz=_stockBrz }),"REFERENCE");
         var precompute=Stopwatch.StartNew();
         _headToHeadSolver=new HeadToHeadComparisonSolver(_packageDirectory);
         precompute.Stop();
@@ -94,7 +102,7 @@ public partial class MainWindow : Window
             LateralReadout.Text = $"{_ay:+0.00;-0.00;0.00} G";
             MagnitudeReadout.Text = $"GSUM {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {total:0.00} G" + (point.WasClamped ? "  •  capped" : "");
 
-            var inputA = ReadSetup("Setup A", true); var inputB = ReadSetup("Setup B", false);
+            var inputA = ReadSetup("Stock GR86", true); var inputB = ReadSetup("Stock BRZ", false);
             _comparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
                 .Solve(_vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
             DrawG(point, radius);
@@ -124,17 +132,33 @@ public partial class MainWindow : Window
         DeltaHeadline.Text = $"B − A RCB  {Signed(comparison.BMinusA.RcbPercentagePoints, " pp")}";
         DeltaHeadline.Foreground = comparison.BMinusA.RcbPercentagePoints switch { > 0 => Brushes.Orange, < 0 => Brushes.DeepSkyBlue, _ => Brushes.White };
         AStateSummary.Text = Summary(a); BStateSummary.Text = Summary(b);
+        var toPerDegree=Math.PI/180;
         var rows = new List<ComparisonRow>
         {
             Row("Front RSD", 100*a.State.RollStiffnessDistributionFront, 100*b.State.RollStiffnessDistributionFront, "%"),
             Row("RCB", a.State.RollCoupleBiasPercentagePoints, b.State.RollCoupleBiasPercentagePoints, "percentage points"),
             Row("Roll angle", Degrees(a.State.RollRad), Degrees(b.State.RollRad), "deg"),
             Row("Pitch angle", Degrees(a.State.PitchRad), Degrees(b.State.PitchRad), "deg"),
-            Row("Front spring roll stiffness", a.FrontSpringRollStiffnessNmPerRad, b.FrontSpringRollStiffnessNmPerRad, "N·m/rad"),
-            Row("Front ARB roll stiffness", a.FrontArbRollStiffnessNmPerRad, b.FrontArbRollStiffnessNmPerRad, "N·m/rad"),
-            Row("Rear spring roll stiffness", a.RearSpringRollStiffnessNmPerRad, b.RearSpringRollStiffnessNmPerRad, "N·m/rad"),
-            Row("Rear ARB roll stiffness", a.RearArbRollStiffnessNmPerRad, b.RearArbRollStiffnessNmPerRad, "N·m/rad")
+            Row("3D front spring roll stiffness", a.FrontSpringRollStiffnessNmPerRad*toPerDegree, b.FrontSpringRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
+            Row("3D front ARB roll stiffness", a.FrontArbRollStiffnessNmPerRad*toPerDegree, b.FrontArbRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
+            Row("3D rear spring roll stiffness", a.RearSpringRollStiffnessNmPerRad*toPerDegree, b.RearSpringRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
+            Row("3D rear ARB roll stiffness", a.RearArbRollStiffnessNmPerRad*toPerDegree, b.RearArbRollStiffnessNmPerRad*toPerDegree, "N·m/deg")
         };
+        if(_stockGr86 is not null && _stockBrz is not null)
+        {
+            rows.Add(Row("Reference front spring wheel rate",_stockGr86.FrontSpringWheelRateKgfPerMm,_stockBrz.FrontSpringWheelRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Reference rear spring wheel rate",_stockGr86.RearSpringWheelRateKgfPerMm,_stockBrz.RearSpringWheelRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Reference front ride frequency",_stockGr86.FrontRideFrequencyHz,_stockBrz.FrontRideFrequencyHz,"Hz"));
+            rows.Add(Row("Reference rear ride frequency",_stockGr86.RearRideFrequencyHz,_stockBrz.RearRideFrequencyHz,"Hz"));
+            rows.Add(Row("Derived front ARB rate before MR",_stockGr86.FrontArb.RawRateKgfPerMm,_stockBrz.FrontArb.RawRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Derived rear ARB rate before MR",_stockGr86.RearArb.RawRateKgfPerMm,_stockBrz.RearArb.RawRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Reference front ARB wheel rate",_stockGr86.FrontArb.WheelRateKgfPerMm,_stockBrz.FrontArb.WheelRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Reference rear ARB wheel rate",_stockGr86.RearArb.WheelRateKgfPerMm,_stockBrz.RearArb.WheelRateKgfPerMm,"kgf/mm"));
+            rows.Add(Row("Reference front roll stiffness",_stockGr86.FrontRollStiffnessNmPerDeg,_stockBrz.FrontRollStiffnessNmPerDeg,"N·m/deg"));
+            rows.Add(Row("Reference rear roll stiffness",_stockGr86.RearRollStiffnessNmPerDeg,_stockBrz.RearRollStiffnessNmPerDeg,"N·m/deg"));
+            rows.Add(Row("Reference front RSD",100*_stockGr86.FrontRollStiffnessDistribution,100*_stockBrz.FrontRollStiffnessDistribution,"%"));
+            rows.Add(Row("Reference RCB",_stockGr86.RollCoupleBiasPercentagePoints,_stockBrz.RollCoupleBiasPercentagePoints,"percentage points"));
+        }
         foreach (var corner in new[] { "FL", "FR", "RL", "RR" })
         {
             var av = a.State.Corners.Single(x => x.Corner == corner).NormalLoadN;
@@ -142,9 +166,9 @@ public partial class MainWindow : Window
             rows.Add(Row($"{corner} point-contact normal load", av, bv, "N"));
         }
         ComparisonGrid.ItemsSource = rows;
-        StatusText.Text = "PROVISIONAL: shared GR86 envelope, independently editable springs/tubular OD/ID, 3D front-strut and rear-multilink motion, and fixed-length 3D endlink/bar tangents are live. " +
+        StatusText.Text = "REFERENCE-CALIBRATED: stock GR86 and BRZ inputs reproduce the supplied workbook; shared synthetic hard points are calibrated to its 0.95/0.78 spring and 0.92/0.55 ARB static motion ratios. " +
             "This screen does not yet pass the phase publication gate: nonlinear energy equilibrium, calibrated spring preload-curvature, and force-path roll-center/jacking work remain pending. " +
-            $"Inputs A {a.InputHash[..12]} / B {b.InputHash[..12]}. Bump stops and tire physics are excluded. Log: {App.LogPath}";
+            $"Inputs GR86 {a.InputHash[..12]} / BRZ {b.InputHash[..12]}. Bump stops and tire physics are excluded. Log: {App.LogPath}";
     }
 
     private string CaptureUiState(long attempt) => JsonSerializer.Serialize(new
@@ -159,8 +183,8 @@ public partial class MainWindow : Window
         {
             axisCapG = SweepCap.Text,
             combinedCapG = TotalGCap.Text,
-            setupA = new { frontSpringNPerMm = AFrontSpring.Text, rearSpringNPerMm = ARearSpring.Text, frontBarOdMm = AFrontOd.Text, frontBarIdMm = AFrontId.Text, rearBarOdMm = ARearOd.Text, rearBarIdMm = ARearId.Text },
-            setupB = new { frontSpringNPerMm = BFrontSpring.Text, rearSpringNPerMm = BRearSpring.Text, frontBarOdMm = BFrontOd.Text, frontBarIdMm = BFrontId.Text, rearBarOdMm = BRearOd.Text, rearBarIdMm = BRearId.Text }
+            setupA = new { frontSpringKgfPerMm = AFrontSpring.Text, rearSpringKgfPerMm = ARearSpring.Text, frontBarOdMm = AFrontOd.Text, frontBarIdMm = AFrontId.Text, rearBarOdMm = ARearOd.Text, rearBarIdMm = ARearId.Text },
+            setupB = new { frontSpringKgfPerMm = BFrontSpring.Text, rearSpringKgfPerMm = BRearSpring.Text, frontBarOdMm = BFrontOd.Text, frontBarIdMm = BFrontId.Text, rearBarOdMm = BRearOd.Text, rearBarIdMm = BRearId.Text }
         }
     });
 
@@ -188,6 +212,7 @@ public partial class MainWindow : Window
         side.State.PitchRad,
         side.State.Corners,
         side.State.Axles,
+        side.State.TangentRollStiffnesses,
         side.State.VerticalResidualN,
         side.State.RollResidualNm,
         side.State.PitchResidualNm,
@@ -203,8 +228,8 @@ public partial class MainWindow : Window
         new(metric, Format(a), Format(b), Signed(b - a), unit);
 
     private HeadToHeadSetupInput ReadSetup(string name, bool first) => new(name,
-        ReadPositive(first ? AFrontSpring : BFrontSpring, $"{name} front spring") * 1000,
-        ReadPositive(first ? ARearSpring : BRearSpring, $"{name} rear spring") * 1000,
+        ReadPositive(first ? AFrontSpring : BFrontSpring, $"{name} front spring") * 9800,
+        ReadPositive(first ? ARearSpring : BRearSpring, $"{name} rear spring") * 9800,
         ReadPositive(first ? AFrontOd : BFrontOd, $"{name} front bar OD") / 1000,
         ReadNonNegative(first ? AFrontId : BFrontId, $"{name} front bar ID") / 1000,
         ReadPositive(first ? ARearOd : BRearOd, $"{name} rear bar OD") / 1000,
@@ -212,8 +237,8 @@ public partial class MainWindow : Window
 
     private void Populate(SetupFile setup, bool first)
     {
-        Set(first ? AFrontSpring : BFrontSpring, setup.FrontSpringNPerM / 1000);
-        Set(first ? ARearSpring : BRearSpring, setup.RearSpringNPerM / 1000);
+        Set(first ? AFrontSpring : BFrontSpring, setup.FrontSpringNPerM / 9800);
+        Set(first ? ARearSpring : BRearSpring, setup.RearSpringNPerM / 9800);
         Set(first ? AFrontOd : BFrontOd, setup.FrontArbOdM * 1000);
         Set(first ? AFrontId : BFrontId, setup.FrontArbIdM * 1000);
         Set(first ? ARearOd : BRearOd, setup.RearArbOdM * 1000);

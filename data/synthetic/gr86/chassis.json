@@ -1,13 +1,13 @@
 {
-  "id": "2022-toyota-gr86-inspired-envelope",
+  "id": "2022-stock-gr86-brz-reference-envelope",
   "schemaVersion": "1.0",
   "provenance": "publicSource",
-  "sourceNote": "Published GR86 envelope: 2575 mm wheelbase, 1520/1550 mm tracks and 1276 kg representative curb mass. Toyota describes approximately 53:47 front/rear distribution. CG height is an editable estimate, not OEM data.",
-  "totalMassKg": 1276.0,
-  "wheelbaseM": 2.575,
-  "frontTrackM": 1.520,
-  "rearTrackM": 1.550,
-  "cgFromRearAxleM": 1.36475,
+  "sourceNote": "Mass, distribution, wheelbase, and tracks reproduce the supplied suspension_ref_sheet.xlsx reference case with driver. CG height remains an editable estimate because the workbook does not provide it.",
+  "totalMassKg": 1360.778,
+  "wheelbaseM": 2.57556,
+  "frontTrackM": 1.53292,
+  "rearTrackM": 1.5494,
+  "cgFromRearAxleM": 1.41655818930366,
   "cgHeightM": 0.460,
-  "staticFrontWeightFraction": 0.530
+  "staticFrontWeightFraction": 0.5500000735
 }

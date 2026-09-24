@@ -9,6 +9,7 @@ using SuspensionSimulation.Core.RuntimeParameters;
 using SuspensionSimulation.Kinematics;
 using SuspensionSimulation.Solvers.Kinematics;
 using SuspensionSimulation.Solvers.HeadToHead;
+using SuspensionSimulation.Reference;
 using System.Numerics;
 using SuspensionSimulation.Core.Kinematics;
 
@@ -466,22 +467,85 @@ Run("desktop app creates timestamped project-local logs with reproducibility con
         throw new Exception("Each application run must use a unique project-local log file.");
     foreach (var marker in new[] { "run-manifest", "GitSnapshot()", "RuntimeInformation.FrameworkDescription", "LogException" })
         if (!app.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Run log is missing reproducibility marker {marker}.");
-    foreach (var marker in new[] { "render-attempt", "packageFingerprint", "frontBarOdMm", "render-result", "CaptureResult" })
+    foreach (var marker in new[] { "stock-reference-derivation", "render-attempt", "packageFingerprint", "frontSpringKgfPerMm", "frontBarOdMm", "render-result", "TangentRollStiffnesses", "CaptureResult" })
         if (!window.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Dashboard log is missing state marker {marker}.");
 });
 
-Run("GR86 package separates published envelope from synthetic front and rear topology", () =>
+Run("stock-twins package retains reference-sheet envelope and declared topology", () =>
 {
     var directory = Path.Combine("data", "synthetic", "gr86");
     var setup = ModularSetupLoader.Load(directory);
-    if (setup.Chassis.WheelbaseM != 2.575 || setup.Chassis.FrontTrackM != 1.520 || setup.Chassis.RearTrackM != 1.550)
-        throw new Exception("Published GR86 envelope values were not retained.");
+    Equal(1360.778, setup.Chassis.TotalMassKg, 1e-9);
+    Equal(.5500000735, setup.Chassis.StaticFrontWeightFraction, 1e-12);
+    Equal(2.57556, setup.Chassis.WheelbaseM, 1e-12);
+    Equal(1.53292, setup.Chassis.FrontTrackM, 1e-12);
+    Equal(1.5494, setup.Chassis.RearTrackM, 1e-12);
     var front = File.ReadAllText(Path.Combine(directory, "front-strut-hard-points.json"));
     var rear = File.ReadAllText(Path.Combine(directory, "rear-double-wishbone-hard-points.json"));
     if (!front.Contains("front-macpherson-3d", StringComparison.Ordinal) || !rear.Contains("rear-double-wishbone-multilink-3d", StringComparison.Ordinal))
         throw new Exception("GR86 package must explicitly retain front-strut and rear-multilink topology.");
     if (setup.AntiRollBars.Any(x => x.ModelKind != AntiRollBarModelKind.TubularGeometry || x.DirectInstalledWheelPairRateNPerM != 0))
         throw new Exception("GR86 head-to-head package must not contain a direct-rate ARB input.");
+});
+
+Run("stock GR86 and BRZ reference calculations independently reproduce workbook rows", () =>
+{
+    var reference = Stock86BrzReferenceLoader.Load(Path.Combine("data", "reference", "stock-86-brz", "reference-sheet.json"));
+    foreach (var setup in reference.Setups)
+    {
+        var actual = Stock86BrzReferenceCalculator.Calculate(reference, setup); var expected = setup.Expected;
+        Equal(expected.FrontSpringWheelRateKgfPerMm, actual.FrontSpringWheelRateKgfPerMm, 1e-9);
+        Equal(expected.RearSpringWheelRateKgfPerMm, actual.RearSpringWheelRateKgfPerMm, 1e-9);
+        Equal(expected.FrontRideFrequencyHz, actual.FrontRideFrequencyHz, 2e-9);
+        Equal(expected.RearRideFrequencyHz, actual.RearRideFrequencyHz, 2e-9);
+        Equal(expected.RearToFrontFrequencyRatio, actual.RearToFrontFrequencyRatio, 2e-9);
+        if (actual.RideCharacter != expected.RideCharacter) throw new Exception($"{setup.Name} ride character mismatch.");
+        Equal(expected.FrontArbRawRateKgfPerMm, actual.FrontArb.RawRateKgfPerMm, 2e-9);
+        Equal(expected.RearArbRawRateKgfPerMm, actual.RearArb.RawRateKgfPerMm, 2e-9);
+        Equal(expected.FrontArbWheelRateKgfPerMm, actual.FrontArb.WheelRateKgfPerMm, 2e-9);
+        Equal(expected.RearArbWheelRateKgfPerMm, actual.RearArb.WheelRateKgfPerMm, 2e-9);
+        Equal(expected.FrontRollStiffnessNmPerDeg, actual.FrontRollStiffnessNmPerDeg, 2e-6);
+        Equal(expected.RearRollStiffnessNmPerDeg, actual.RearRollStiffnessNmPerDeg, 2e-6);
+        Equal(expected.TotalRollStiffnessNmPerDeg, actual.TotalRollStiffnessNmPerDeg, 2e-6);
+        Equal(expected.FrontRollStiffnessDistribution, actual.FrontRollStiffnessDistribution, 2e-10);
+        Equal(expected.ArbFractionOfTotalRollStiffness, actual.ArbFractionOfTotalRollStiffness, 2e-10);
+    }
+});
+
+Run("stock-twins 3D geometry reproduces reference static motion ratios", () =>
+{
+    var solver = new HeadToHeadComparisonSolver(Path.Combine("data", "synthetic", "gr86"));
+    var fl = solver.TravelMaps["FL"].Evaluate(0); var rl = solver.TravelMaps["RL"].Evaluate(0);
+    var frontSpring = fl.SpringCompressionPerWheelJounce; var rearSpring = rl.SpringCompressionPerWheelJounce;
+    var frontArb = Math.Abs(fl.ArbLowerDerivativePerWheelJounce.Z); var rearArb = Math.Abs(rl.ArbLowerDerivativePerWheelJounce.Z);
+    if (Math.Abs(frontSpring-.95) > .003 || Math.Abs(rearSpring-.78) > .003 || Math.Abs(frontArb-.92) > .005 || Math.Abs(rearArb-.55) > .005)
+        throw new Exception($"Static ratios front spring={frontSpring:G8}, rear spring={rearSpring:G8}, front ARB={frontArb:G8}, rear ARB={rearArb:G8}.");
+});
+
+Run("stock GR86 and BRZ 3D head-to-head reproduces reference static roll balance", () =>
+{
+    var reference = Stock86BrzReferenceLoader.Load(Path.Combine("data", "reference", "stock-86-brz", "reference-sheet.json"));
+    var directory = Path.Combine("data", "synthetic", "gr86"); var vehicle = ModularSetupLoader.Load(directory); var solver = new HeadToHeadComparisonSolver(directory);
+    HeadToHeadSetupInput Input(StockSetupReference x) => new(x.Name,
+        x.FrontSpringRateKgfPerMm*reference.Constants.SpringRateNPerMPerKgfPerMm,
+        x.RearSpringRateKgfPerMm*reference.Constants.SpringRateNPerMPerKgfPerMm,
+        x.FrontArb.OutsideDiameterM,x.FrontArb.InsideDiameterM,x.RearArb.OutsideDiameterM,x.RearArb.InsideDiameterM);
+    var result=solver.Solve(vehicle,Input(reference.Setups[0]),Input(reference.Setups[1]),new LoadCase("static-reference",0,0,0));
+    void Verify(HeadToHeadSideResult side,StockSetupReference source)
+    {
+        var expected=Stock86BrzReferenceCalculator.Calculate(reference,source); var toPerDegree=Math.PI/180;
+        var front=side.State.TangentRollStiffnesses!.Single(x=>x.Axle=="front"); var rear=side.State.TangentRollStiffnesses!.Single(x=>x.Axle=="rear");
+        var errors=new[]
+        {
+            Math.Abs(front.SpringNmPerRad*toPerDegree/expected.FrontSpringRollStiffnessNmPerDeg-1),
+            Math.Abs(rear.SpringNmPerRad*toPerDegree/expected.RearSpringRollStiffnessNmPerDeg-1),
+            Math.Abs(front.ArbNmPerRad*toPerDegree/expected.FrontArbRollStiffnessNmPerDeg-1),
+            Math.Abs(rear.ArbNmPerRad*toPerDegree/expected.RearArbRollStiffnessNmPerDeg-1),
+            Math.Abs(side.State.RollStiffnessDistributionFront/expected.FrontRollStiffnessDistribution-1)
+        };
+        if(errors.Max()>.015) throw new Exception($"{source.Name} static 3D mismatch: spring F/R={front.SpringNmPerRad*toPerDegree:G7}/{rear.SpringNmPerRad*toPerDegree:G7}, ARB F/R={front.ArbNmPerRad*toPerDegree:G7}/{rear.ArbNmPerRad*toPerDegree:G7}, RSD={side.State.RollStiffnessDistributionFront:G7}; max relative error={errors.Max():P3}.");
+    }
+    Verify(result.A,reference.Setups[0]); Verify(result.B,reference.Setups[1]);
 });
 
 Run("head-to-head identical setups produce exactly zero deltas", () =>
@@ -510,6 +574,8 @@ Run("head-to-head UI has one shared controller and two independent setups", () =
 {
     var xaml = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml"));
     if (Count(xaml, "x:Name=\"GCircleCanvas\"") != 1) throw new Exception("Exactly one shared G-circle is required.");
+    foreach(var marker in new[]{"STOCK GR86","STOCK BRZ","Front spring (kgf/mm)","REFERENCE ROW 7","REFERENCE ROW 8"})
+        if(!xaml.Contains(marker,StringComparison.Ordinal)) throw new Exception($"Stock reference UI is missing {marker}.");
     foreach (var name in new[] { "AFrontSpring", "ARearSpring", "AFrontOd", "AFrontId", "ARearOd", "ARearId", "BFrontSpring", "BRearSpring", "BFrontOd", "BFrontId", "BRearOd", "BRearId" })
         if (!xaml.Contains($"x:Name=\"{name}\"", StringComparison.Ordinal)) throw new Exception($"Missing head-to-head input {name}.");
 });

@@ -1,0 +1,123 @@
+{
+  "schema": "suspension-sim/stock-86-brz-reference/v1",
+  "source": {
+    "workbook": "artifacts/suspension_ref_sheet.xlsx",
+    "sha256": "64015887af2f2026cefab93caf28625f5b4a010bb706a2094e5776957d049afe",
+    "weightsSheet": "1. Weights and Dimensions",
+    "setupSheet": "2. Springs and Frequencies",
+    "antiRollBarSheet": "3. Anti-Roll Bar Rate Calculato",
+    "note": "Normalized once from the supplied workbook. Expected values are cached workbook results; production calculations must derive them from inputs."
+  },
+  "constants": {
+    "springRateNPerMPerKgfPerMm": 9800.0,
+    "barRateKgfPerMmPerNPerM": 0.000101972
+  },
+  "vehicle": {
+    "totalMassKg": 1360.778,
+    "frontMassFraction": 0.5500000735,
+    "frontUnsprungMassPerCornerKg": 35.0,
+    "rearUnsprungMassPerCornerKg": 38.0,
+    "frontTrackM": 1.53292,
+    "rearTrackM": 1.5494,
+    "wheelbaseM": 2.57556,
+    "sourceCells": "Weights!D9,C10,C23:C24,H19:H21"
+  },
+  "setups": [
+    {
+      "id": "stock-gr86-2022",
+      "name": "2022 GR86 stock",
+      "sourceRow": 7,
+      "frontSpringRateKgfPerMm": 2.9,
+      "rearSpringRateKgfPerMm": 4.0,
+      "frontSpringMotionRatio": 0.95,
+      "rearSpringMotionRatio": 0.78,
+      "frontArb": {
+        "shearModulusPa": 80000000000.0,
+        "youngModulusPa": 210000000000.0,
+        "cantileverLengthM": 0.160,
+        "torsionLengthM": 0.860,
+        "outsideDiameterM": 0.018,
+        "insideDiameterM": 0.0,
+        "motionRatio": 0.92,
+        "enteredRateKgfPerMm": 3.49,
+        "sourceCell": "ARB!B9:G9"
+      },
+      "rearArb": {
+        "shearModulusPa": 80000000000.0,
+        "youngModulusPa": 210000000000.0,
+        "cantileverLengthM": 0.133,
+        "torsionLengthM": 1.000,
+        "outsideDiameterM": 0.015,
+        "insideDiameterM": 0.0,
+        "motionRatio": 0.55,
+        "enteredRateKgfPerMm": 2.15,
+        "sourceCell": "ARB!B11:G11"
+      },
+      "expected": {
+        "frontSpringWheelRateKgfPerMm": 2.61725,
+        "rearSpringWheelRateKgfPerMm": 2.4336,
+        "frontRideFrequencyHz": 1.383945187,
+        "rearRideFrequencyHz": 1.500889168,
+        "rearToFrontFrequencyRatio": 1.084500442,
+        "rideCharacter": "FLATRIDE",
+        "frontArbRawRateKgfPerMm": 3.489046278,
+        "rearArbRawRateKgfPerMm": 2.147049652,
+        "frontArbWheelRateKgfPerMm": 2.953936,
+        "rearArbWheelRateKgfPerMm": 0.650375,
+        "frontRollStiffnessNmPerDeg": 1119.592774,
+        "rearRollStiffnessNmPerDeg": 633.1569811,
+        "totalRollStiffnessNmPerDeg": 1752.749755,
+        "frontRollStiffnessDistribution": 0.6387636174,
+        "arbFractionOfTotalRollStiffness": 0.4148637689
+      }
+    },
+    {
+      "id": "stock-brz-2022",
+      "name": "2022 BRZ stock",
+      "sourceRow": 8,
+      "frontSpringRateKgfPerMm": 3.1,
+      "rearSpringRateKgfPerMm": 3.6,
+      "frontSpringMotionRatio": 0.95,
+      "rearSpringMotionRatio": 0.78,
+      "frontArb": {
+        "shearModulusPa": 80000000000.0,
+        "youngModulusPa": 210000000000.0,
+        "cantileverLengthM": 0.160,
+        "torsionLengthM": 0.860,
+        "outsideDiameterM": 0.0183,
+        "insideDiameterM": 0.0086,
+        "motionRatio": 0.92,
+        "enteredRateKgfPerMm": 3.55,
+        "sourceCell": "ARB!B7:G7"
+      },
+      "rearArb": {
+        "shearModulusPa": 80000000000.0,
+        "youngModulusPa": 210000000000.0,
+        "cantileverLengthM": 0.133,
+        "torsionLengthM": 1.000,
+        "outsideDiameterM": 0.014,
+        "insideDiameterM": 0.0,
+        "motionRatio": 0.55,
+        "enteredRateKgfPerMm": 1.63,
+        "sourceCell": "ARB!B8:G8"
+      },
+      "expected": {
+        "frontSpringWheelRateKgfPerMm": 2.79775,
+        "rearSpringWheelRateKgfPerMm": 2.19024,
+        "frontRideFrequencyHz": 1.430871843,
+        "rearRideFrequencyHz": 1.423868486,
+        "rearToFrontFrequencyRatio": 0.9951055313,
+        "rideCharacter": "PITCH",
+        "frontArbRawRateKgfPerMm": 3.545722357,
+        "rearArbRawRateKgfPerMm": 1.629255495,
+        "frontArbWheelRateKgfPerMm": 3.00472,
+        "rearArbWheelRateKgfPerMm": 0.493075,
+        "frontRollStiffnessNmPerDeg": 1166.071907,
+        "rearRollStiffnessNmPerDeg": 550.8992857,
+        "totalRollStiffnessNmPerDeg": 1716.971192,
+        "frontRollStiffnessDistribution": 0.6791447124,
+        "arbFractionOfTotalRollStiffness": 0.4106437185
+      }
+    }
+  ]
+}

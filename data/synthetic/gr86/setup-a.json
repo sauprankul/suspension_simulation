@@ -1,1 +1,1 @@
-{ "schema": "suspension-sim/head-to-head-setup/v1", "name": "Setup A", "frontSpringNPerM": 45000.0, "rearSpringNPerM": 50000.0, "frontArbOdM": 0.020, "frontArbIdM": 0.0, "rearArbOdM": 0.016, "rearArbIdM": 0.0, "provenance": "synthetic" }
+{ "schema": "suspension-sim/head-to-head-setup/v1", "name": "Stock GR86", "frontSpringNPerM": 28420.0, "rearSpringNPerM": 39200.0, "frontArbOdM": 0.018, "frontArbIdM": 0.0, "rearArbOdM": 0.015, "rearArbIdM": 0.0, "provenance": "referenceSheet" }

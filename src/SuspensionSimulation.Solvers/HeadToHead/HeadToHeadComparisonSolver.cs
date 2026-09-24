@@ -106,9 +106,9 @@ public sealed class HeadToHeadComparisonSolver
         var rear = state.TangentRollStiffnesses!.Single(x => x.Axle == "rear");
         var diagnostics = new List<string>
         {
-            "Published GR86 envelope; spring, ARB and hard-point values are synthetic/estimated.",
+            "Supplied reference-sheet mass, tracks, stock springs, and flexible-arm ARB dimensions; shared hard points remain synthetic but are calibrated to its static motion ratios.",
             geometryLive
-                ? "Startup-precomputed 3D front-strut and rear-multilink branches supply local spring derivatives; fixed-length 3D endlinks supply each ARB energy Hessian."
+                ? "Startup-precomputed 3D front-strut and rear-multilink branches supply local spring derivatives; fixed-length 3D endlinks plus declared arm-bending/torsion compliance supply each ARB energy Hessian."
                 : "PROVISIONAL FALLBACK: declared scalar spring/ARB attachment motion ratios are in use because no 3D package was supplied.",
             "PROVISIONAL: the whole-car equilibrium uses one explicit 3D local-tangent update; full nonlinear component force integration and force-path roll-center/jacking gates remain pending.",
             "Bump stops, tire physics, damping, compliance and aero are excluded."

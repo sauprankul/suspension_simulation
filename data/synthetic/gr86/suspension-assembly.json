@@ -4,9 +4,9 @@
   "frontAntiRollBarId": "gr86-front-arb",
   "rearAntiRollBarId": "gr86-rear-arb",
   "corners": [
-    { "corner": "FL", "springId": "gr86-front-spring", "damperId": "gr86-front-damper", "bumpStopId": "gr86-front-stop", "motionRatio": 0.94 },
-    { "corner": "FR", "springId": "gr86-front-spring", "damperId": "gr86-front-damper", "bumpStopId": "gr86-front-stop", "motionRatio": 0.94 },
-    { "corner": "RL", "springId": "gr86-rear-spring", "damperId": "gr86-rear-damper", "bumpStopId": "gr86-rear-stop", "motionRatio": 0.72 },
-    { "corner": "RR", "springId": "gr86-rear-spring", "damperId": "gr86-rear-damper", "bumpStopId": "gr86-rear-stop", "motionRatio": 0.72 }
+    { "corner": "FL", "springId": "gr86-front-spring", "damperId": "gr86-front-damper", "bumpStopId": "gr86-front-stop", "motionRatio": 0.95 },
+    { "corner": "FR", "springId": "gr86-front-spring", "damperId": "gr86-front-damper", "bumpStopId": "gr86-front-stop", "motionRatio": 0.95 },
+    { "corner": "RL", "springId": "gr86-rear-spring", "damperId": "gr86-rear-damper", "bumpStopId": "gr86-rear-stop", "motionRatio": 0.78 },
+    { "corner": "RR", "springId": "gr86-rear-spring", "damperId": "gr86-rear-damper", "bumpStopId": "gr86-rear-stop", "motionRatio": 0.78 }
   ]
 }

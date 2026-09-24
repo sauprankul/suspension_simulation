@@ -14,7 +14,9 @@ public sealed record TubularArbMechanism3DConfig(
     double InsideDiameterM,
     double ShearModulusPa,
     double TorsionLengthM,
-    string Provenance);
+    string Provenance,
+    double YoungModulusPa = 210_000_000_000.0,
+    double EnergyStiffnessScale = 1.0);
 
 public sealed record ArbSideState3D(
     double ArmAngleRad,
@@ -39,4 +41,9 @@ public sealed record TubularArbMechanismState3D(
     double RightWheelReactionN,
     double[,] WheelTangentNPerM,
     string Validity,
-    IReadOnlyList<string> Diagnostics);
+    IReadOnlyList<string> Diagnostics,
+    double SecondMomentM4 = double.NaN,
+    double LeftArmBendingStiffnessNPerM = double.NaN,
+    double RightArmBendingStiffnessNPerM = double.NaN,
+    double EffectiveSystemTorsionalStiffnessNmPerRad = double.NaN,
+    double MechanismTwistRad = double.NaN);

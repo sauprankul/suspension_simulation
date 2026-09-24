@@ -1,8 +1,8 @@
 namespace SuspensionSimulation.Components;
 
 /// <summary>
-/// Small-deflection torsion-only ARB geometry. The torsion section is a circular tube;
-/// arm bending, bearing compliance, link bending, and suspension kinematics are excluded.
+/// Small-deflection circular-section ARB geometry. Torsion-section twist and cantilever-arm
+/// bending act in series. Bearing compliance, link bending, and suspension kinematics are excluded.
 /// </summary>
 public sealed record TubularAntiRollBarConfig : Configuration.IVersionedConfiguration
 {
@@ -17,6 +17,10 @@ public sealed record TubularAntiRollBarConfig : Configuration.IVersionedConfigur
     public double InsideDiameterM { get; init; }
     /// <summary>Material shear modulus in Pa; a steel value must be declared, never implied.</summary>
     public double ShearModulusPa { get; init; }
+    /// <summary>Material Young's modulus in Pa for circular cantilever-arm bending.</summary>
+    public double YoungModulusPa { get; init; } = 210_000_000_000.0;
+    /// <summary>Explicit source convention for mapping the derived bar rate into stored roll energy.</summary>
+    public double EnergyStiffnessScale { get; init; } = 1.0;
     public required ArbSideGeometry Left { get; init; }
     public required ArbSideGeometry Right { get; init; }
 }
@@ -36,7 +40,11 @@ public sealed record ArbSideGeometry(
 
 public sealed record TubularAntiRollBarProperties(
     double PolarSecondMomentM4,
-    double TorsionalStiffnessNmPerRad);
+    double TorsionalStiffnessNmPerRad,
+    double SecondMomentM4 = double.NaN,
+    double LeftArmBendingStiffnessNPerM = double.NaN,
+    double RightArmBendingStiffnessNPerM = double.NaN,
+    double EffectiveSystemTorsionalStiffnessNmPerRad = double.NaN);
 
 public sealed record TubularArbWheelTangent(double LeftSelfNPerM, double RightSelfNPerM, double CrossNPerM,
     double? SymmetricEffectiveWheelPairTangentNPerM, string Validity, IReadOnlyList<string> Warnings,
@@ -51,7 +59,8 @@ public sealed record TubularAntiRollBarEvaluation(
     double RightEndLinkAxialForceN,
     double LeftWheelReactionN,
     double RightWheelReactionN,
-    double StoredEnergyJ);
+    double StoredEnergyJ,
+    double MechanismTwistRad = double.NaN);
 
 public sealed class TubularAntiRollBar
 {
@@ -63,10 +72,15 @@ public sealed class TubularAntiRollBar
         if (string.IsNullOrWhiteSpace(config.Id)) throw new ArgumentException("An id is required.", nameof(config));
         Guard.Positive(nameof(config.TorsionLengthM), config.TorsionLengthM); Guard.Positive(nameof(config.OutsideDiameterM), config.OutsideDiameterM);
         Guard.NonNegative(nameof(config.InsideDiameterM), config.InsideDiameterM); Guard.Positive(nameof(config.ShearModulusPa), config.ShearModulusPa);
+        Guard.Positive(nameof(config.YoungModulusPa), config.YoungModulusPa); Guard.Positive(nameof(config.EnergyStiffnessScale), config.EnergyStiffnessScale);
         if (config.InsideDiameterM >= config.OutsideDiameterM) throw new ArgumentException("Inside diameter must be smaller than outside diameter.", nameof(config));
         ValidateSide(config.Left, nameof(config.Left)); ValidateSide(config.Right, nameof(config.Right));
-        var polar = Math.PI / 32.0 * (Math.Pow(config.OutsideDiameterM, 4) - Math.Pow(config.InsideDiameterM, 4));
-        _properties = new TubularAntiRollBarProperties(polar, config.ShearModulusPa * polar / config.TorsionLengthM);
+        var second = Math.PI / 64.0 * (Math.Pow(config.OutsideDiameterM, 4) - Math.Pow(config.InsideDiameterM, 4));
+        var polar = 2*second; var torsional = config.ShearModulusPa * polar / config.TorsionLengthM;
+        var leftArm = 3*config.YoungModulusPa*second/Math.Pow(config.Left.LeverArmM,3);
+        var rightArm = 3*config.YoungModulusPa*second/Math.Pow(config.Right.LeverArmM,3);
+        var effective = config.EnergyStiffnessScale/(1/torsional+1/(leftArm*config.Left.LeverArmM*config.Left.LeverArmM)+1/(rightArm*config.Right.LeverArmM*config.Right.LeverArmM));
+        _properties = new TubularAntiRollBarProperties(polar,torsional,second,leftArm,rightArm,effective);
     }
 
     public TubularAntiRollBarProperties Properties => _properties;
@@ -94,9 +108,9 @@ public sealed class TubularAntiRollBar
                 leftWheelToEndLinkVerticalMotionRatio * Math.Cos(_config.Left.EndLinkAngleFromVerticalRad), rightWheelToEndLinkVerticalMotionRatio * Math.Cos(_config.Right.EndLinkAngleFromVerticalRad));
         var aL = EffectiveBarEndMotionRatio(leftWheelToEndLinkVerticalMotionRatio, _config.Left) / _config.Left.LeverArmM;
         var aR = EffectiveBarEndMotionRatio(rightWheelToEndLinkVerticalMotionRatio, _config.Right) / _config.Right.LeverArmM;
-        var left = _properties.TorsionalStiffnessNmPerRad * aL * aL;
-        var right = _properties.TorsionalStiffnessNmPerRad * aR * aR;
-        var cross = -_properties.TorsionalStiffnessNmPerRad * aL * aR;
+        var left = _properties.EffectiveSystemTorsionalStiffnessNmPerRad * aL * aL;
+        var right = _properties.EffectiveSystemTorsionalStiffnessNmPerRad * aR * aR;
+        var cross = -_properties.EffectiveSystemTorsionalStiffnessNmPerRad * aL * aR;
         var symmetric = Math.Abs(aL - aR) <= 1e-10 * Math.Max(1, Math.Max(Math.Abs(aL), Math.Abs(aR)));
         return new(left, right, cross, symmetric ? left : null, symmetric ? "valid" : "warning",
             symmetric ? [] : ["Asymmetric side geometry: retain the coupled stiffness matrix; a single direct wheel-pair rate is not exact."],
@@ -114,17 +128,19 @@ public sealed class TubularAntiRollBar
         var rightEffective = EffectiveBarEndMotionRatio(_config.Right.WheelToEndLinkVerticalMotionRatio, _config.Right);
         var leftArmAngle = leftEffective * leftWheelJounceM / _config.Left.LeverArmM;
         var rightArmAngle = rightEffective * rightWheelJounceM / _config.Right.LeverArmM;
-        var twist = leftArmAngle - rightArmAngle;
-        var torque = _properties.TorsionalStiffnessNmPerRad * twist;
+        var mechanismTwist = leftArmAngle - rightArmAngle;
+        var torque = _properties.EffectiveSystemTorsionalStiffnessNmPerRad * mechanismTwist;
+        var barTwist = torque/_properties.TorsionalStiffnessNmPerRad;
         // -d(1/2*k*twist^2)/d(end-link vertical displacement), one side per arm.
         var leftVertical = -torque / _config.Left.LeverArmM;
         var rightVertical = torque / _config.Right.LeverArmM;
         var leftAxial = AxialForce(leftVertical, _config.Left.EndLinkAngleFromVerticalRad);
         var rightAxial = AxialForce(rightVertical, _config.Right.EndLinkAngleFromVerticalRad);
-        return new(twist, torque, leftVertical, rightVertical, leftAxial, rightAxial,
+        return new(barTwist, torque, leftVertical, rightVertical, leftAxial, rightAxial,
             leftVertical * leftEffective,
             rightVertical * rightEffective,
-            0.5 * _properties.TorsionalStiffnessNmPerRad * twist * twist);
+            0.5 * _properties.EffectiveSystemTorsionalStiffnessNmPerRad * mechanismTwist * mechanismTwist,
+            mechanismTwist);
     }
 
     private static void ValidateSide(ArbSideGeometry side, string name)

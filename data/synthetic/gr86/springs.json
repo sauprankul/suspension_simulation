@@ -2,17 +2,17 @@
   {
     "id": "gr86-front-spring",
     "schemaVersion": "1.0",
-    "provenance": "synthetic",
-    "sourceNote": "Editable comparison seed; not an OEM rate.",
-    "linearRateNPerM": 45000.0,
+    "provenance": "publicSource",
+    "sourceNote": "Supplied suspension_ref_sheet.xlsx stock GR86 row: 2.9 kgf/mm using its 9800 N/m conversion.",
+    "linearRateNPerM": 28420.0,
     "preloadN": 0.0
   },
   {
     "id": "gr86-rear-spring",
     "schemaVersion": "1.0",
-    "provenance": "synthetic",
-    "sourceNote": "Editable comparison seed; not an OEM rate.",
-    "linearRateNPerM": 50000.0,
+    "provenance": "publicSource",
+    "sourceNote": "Supplied suspension_ref_sheet.xlsx stock GR86 row: 4.0 kgf/mm using its 9800 N/m conversion.",
+    "linearRateNPerM": 39200.0,
     "preloadN": 0.0
   }
 ]

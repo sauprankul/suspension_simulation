@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private ModularSetup? _vehicle;
     private HeadToHeadComparisonResult? _comparison;
     private string? _packageDirectory;
+    private long _renderAttempt;
 
     public MainWindow()
     {
@@ -38,6 +39,7 @@ public partial class MainWindow : Window
         _vehicle = ModularSetupLoader.Load(_packageDirectory);
         var a = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-a.json"));
         var b = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-b.json"));
+        App.Log($"Loaded GR86 package directory={_packageDirectory} fingerprint={_vehicle.InputFingerprintSha256}.");
         Populate(a, true); Populate(b, false);
         Render();
     }
@@ -60,6 +62,9 @@ public partial class MainWindow : Window
     private void Render()
     {
         if (!IsLoaded || _vehicle is null) return;
+        var attempt = Interlocked.Increment(ref _renderAttempt);
+        var inputSnapshot = CaptureUiState(attempt);
+        App.Log(inputSnapshot, "INPUT");
         var radius = Radius();
         try
         {
@@ -76,12 +81,12 @@ public partial class MainWindow : Window
             DrawCar(ACarCanvas, _comparison.A.State, Brushes.DeepSkyBlue);
             DrawCar(BCarCanvas, _comparison.B.State, Brushes.Orange);
             RenderResults(_comparison);
-            App.Log($"Head-to-head render ax={_ax:G5}, ay={_ay:G5}, A={_comparison.A.InputHash[..12]}, B={_comparison.B.InputHash[..12]}.");
+            App.Log(CaptureResult(attempt, _comparison), "RESULT");
         }
         catch (Exception exception)
         {
-            App.Log($"Head-to-head render failed at ax={_ax:G6}, ay={_ay:G6}: {exception}");
-            StatusText.Text = $"Input/solve error; previous valid plots retained: {exception.Message}";
+            App.LogException($"Head-to-head render failed attempt={attempt}; inputSnapshot={inputSnapshot}", exception);
+            StatusText.Text = $"Input/solve error; previous valid plots retained: {exception.Message}  •  Log: {App.LogPath}";
             try
             {
                 var point = GCircleMapper.Map(_ax, _ay, radius, ReadPositive(SweepCap, "G axis cap"), ReadPositive(TotalGCap, "combined G cap"));
@@ -119,8 +124,56 @@ public partial class MainWindow : Window
         ComparisonGrid.ItemsSource = rows;
         StatusText.Text = "PROVISIONAL: shared GR86 envelope, independently editable springs/tubular OD/ID, 3D front-strut and rear-multilink motion, and fixed-length 3D endlink/bar tangents are live. " +
             "This screen does not yet pass the phase publication gate: nonlinear energy equilibrium, calibrated spring preload-curvature, and force-path roll-center/jacking work remain pending. " +
-            $"Inputs A {a.InputHash[..12]} / B {b.InputHash[..12]}. Bump stops and tire physics are excluded.";
+            $"Inputs A {a.InputHash[..12]} / B {b.InputHash[..12]}. Bump stops and tire physics are excluded. Log: {App.LogPath}";
     }
+
+    private string CaptureUiState(long attempt) => JsonSerializer.Serialize(new
+    {
+        eventName = "render-attempt",
+        attempt,
+        axG = _ax,
+        ayG = _ay,
+        packageDirectory = _packageDirectory,
+        packageFingerprint = _vehicle?.InputFingerprintSha256,
+        controls = new
+        {
+            axisCapG = SweepCap.Text,
+            combinedCapG = TotalGCap.Text,
+            setupA = new { frontSpringNPerMm = AFrontSpring.Text, rearSpringNPerMm = ARearSpring.Text, frontBarOdMm = AFrontOd.Text, frontBarIdMm = AFrontId.Text, rearBarOdMm = ARearOd.Text, rearBarIdMm = ARearId.Text },
+            setupB = new { frontSpringNPerMm = BFrontSpring.Text, rearSpringNPerMm = BRearSpring.Text, frontBarOdMm = BFrontOd.Text, frontBarIdMm = BFrontId.Text, rearBarOdMm = BRearOd.Text, rearBarIdMm = BRearId.Text }
+        }
+    });
+
+    private static string CaptureResult(long attempt, HeadToHeadComparisonResult comparison) => JsonSerializer.Serialize(new
+    {
+        eventName = "render-result",
+        attempt,
+        loadCase = comparison.SharedLoadCase,
+        validity = comparison.Validity,
+        setupA = ResultSide(comparison.A),
+        setupB = ResultSide(comparison.B),
+        delta = comparison.BMinusA
+    });
+
+    private static object ResultSide(HeadToHeadSideResult side) => new
+    {
+        input = side.Input,
+        side.InputHash,
+        side.Validity,
+        side.Diagnostics,
+        rsdFront = side.State.RollStiffnessDistributionFront,
+        rcbPercentagePoints = side.State.RollCoupleBiasPercentagePoints,
+        side.State.HeaveCompressionM,
+        side.State.RollRad,
+        side.State.PitchRad,
+        side.State.Corners,
+        side.State.Axles,
+        side.State.VerticalResidualN,
+        side.State.RollResidualNm,
+        side.State.PitchResidualNm,
+        side.State.SolverIterations,
+        side.State.Converged
+    };
 
     private static string Summary(HeadToHeadSideResult side) =>
         $"Roll {Degrees(side.State.RollRad):0.000}°  •  Pitch {Degrees(side.State.PitchRad):0.000}°  •  " +

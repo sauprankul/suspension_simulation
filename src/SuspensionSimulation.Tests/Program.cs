@@ -452,10 +452,22 @@ Run("pure longitudinal linear no-stop geometry RSD preserves the reference roll 
 Run("dashboard render failure preserves the prior plot and records a diagnostic", () =>
 {
     var source = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
-    if (!source.Contains("previous valid plots retained", StringComparison.Ordinal) || !source.Contains("App.Log($\"Head-to-head render failed", StringComparison.Ordinal)) throw new Exception("Render failure recovery must retain the prior plots and write a diagnostic.");
+    if (!source.Contains("previous valid plots retained", StringComparison.Ordinal) || !source.Contains("App.LogException($\"Head-to-head render failed", StringComparison.Ordinal)) throw new Exception("Render failure recovery must retain the prior plots and write a diagnostic.");
     var marker = source.IndexOf("catch (Exception exception)", StringComparison.Ordinal);
     var recovery = source[marker..Math.Min(source.Length, marker + 700)];
     if (recovery.Contains("ACarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("BCarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("ComparisonGrid.ItemsSource = null", StringComparison.Ordinal)) throw new Exception("Render recovery must not blank the dashboard.");
+});
+
+Run("desktop app creates timestamped project-local logs with reproducibility context", () =>
+{
+    var app = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "App.xaml.cs"));
+    var window = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
+    if (!app.Contains("Path.Combine(RepositoryRoot, \"logs\"", StringComparison.Ordinal) || !app.Contains("run-{RunId}.log", StringComparison.Ordinal))
+        throw new Exception("Each application run must use a unique project-local log file.");
+    foreach (var marker in new[] { "run-manifest", "GitSnapshot()", "RuntimeInformation.FrameworkDescription", "LogException" })
+        if (!app.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Run log is missing reproducibility marker {marker}.");
+    foreach (var marker in new[] { "render-attempt", "packageFingerprint", "frontBarOdMm", "render-result", "CaptureResult" })
+        if (!window.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Dashboard log is missing state marker {marker}.");
 });
 
 Run("GR86 package separates published envelope from synthetic front and rear topology", () =>

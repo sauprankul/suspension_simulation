@@ -8,10 +8,12 @@ using SuspensionSimulation.Results;
 using SuspensionSimulation.Core.RuntimeParameters;
 using SuspensionSimulation.Kinematics;
 using SuspensionSimulation.Solvers.Kinematics;
+using SuspensionSimulation.Solvers.HeadToHead;
 using System.Numerics;
 using SuspensionSimulation.Core.Kinematics;
 
 var failures = new List<string>();
+var totalChecks = 0;
 Run("committed synthetic analytic fixture catalogue validates", () => SuspensionSimulation.Tests.TestdataFixtureHarness.Verify());
 Run("ideal ARB rejects equal heave", () =>
 {
@@ -389,12 +391,11 @@ Run("solved strut travel changes local motion ratio and tubular ARB tangent", ()
     var bumpTangent = bar.WheelTangent(bump.StrutMotionRatio.MotionRatio, bump.StrutMotionRatio.MotionRatio);
     if (Math.Abs(referenceTangent.LeftSelfNPerM - bumpTangent.LeftSelfNPerM) < 1e-3) throw new Exception("ARB tangent must follow supplied solved travel derivatives.");
 });
-Run("dashboard keeps legacy direct ARB inputs hidden by default", () =>
+Run("head-to-head dashboard exposes tubular dimensions and no direct ARB rate", () =>
 {
     var xaml = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml"));
-    if (!xaml.Contains("x:Name=\"LegacyDirectArbPanel\" Visibility=\"Collapsed\"", StringComparison.Ordinal)) throw new Exception("Legacy ARB panel must be collapsed by default.");
-    if (!xaml.Contains("Enable legacy direct-rate import mode", StringComparison.Ordinal)) throw new Exception("Legacy mode must be explicitly opt-in.");
-    if (xaml.Contains("Front ARB local tangent", StringComparison.Ordinal) || xaml.Contains("Rear ARB local tangent", StringComparison.Ordinal)) throw new Exception("Primary UI must expose geometry parameters, not a direct tangent control.");
+    if (!xaml.Contains("Front bar OD (mm)", StringComparison.Ordinal) || !xaml.Contains("Front bar ID (mm)", StringComparison.Ordinal)) throw new Exception("Primary UI must expose tubular geometry.");
+    if (xaml.Contains("direct rate", StringComparison.OrdinalIgnoreCase) || xaml.Contains("local tangent", StringComparison.OrdinalIgnoreCase)) throw new Exception("Primary UI must not expose a direct ARB rate/tangent input.");
 });
 Run("Cayman dashboard stiffness path is geometry-backed rather than unavailable", () =>
 {
@@ -451,24 +452,145 @@ Run("pure longitudinal linear no-stop geometry RSD preserves the reference roll 
 Run("dashboard render failure preserves the prior plot and records a diagnostic", () =>
 {
     var source = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
-    if (!source.Contains("previous valid plot retained", StringComparison.Ordinal) || !source.Contains("App.Log($\"Render failed", StringComparison.Ordinal)) throw new Exception("Render failure recovery must retain the prior plot and write a diagnostic.");
+    if (!source.Contains("previous valid plots retained", StringComparison.Ordinal) || !source.Contains("App.Log($\"Head-to-head render failed", StringComparison.Ordinal)) throw new Exception("Render failure recovery must retain the prior plots and write a diagnostic.");
     var marker = source.IndexOf("catch (Exception exception)", StringComparison.Ordinal);
     var recovery = source[marker..Math.Min(source.Length, marker + 700)];
-    if (recovery.Contains("CarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("MetricsGrid.ItemsSource = null", StringComparison.Ordinal)) throw new Exception("Render recovery must not blank the dashboard.");
+    if (recovery.Contains("ACarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("BCarCanvas.Children.Clear", StringComparison.Ordinal) || recovery.Contains("ComparisonGrid.ItemsSource = null", StringComparison.Ordinal)) throw new Exception("Render recovery must not blank the dashboard.");
 });
 
-Console.WriteLine($"{40 - failures.Count}/40 regression checks passed.");
+Run("GR86 package separates published envelope from synthetic front and rear topology", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86");
+    var setup = ModularSetupLoader.Load(directory);
+    if (setup.Chassis.WheelbaseM != 2.575 || setup.Chassis.FrontTrackM != 1.520 || setup.Chassis.RearTrackM != 1.550)
+        throw new Exception("Published GR86 envelope values were not retained.");
+    var front = File.ReadAllText(Path.Combine(directory, "front-strut-hard-points.json"));
+    var rear = File.ReadAllText(Path.Combine(directory, "rear-double-wishbone-hard-points.json"));
+    if (!front.Contains("front-macpherson-3d", StringComparison.Ordinal) || !rear.Contains("rear-double-wishbone-multilink-3d", StringComparison.Ordinal))
+        throw new Exception("GR86 package must explicitly retain front-strut and rear-multilink topology.");
+    if (setup.AntiRollBars.Any(x => x.ModelKind != AntiRollBarModelKind.TubularGeometry || x.DirectInstalledWheelPairRateNPerM != 0))
+        throw new Exception("GR86 head-to-head package must not contain a direct-rate ARB input.");
+});
+
+Run("head-to-head identical setups produce exactly zero deltas", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86"); var setup = ModularSetupLoader.Load(directory);
+    var input = new HeadToHeadSetupInput("same", 45_000, 50_000, .020, 0, .016, 0);
+    var result = new HeadToHeadComparisonSolver(directory).Solve(setup, input, input, new LoadCase("shared", -.4, 1.1, 0));
+    Equal(0, result.BMinusA.FrontRsdPercentagePoints, 1e-12);
+    Equal(0, result.BMinusA.RcbPercentagePoints, 1e-12);
+    foreach (var value in result.BMinusA.CornerLoadN.Values) Equal(0, value, 1e-12);
+});
+
+Run("head-to-head tubular diameter edit changes derived ARB and RCB", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86"); var setup = ModularSetupLoader.Load(directory);
+    var a = new HeadToHeadSetupInput("A", 45_000, 50_000, .020, 0, .016, 0);
+    var b = a with { Name = "B", FrontArbOutsideDiameterM = .022, FrontArbInsideDiameterM = .010 };
+    var result = new HeadToHeadComparisonSolver(directory).Solve(setup, a, b, new LoadCase("shared", 0, 1, 0));
+    if (Math.Abs(result.A.FrontArbRollStiffnessNmPerRad - result.B.FrontArbRollStiffnessNmPerRad) < 1)
+        throw new Exception("Tubular OD/ID edit did not change the derived front ARB roll stiffness.");
+    if (Math.Abs(result.BMinusA.RcbPercentagePoints) < 1e-6)
+        throw new Exception("Derived tubular ARB change did not propagate to RCB.");
+});
+
+Run("head-to-head UI has one shared controller and two independent setups", () =>
+{
+    var xaml = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml"));
+    if (Count(xaml, "x:Name=\"GCircleCanvas\"") != 1) throw new Exception("Exactly one shared G-circle is required.");
+    foreach (var name in new[] { "AFrontSpring", "ARearSpring", "AFrontOd", "AFrontId", "ARearOd", "ARearId", "BFrontSpring", "BRearSpring", "BFrontOd", "BFrontId", "BRearOd", "BRearId" })
+        if (!xaml.Contains($"x:Name=\"{name}\"", StringComparison.Ordinal)) throw new Exception($"Missing head-to-head input {name}.");
+});
+
+Run("3D MacPherson rigid constraints close and continue through travel", () =>
+{
+    var solver = new RigidMechanism3DSolver(); var geometry = ThreeDimensionalStrutFixture("FL", 1);
+    var reference = solver.Solve(geometry, 0); var travel = solver.SolveTravel(geometry, .010);
+    if (!reference.Converged || reference.MaximumConstraintResidualM > 1e-6) throw new Exception($"3D strut reference pose did not close ({reference.MaximumConstraintResidualM:G4} m).");
+    if (!travel.Pose.Converged || !double.IsFinite(travel.SpringCompressionPerWheelJounce) || travel.ArbLowerDerivativePerWheelJounce.Length() <= 0)
+        throw new Exception($"3D strut travel continuation failed: converged={travel.Pose.Converged}, residual={travel.Pose.MaximumConstraintResidualM:G4}, ds={travel.SpringCompressionPerWheelJounce:G4}, arb={travel.ArbLowerDerivativePerWheelJounce}.");
+});
+
+Run("3D double wishbone rigid constraints close and continue through travel", () =>
+{
+    var solver = new RigidMechanism3DSolver(); var geometry = ThreeDimensionalRearFixture("RL", 1);
+    var reference = solver.Solve(geometry, 0); var travel = solver.SolveTravel(geometry, .010);
+    if (!reference.Converged || reference.MaximumConstraintResidualM > 1e-6) throw new Exception($"3D rear reference pose did not close ({reference.MaximumConstraintResidualM:G4} m).");
+    if (!travel.Pose.Converged || !double.IsFinite(travel.SpringCompressionPerWheelJounce) || travel.ArbLowerDerivativePerWheelJounce.Length() <= 0)
+        throw new Exception($"3D rear travel continuation failed: converged={travel.Pose.Converged}, residual={travel.Pose.MaximumConstraintResidualM:G4}, ds={travel.SpringCompressionPerWheelJounce:G4}, arb={travel.ArbLowerDerivativePerWheelJounce}.");
+    if (travel.Pose.Topology != "double-wishbone-multilink-3d") throw new Exception("Rear topology must not be substituted with a strut.");
+});
+
+Run("committed GR86 hard points close as front strut and rear multilink mechanisms", () =>
+{
+    var package = Gr86HardPointPackageLoader.Load(Path.Combine("data", "synthetic", "gr86"));
+    var solver = new RigidMechanism3DSolver();
+    foreach (var corner in package.Front.Values)
+    {
+        var travel = solver.SolveTravel(corner, .005);
+        if (!travel.Pose.Converged || !double.IsFinite(travel.SpringCompressionPerWheelJounce)) throw new Exception($"{corner.Id} committed front geometry did not continue: residual={travel.Pose.MaximumConstraintResidualM:G4}, iter={travel.Pose.Iterations}, ds={travel.SpringCompressionPerWheelJounce:G4}.");
+    }
+    foreach (var corner in package.Rear.Values)
+    {
+        var travel = solver.SolveTravel(corner, .005);
+        if (!travel.Pose.Converged || !double.IsFinite(travel.SpringCompressionPerWheelJounce)) throw new Exception($"{corner.Id} committed rear geometry did not continue: residual={travel.Pose.MaximumConstraintResidualM:G4}, iter={travel.Pose.Iterations}, ds={travel.SpringCompressionPerWheelJounce:G4}.");
+    }
+});
+
+Run("3D fixed-length ARB endlinks reject heave and produce a coupled energy Hessian", () =>
+{
+    var config = ThreeDimensionalArbFixture(); var solver = new TubularArbMechanism3DSolver();
+    Vector3 Left(double jounce) => config.LeftLowerJointReference + new Vector3(0,0,(float)jounce);
+    Vector3 Right(double jounce) => config.RightLowerJointReference + new Vector3(0,0,(float)jounce);
+    var heave = solver.Evaluate(config, Left, Right, .010, .010);
+    Equal(0, heave.BarTwistRad, 2e-6); Equal(0, heave.StoredEnergyJ, 1e-8);
+    var roll = solver.Evaluate(config, Left, Right, .010, -.010);
+    if (roll.Validity == "invalid" || roll.WheelTangentNPerM[0,0] <= 0 || roll.WheelTangentNPerM[1,1] <= 0 || roll.WheelTangentNPerM[0,1] >= 0)
+        throw new Exception("3D ARB must expose a physical coupled wheel Hessian.");
+    Equal(roll.WheelTangentNPerM[0,1], roll.WheelTangentNPerM[1,0], 1e-9);
+});
+
+Run("3D ARB tangent responds to solved endlink geometry and hollow tube ID", () =>
+{
+    var solver = new TubularArbMechanism3DSolver(); var vertical = ThreeDimensionalArbFixture();
+    Vector3 Left(double jounce) => vertical.LeftLowerJointReference + new Vector3(0,0,(float)jounce);
+    Vector3 Right(double jounce) => vertical.RightLowerJointReference + new Vector3(0,0,(float)jounce);
+    var solid = solver.Evaluate(vertical, Left, Right, .008, -.008);
+    var hollowConfig = vertical with { InsideDiameterM = .014 };
+    var hollow = solver.Evaluate(hollowConfig, Left, Right, .008, -.008);
+    if (hollow.TorsionalStiffnessNmPerRad >= solid.TorsionalStiffnessNmPerRad || hollow.WheelTangentNPerM[0,0] >= solid.WheelTangentNPerM[0,0])
+        throw new Exception("Increasing tube ID must reduce torsional and wheel tangent stiffness.");
+    var angled = vertical with
+    {
+        LeftLowerJointReference = vertical.LeftLowerJointReference + new Vector3(.06f,0,0),
+        RightLowerJointReference = vertical.RightLowerJointReference + new Vector3(.06f,0,0)
+    };
+    Vector3 AngledLeft(double jounce) => angled.LeftLowerJointReference + new Vector3(0,0,(float)jounce);
+    Vector3 AngledRight(double jounce) => angled.RightLowerJointReference + new Vector3(0,0,(float)jounce);
+    var angledState = solver.Evaluate(angled, AngledLeft, AngledRight, .008, -.008);
+    if (Math.Abs(angledState.WheelTangentNPerM[0,0]-solid.WheelTangentNPerM[0,0]) < 1)
+        throw new Exception("Changing fixed-link geometry must change the derived wheel tangent.");
+});
+
+Console.WriteLine($"{totalChecks - failures.Count}/{totalChecks} regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 
 void Run(string name, Action test)
 {
+    totalChecks++;
     try { test(); Console.WriteLine($"PASS {name}"); }
     catch (Exception e) { failures.Add($"FAIL {name}: {e.Message}"); }
 }
 static void Equal(double expected, double actual, double tolerance)
 {
     if (Math.Abs(expected - actual) > tolerance) throw new Exception($"Expected {expected:G17}, got {actual:G17} (tolerance {tolerance:G17}).");
+}
+static int Count(string text, string value)
+{
+    var count = 0; var index = 0;
+    while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) { count++; index += value.Length; }
+    return count;
 }
 static VehiclePackage SymmetricPackage() => new(
     new ChassisModel("symmetric", 1000, 2.5, 1.5, 1.5, 0.5, 0.5, "Synthetic", null),
@@ -503,3 +625,24 @@ static MacPhersonPlanarCornerConfig PlanarStrutFixture() => new()
     TieRodOuterReferenceM = new Vector3(0, 0.98f, 0.55f),
     GroundPlaneZM = 0
 };
+
+static MacPhersonCorner3D ThreeDimensionalStrutFixture(string id, float side)
+{
+    Vector3 Mirror(float x, float y, float z) => new(x, side*y, z);
+    var upright = new RigidUprightPoints3D(Mirror(0, .75f, .31f), Mirror(0, .72f, .20f), Mirror(0, .69f, .50f),
+        Mirror(-.05f, .69f, .27f), Mirror(0, .69f, .29f), Mirror(0, .68f, .32f), Mirror(.01f, .67f, .50f));
+    return new(id, upright, Mirror(.13f,.30f,.18f), Mirror(-.14f,.31f,.19f), Mirror(-.02f,.56f,.80f), Mirror(-.16f,.34f,.29f), Mirror(-.02f,.56f,.80f));
+}
+
+static DoubleWishboneCorner3D ThreeDimensionalRearFixture(string id, float side)
+{
+    Vector3 Mirror(float x, float y, float z) => new(x, side*y, z);
+    var upright = new RigidUprightPoints3D(Mirror(0,.77f,.31f), Mirror(0,.73f,.22f), Mirror(0,.70f,.50f),
+        Mirror(-.06f,.71f,.31f), Mirror(0,.70f,.30f), Mirror(.02f,.59f,.25f), Mirror(-.02f,.63f,.26f));
+    return new(id, upright, Mirror(.14f,.31f,.20f), Mirror(-.15f,.32f,.21f), Mirror(.12f,.40f,.52f), Mirror(-.13f,.41f,.53f),
+        Mirror(-.17f,.35f,.30f), Mirror(.01f,.50f,.72f), Mirror(.02f,.59f,.25f), Mirror(-.02f,.63f,.26f));
+}
+
+static TubularArbMechanism3DConfig ThreeDimensionalArbFixture() => new(
+    "3d-arb", new(0,-.5f,0), new(0,.5f,0), new(.15f,.5f,0), new(.15f,-.5f,0),
+    new(.15f,.5f,-.25f), new(.15f,-.5f,-.25f), .020, 0, 79.3e9, 1.0, "analytic synthetic");

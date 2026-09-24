@@ -1,0 +1,21 @@
+{
+  "schema": "suspension-sim/front-macpherson-3d/v1",
+  "coordinateFrame": "+X forward, +Y left, +Z up; origin at static CG ground projection; metres",
+  "provenance": "synthetic",
+  "note": "Plausible, editable GR86-envelope geometry only; not measured or OEM coordinates.",
+  "uncertaintyM": 0.025,
+  "left": {
+    "wheelCenter": [1.21025, 0.750, 0.310],
+    "lowerArmFrontPivot": [1.34025, 0.300, 0.180],
+    "lowerArmRearPivot": [1.07025, 0.310, 0.190],
+    "lowerBallJoint": [1.21025, 0.720, 0.200],
+    "strutTopMount": [1.19025, 0.560, 0.800],
+    "strutUprightLower": [1.21025, 0.690, 0.290],
+    "tieRodInner": [1.05025, 0.340, 0.290],
+    "tieRodOuter": [1.16025, 0.690, 0.270],
+    "springUpper": [1.19025, 0.560, 0.800],
+    "springLower": [1.21025, 0.680, 0.320],
+    "arbLinkLower": [1.22025, 0.670, 0.500]
+  },
+  "right": "mirrorY(left)"
+}

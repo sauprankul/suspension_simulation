@@ -1,0 +1,13 @@
+{
+  "id": "2022-toyota-gr86-inspired-envelope",
+  "schemaVersion": "1.0",
+  "provenance": "publicSource",
+  "sourceNote": "Published GR86 envelope: 2575 mm wheelbase, 1520/1550 mm tracks and 1276 kg representative curb mass. Toyota describes approximately 53:47 front/rear distribution. CG height is an editable estimate, not OEM data.",
+  "totalMassKg": 1276.0,
+  "wheelbaseM": 2.575,
+  "frontTrackM": 1.520,
+  "rearTrackM": 1.550,
+  "cgFromRearAxleM": 1.36475,
+  "cgHeightM": 0.460,
+  "staticFrontWeightFraction": 0.530
+}

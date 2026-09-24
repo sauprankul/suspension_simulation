@@ -1,0 +1,10 @@
+{
+  "schema": "suspension-sim/vehicle-envelope/v1",
+  "coordinateFrame": "+X forward, +Y left, +Z up; SI units",
+  "mass": { "value": 1276.0, "unit": "kg", "provenance": "publicSource", "bounds": [1276.0, 1316.0], "note": "Representative published curb-mass range." },
+  "wheelbase": { "value": 2.575, "unit": "m", "provenance": "publicSource", "bounds": [2.575, 2.575] },
+  "frontTrack": { "value": 1.520, "unit": "m", "provenance": "publicSource", "bounds": [1.520, 1.520] },
+  "rearTrack": { "value": 1.550, "unit": "m", "provenance": "publicSource", "bounds": [1.550, 1.550] },
+  "staticFrontFraction": { "value": 0.530, "unit": "fraction", "provenance": "publicSource", "bounds": [0.52, 0.54], "note": "Toyota describes approximately 53:47." },
+  "cgHeight": { "value": 0.460, "unit": "m", "provenance": "estimated", "bounds": [0.42, 0.50], "note": "Editable sensitivity input; no OEM claim." }
+}

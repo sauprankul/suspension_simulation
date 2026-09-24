@@ -1,0 +1,9 @@
+{
+  "schema": "suspension-sim/tubular-arb-3d/v1",
+  "id": "gr86-rear-arb",
+  "provenance": "synthetic",
+  "tube": { "outsideDiameterM": 0.016, "insideDiameterM": 0.0, "torsionLengthM": 1.02, "shearModulusPa": 79300000000.0 },
+  "axisStart": [-1.500, -0.510, 0.315], "axisEnd": [-1.500, 0.510, 0.315],
+  "leftArmEnd": [-1.330, 0.600, 0.330], "rightArmEnd": [-1.330, -0.600, 0.330],
+  "leftLowerJoint": [-1.390, 0.625, 0.260], "rightLowerJoint": [-1.390, -0.625, 0.260]
+}

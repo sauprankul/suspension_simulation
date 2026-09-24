@@ -1,0 +1,8 @@
+{
+  "schema": "suspension-sim/static-reference/v1",
+  "provenance": "estimated",
+  "groundPlaneZM": 0.0,
+  "frontRideHeightM": 0.125,
+  "rearRideHeightM": 0.130,
+  "note": "Editable seed. Spring installed lengths and preload must be calibrated before absolute force claims. Head-to-head uses the same reference for A and B."
+}

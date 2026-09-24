@@ -1,0 +1,1 @@
+{ "schema": "suspension-sim/head-to-head-cases/v1", "cases": [{"id":"static","axG":0.0,"ayG":0.0},{"id":"one-g-left","axG":0.0,"ayG":1.0},{"id":"trail-brake","axG":-0.6,"ayG":1.2}], "travelSweepM": [-0.050, 0.050], "combinedGCap": 2.0 }

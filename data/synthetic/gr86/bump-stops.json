@@ -1,0 +1,4 @@
+[
+  { "id": "gr86-front-stop", "schemaVersion": "1.0", "provenance": "synthetic", "sourceNote": "Explicitly zero-rate and excluded from head-to-head phase.", "engagementGapM": 1.0, "preloadN": 0.0, "forceCurve": [{"x":0.0,"y":0.0},{"x":0.1,"y":0.0}] },
+  { "id": "gr86-rear-stop", "schemaVersion": "1.0", "provenance": "synthetic", "sourceNote": "Explicitly zero-rate and excluded from head-to-head phase.", "engagementGapM": 1.0, "preloadN": 0.0, "forceCurve": [{"x":0.0,"y":0.0},{"x":0.1,"y":0.0}] }
+]

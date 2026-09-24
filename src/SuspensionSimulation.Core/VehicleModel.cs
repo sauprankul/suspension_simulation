@@ -35,7 +35,15 @@ public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRate
 {
     public AntiRollBarModelKind ModelKind { get; init; } = AntiRollBarModelKind.LegacyDirectWheelPairRate;
     public TubularAntiRollBar? Tubular { get; init; }
-    public bool IsLegacyDirectRate => ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate;
+    public ArbTangentMatrix? GeometryDerivedTangent { get; init; }
+    public bool IsLegacyDirectRate => ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate && GeometryDerivedTangent is null;
+
+    public static AntiRollBarModel FromGeometryDerivedTangent(string axle, ArbTangentMatrix tangent, string notes) =>
+        new(axle, 0, "geometry-derived-3d", notes)
+        {
+            ModelKind = AntiRollBarModelKind.TubularGeometry,
+            GeometryDerivedTangent = tangent
+        };
 
     public static AntiRollBarModel FromConfig(string axle, AntiRollBarConfig config, string dataClassification)
     {
@@ -57,6 +65,9 @@ public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRate
     public (double LeftN, double RightN) ResistingWheelForces(double leftCompressionM, double rightCompressionM)
     {
         if (!double.IsFinite(leftCompressionM) || !double.IsFinite(rightCompressionM)) throw new ArgumentOutOfRangeException(nameof(leftCompressionM));
+        if (GeometryDerivedTangent is { } derived)
+            return (derived.LeftSelfNPerM*leftCompressionM + derived.LeftCrossNPerM*rightCompressionM,
+                derived.RightCrossNPerM*leftCompressionM + derived.RightSelfNPerM*rightCompressionM);
         if (ModelKind == AntiRollBarModelKind.TubularGeometry)
         {
             if (Tubular is null) throw new InvalidOperationException($"Tubular ARB '{Axle}' has no geometry.");
@@ -72,6 +83,7 @@ public sealed record AntiRollBarModel(string Axle, double InstalledWheelPairRate
     /// <summary>Local K where resisting wheel force is K times [left, right] compression.</summary>
     public ArbTangentMatrix TangentMatrix()
     {
+        if (GeometryDerivedTangent is { } derived) return derived;
         if (ModelKind == AntiRollBarModelKind.LegacyDirectWheelPairRate)
             return new(InstalledWheelPairRateNPerM, -InstalledWheelPairRateNPerM,
                 -InstalledWheelPairRateNPerM, InstalledWheelPairRateNPerM);

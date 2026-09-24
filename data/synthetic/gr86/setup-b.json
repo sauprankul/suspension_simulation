@@ -1,0 +1,1 @@
+{ "schema": "suspension-sim/head-to-head-setup/v1", "name": "Setup B", "frontSpringNPerM": 50000.0, "rearSpringNPerM": 55000.0, "frontArbOdM": 0.022, "frontArbIdM": 0.012, "rearArbOdM": 0.017, "rearArbIdM": 0.010, "provenance": "synthetic" }

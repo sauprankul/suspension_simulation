@@ -1,0 +1,32 @@
+[
+  {
+    "id": "gr86-front-arb",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Editable tubular steel comparison seed; no direct installed N/mm rate.",
+    "modelKind": "tubularGeometry",
+    "tubular": {
+      "torsionLengthM": 0.98,
+      "outsideDiameterM": 0.020,
+      "insideDiameterM": 0.0,
+      "shearModulusPa": 79300000000.0,
+      "left": { "leverArmM": 0.185, "endLinkLengthM": 0.285, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.78 },
+      "right": { "leverArmM": 0.185, "endLinkLengthM": 0.285, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.78 }
+    }
+  },
+  {
+    "id": "gr86-rear-arb",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Editable tubular steel comparison seed; no direct installed N/mm rate.",
+    "modelKind": "tubularGeometry",
+    "tubular": {
+      "torsionLengthM": 1.02,
+      "outsideDiameterM": 0.016,
+      "insideDiameterM": 0.0,
+      "shearModulusPa": 79300000000.0,
+      "left": { "leverArmM": 0.195, "endLinkLengthM": 0.225, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.70 },
+      "right": { "leverArmM": 0.195, "endLinkLengthM": 0.225, "endLinkAngleFromVerticalRad": 0.0, "wheelToEndLinkVerticalMotionRatio": 0.70 }
+    }
+  }
+]

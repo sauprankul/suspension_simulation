@@ -1,0 +1,24 @@
+{
+  "schema": "suspension-sim/rear-double-wishbone-multilink-3d/v1",
+  "coordinateFrame": "+X forward, +Y left, +Z up; origin at static CG ground projection; metres",
+  "provenance": "synthetic",
+  "note": "Explicit rear topology seed; plausible and editable, not measured or OEM coordinates.",
+  "uncertaintyM": 0.030,
+  "left": {
+    "wheelCenter": [-1.36475, 0.775, 0.310],
+    "lowerArmFrontPivot": [-1.235, 0.300, 0.200],
+    "lowerArmRearPivot": [-1.485, 0.315, 0.205],
+    "lowerBallJoint": [-1.365, 0.735, 0.225],
+    "upperArmFrontPivot": [-1.255, 0.390, 0.520],
+    "upperArmRearPivot": [-1.475, 0.405, 0.525],
+    "upperBallJoint": [-1.365, 0.705, 0.500],
+    "toeLinkInner": [-1.470, 0.350, 0.300],
+    "toeLinkOuter": [-1.430, 0.710, 0.305],
+    "trailingLinkInner": [-1.805, 0.430, 0.255],
+    "trailingLinkOuter": [-1.415, 0.720, 0.245],
+    "springUpper": [-1.355, 0.500, 0.720],
+    "springLowerOnLowerArm": [-1.350, 0.575, 0.245],
+    "arbLinkLowerOnLowerArm": [-1.390, 0.625, 0.260]
+  },
+  "right": "mirrorY(left)"
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "gr86-front-spring",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Editable comparison seed; not an OEM rate.",
+    "linearRateNPerM": 45000.0,
+    "preloadN": 0.0
+  },
+  {
+    "id": "gr86-rear-spring",
+    "schemaVersion": "1.0",
+    "provenance": "synthetic",
+    "sourceNote": "Editable comparison seed; not an OEM rate.",
+    "linearRateNPerM": 50000.0,
+    "preloadN": 0.0
+  }
+]

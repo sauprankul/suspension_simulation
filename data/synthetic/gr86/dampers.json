@@ -1,0 +1,4 @@
+[
+  { "id": "gr86-front-damper", "schemaVersion": "1.0", "provenance": "synthetic", "sourceNote": "Placeholder; excluded from quasi-static comparison.", "compressionDampingNPerMPerS": 0.0, "reboundDampingNPerMPerS": 0.0 },
+  { "id": "gr86-rear-damper", "schemaVersion": "1.0", "provenance": "synthetic", "sourceNote": "Placeholder; excluded from quasi-static comparison.", "compressionDampingNPerMPerS": 0.0, "reboundDampingNPerMPerS": 0.0 }
+]

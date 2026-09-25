@@ -30,7 +30,10 @@ public sealed record ComponentCornerTangentWheelStiffness(
     ComponentTangentValidity Validity,
     IReadOnlyList<ComponentTangentDiagnostic> Diagnostics,
     double ReferenceRelativeCompressionM = double.NaN,
-    string PerturbationConvention = "positive wheel-centre jounce; opposite wheel held fixed");
+    string PerturbationConvention = "positive wheel-centre jounce; opposite wheel held fixed")
+{
+    public double ParallelElementOnlyNPerM { get; init; }
+}
 
 public sealed record ComponentAxleTangentWheelStiffness(
     ComponentCornerTangentWheelStiffness Left,

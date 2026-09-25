@@ -12,7 +12,7 @@ internal static class TestdataFixtureHarness
 {
     private static readonly string[] FixtureNames =
     ["spring-linear", "spring-piecewise", "arb-direct", "arb-tubular", "bump-stop", "damper-placeholder",
-     "chassis-equilibrium", "motion-ratio", "tangent-decomposition", "dashboard-g-circle"];
+     "chassis-equilibrium", "motion-ratio", "tangent-decomposition", "dashboard-g-circle", "parallel-elastic", "travel-limit"];
 
     public static void Verify()
     {
@@ -38,6 +38,10 @@ internal static class TestdataFixtureHarness
         Equal(500, stop.EvaluateCompression(.025).ForceN); Equal(0, stop.EvaluateCompression(.015).ForceN);
         var damper = new Damper(new DamperConfig { Id = "damper", CompressionDampingNPerMPerS = 2000, ReboundDampingNPerMPerS = 3000 });
         Equal(-1000, damper.EvaluateForce(.5)); Equal(1500, damper.EvaluateForce(-.5)); Equal(0, damper.EvaluateForce(0));
+        var parallel = new CurveParallelElasticElement(new ParallelElasticElementConfig { Id="parallel",Corners=[Corner.FL],ForceCurve=[new(-50,500),new(0,1000),new(50,2000)] });
+        Equal(500,parallel.EvaluateWheelJounce(.025).ForceN); Equal(20_000,parallel.EvaluateWheelJounce(.025).TangentRateNPerM);
+        var limit = new WheelTravelLimitElement("limit",-.05,.06,10_000_000);
+        Equal(0,limit.EvaluateWheelJounce(0).ForceN); Equal(10_000,limit.EvaluateWheelJounce(.061).ForceN); Equal(-10_000,limit.EvaluateWheelJounce(-.051).ForceN);
         VerifyGeometryBackedFixtures(root);
         VerifyCaymanFourCornerGeometry(root);
     }

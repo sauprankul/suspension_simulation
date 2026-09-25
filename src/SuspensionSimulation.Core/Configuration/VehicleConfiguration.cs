@@ -23,6 +23,10 @@ public sealed record ChassisConfig : IVersionedConfiguration
     public double CgFromRearAxleM { get; init; }
     public double CgHeightM { get; init; }
     public double StaticFrontWeightFraction { get; init; }
+    public double FrontUnsprungMassPerCornerKg { get; init; }
+    public double RearUnsprungMassPerCornerKg { get; init; }
+    public double FrontUnsprungCgHeightM { get; init; }
+    public double RearUnsprungCgHeightM { get; init; }
 }
 
 public sealed record CornerAssemblyConfig

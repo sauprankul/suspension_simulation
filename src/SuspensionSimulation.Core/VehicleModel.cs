@@ -14,13 +14,28 @@ public sealed record ChassisModel(
     double CgHeightM,
     double StaticFrontWeightFraction,
     string DataClassification,
-    string? Source);
+    string? Source)
+{
+    public double FrontUnsprungMassPerCornerKg { get; init; }
+    public double RearUnsprungMassPerCornerKg { get; init; }
+    public double FrontUnsprungCgHeightM { get; init; }
+    public double RearUnsprungCgHeightM { get; init; }
+    public double UnsprungMassKg => 2*(FrontUnsprungMassPerCornerKg+RearUnsprungMassPerCornerKg);
+    public double SprungMassKg => MassKg-UnsprungMassKg;
+    public double SprungStaticFrontWeightFraction =>
+        (MassKg*StaticFrontWeightFraction-2*FrontUnsprungMassPerCornerKg)/SprungMassKg;
+    public double SprungCgHeightM =>
+        (MassKg*CgHeightM-2*FrontUnsprungMassPerCornerKg*FrontUnsprungCgHeightM-2*RearUnsprungMassPerCornerKg*RearUnsprungCgHeightM)/SprungMassKg;
+}
 
 public sealed record CornerSpring(
     string Corner,
     double WheelRateNPerM,
     double BumpStopGapM,
-    double BumpStopRateNPerM);
+    double BumpStopRateNPerM)
+{
+    public IReadOnlyList<IWheelParallelElasticElement> ParallelElements { get; init; } = [];
+}
 
 public sealed record SpringsModel(IReadOnlyList<CornerSpring> Corners, string DataClassification, string? Notes);
 

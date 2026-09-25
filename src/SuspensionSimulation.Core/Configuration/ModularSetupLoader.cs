@@ -29,7 +29,8 @@ public static class ModularSetupLoader
             JsonConfigurationLoader.Load<List<DamperConfig>>(paths[3]),
             JsonConfigurationLoader.Load<List<BumpStopConfig>>(paths[4]),
             JsonConfigurationLoader.Load<SuspensionAssemblyConfig>(paths[5]),
-            Fingerprint(paths));
+            Fingerprint(paths.Concat(new[] { "parallel-springs.json", "travel-limits.json" }
+                .Select(x => Path.Combine(directory,x)).Where(File.Exists))));
         Validate(setup);
         return setup;
     }
@@ -51,6 +52,10 @@ public static class ModularSetupLoader
             throw new InvalidDataException("Chassis mass, wheelbase, and tracks must be positive.");
         if (setup.Chassis.StaticFrontWeightFraction is <= 0 or >= 1)
             throw new InvalidDataException("Static front weight fraction must be strictly between zero and one.");
+        if (setup.Chassis.FrontUnsprungMassPerCornerKg < 0 || setup.Chassis.RearUnsprungMassPerCornerKg < 0 ||
+            setup.Chassis.FrontUnsprungCgHeightM < 0 || setup.Chassis.RearUnsprungCgHeightM < 0 ||
+            2*(setup.Chassis.FrontUnsprungMassPerCornerKg+setup.Chassis.RearUnsprungMassPerCornerKg) >= setup.Chassis.TotalMassKg)
+            throw new InvalidDataException("Unsprung masses/CG heights must be non-negative and leave positive sprung mass.");
         RequireUnique(setup.Springs.Select(x => x.Id), "spring"); RequireUnique(setup.AntiRollBars.Select(x => x.Id), "ARB");
         RequireUnique(setup.Dampers.Select(x => x.Id), "damper"); RequireUnique(setup.BumpStops.Select(x => x.Id), "bump stop");
         if (setup.Assembly.Corners.Count != 4 || setup.Assembly.Corners.Select(x => x.Corner).Distinct().Count() != 4)

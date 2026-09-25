@@ -32,7 +32,7 @@ The UI must show that ARB stiffness is coupled: an ARB's diagonal corner term is
 
 This phase deliberately excludes:
 
-- bump stops and travel-limit contact force;
+- measured/OEM-calibrated bump-stop and rebound-spring curves (the implementation may use explicitly provisional editable curves and geometry-derived finite travel penalties, which must remain labelled estimated);
 - tire force capacity, load sensitivity, combined slip, temperature, and lap-time/understeer claims;
 - damper forces and all transient dynamics;
 - compliance, joint friction, chassis/subframe flexibility, aero, and road banking;
@@ -54,6 +54,8 @@ static-reference.json             # static pose, installed spring lengths, ride 
 setup-a.json                      # spring rates and references only
 setup-b.json
 comparison-cases.json             # G cases and travel/roll sweeps
+travel-limits.json                # component stroke and explicit finite hard-stop penalty
+parallel-springs.json             # arbitrary wheel-travel/force curves (stop, rebound spring, gas charge)
 provenance.md
 ```
 
@@ -162,7 +164,13 @@ The solver must distinguish:
 
 Solve body heave, roll, pitch, and all four suspension poses together for each requested `(ax, ay, az)` case. The residual includes chassis force/moment equilibrium plus all front/rear suspension and endlink constraints. Use continuation in G/load state, adaptive step size, condition diagnostics, and named active geometric limits.
 
-For this phase, no bump-stop or tire model acts as a hidden stabilizer. If the no-contact solution loses a branch or produces an ideal point-contact reaction outside the chosen model domain, report it without clamping or inventing a tire law.
+No bump-stop or tire model may act as a hidden stabilizer. Any enabled auxiliary curve or travel-limit penalty is an explicit component with provenance, force, local tangent, and active-state output. If the solution loses a rigid-mechanism branch outside those declared physical constraints, report it without clamping or inventing a tire law.
+
+### Physical travel and parallel elastic elements
+
+Damper/component compression and rebound stroke are source inputs. Wheel travel is derived by intersecting those component lengths with each corner's solved 3D mechanism; it is never copied from a fixed wheel-jounce constant. A top-out or bottom-out contact is represented by a user-visible high-but-finite penalty stiffness outside that derived interval. The result reports penetration, force, tangent, and the active limit ID.
+
+An arbitrary number of conservative parallel elements may be attached to a corner. Each is a piecewise-linear function of reference-relative wheel jounce in millimetres and returns suspension force in newtons. This covers progressive bump rubber, a front rebound spring, or gas charge without creating separate solver code paths. The static curve force is retained as component metadata but subtracted for this reference-relative equilibrium; absolute static preload requires the later calibrated static-energy solve.
 
 ### Acceptance tests
 
@@ -201,4 +209,3 @@ The output must carry `synthetic/estimated` provenance, input hash, convergence/
 ## Completion definition
 
 This phase is complete only when two GR86-inspired setup files can be solved across a requested G/travel sweep, with no direct-rate ARB fallback, no unsolved topology masquerading as geometry, full front/rear 3D hard-point continuation, force-path roll-center/jacking integration, and reproducible RSD/RCB decomposition.
-

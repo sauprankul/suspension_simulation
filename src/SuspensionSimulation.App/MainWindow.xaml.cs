@@ -58,6 +58,8 @@ public partial class MainWindow : Window
             maps=_headToHeadSolver.TravelMaps.ToDictionary(x=>x.Key,x=>new { minimumJounceM=x.Value.MinimumJounceM,maximumJounceM=x.Value.MaximumJounceM,stepM=x.Value.StepM,samples=x.Value.Samples.Count,maximumResidualM=x.Value.MaximumConstraintResidualM }) }),"GEOMETRY");
         var a = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-a.json"));
         var b = LoadSetup(IO.Path.Combine(_packageDirectory, "setup-b.json"));
+        Set(FrontUnsprungMass,_vehicle.Chassis.FrontUnsprungMassPerCornerKg);
+        Set(RearUnsprungMass,_vehicle.Chassis.RearUnsprungMassPerCornerKg);
         App.Log($"Loaded GR86 package directory={_packageDirectory} fingerprint={_vehicle.InputFingerprintSha256}.");
         Populate(a, true); Populate(b, false);
         Render();
@@ -103,8 +105,13 @@ public partial class MainWindow : Window
             MagnitudeReadout.Text = $"GSUM {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {total:0.00} G" + (point.WasClamped ? "  •  capped" : "");
 
             var inputA = ReadSetup("Stock GR86", true); var inputB = ReadSetup("Stock BRZ", false);
+            var vehicle=_vehicle with { Chassis=_vehicle.Chassis with
+            {
+                FrontUnsprungMassPerCornerKg=ReadNonNegative(FrontUnsprungMass,"front unsprung mass"),
+                RearUnsprungMassPerCornerKg=ReadNonNegative(RearUnsprungMass,"rear unsprung mass")
+            }};
             _comparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
-                .Solve(_vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
+                .Solve(vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
             DrawG(point, radius);
             DrawCar(ACarCanvas, _comparison.A.State, Brushes.DeepSkyBlue);
             DrawCar(BCarCanvas, _comparison.B.State, Brushes.Orange);
@@ -142,7 +149,9 @@ public partial class MainWindow : Window
             Row("3D front spring roll stiffness", a.FrontSpringRollStiffnessNmPerRad*toPerDegree, b.FrontSpringRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
             Row("3D front ARB roll stiffness", a.FrontArbRollStiffnessNmPerRad*toPerDegree, b.FrontArbRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
             Row("3D rear spring roll stiffness", a.RearSpringRollStiffnessNmPerRad*toPerDegree, b.RearSpringRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
-            Row("3D rear ARB roll stiffness", a.RearArbRollStiffnessNmPerRad*toPerDegree, b.RearArbRollStiffnessNmPerRad*toPerDegree, "N·m/deg")
+            Row("3D rear ARB roll stiffness", a.RearArbRollStiffnessNmPerRad*toPerDegree, b.RearArbRollStiffnessNmPerRad*toPerDegree, "N·m/deg"),
+            Row("Front parallel-element roll stiffness",a.State.TangentRollStiffnesses!.Single(x=>x.Axle=="front").ParallelElementNmPerRad*toPerDegree,b.State.TangentRollStiffnesses!.Single(x=>x.Axle=="front").ParallelElementNmPerRad*toPerDegree,"N·m/deg"),
+            Row("Rear parallel-element roll stiffness",a.State.TangentRollStiffnesses!.Single(x=>x.Axle=="rear").ParallelElementNmPerRad*toPerDegree,b.State.TangentRollStiffnesses!.Single(x=>x.Axle=="rear").ParallelElementNmPerRad*toPerDegree,"N·m/deg")
         };
         if(_stockGr86 is not null && _stockBrz is not null)
         {
@@ -161,14 +170,18 @@ public partial class MainWindow : Window
         }
         foreach (var corner in new[] { "FL", "FR", "RL", "RR" })
         {
-            var av = a.State.Corners.Single(x => x.Corner == corner).NormalLoadN;
-            var bv = b.State.Corners.Single(x => x.Corner == corner).NormalLoadN;
+            var ac=a.State.Corners.Single(x => x.Corner == corner); var bc=b.State.Corners.Single(x => x.Corner == corner);
+            var av = ac.NormalLoadN; var bv = bc.NormalLoadN;
             rows.Add(Row($"{corner} point-contact normal load", av, bv, "N"));
+            rows.Add(Row($"{corner} wheel jounce",1000*ac.RelativeCompressionM,1000*bc.RelativeCompressionM,"mm"));
+            rows.Add(Row($"{corner} parallel-element force",ac.ParallelElementForceN,bc.ParallelElementForceN,"N"));
+            if(_headToHeadSolver?.PhysicalTravelLimits.TryGetValue(corner,out var limit)==true)
+                rows.Add(new($"{corner} geometry-derived travel window",$"{1000*limit.MinimumJounceM:0.0} to {1000*limit.MaximumJounceM:0.0}",$"{1000*limit.MinimumJounceM:0.0} to {1000*limit.MaximumJounceM:0.0}","0.000","mm"));
         }
         ComparisonGrid.ItemsSource = rows;
         StatusText.Text = "REFERENCE-CALIBRATED: stock GR86 and BRZ inputs reproduce the supplied workbook; shared synthetic hard points are calibrated to its 0.95/0.78 spring and 0.92/0.55 ARB static motion ratios. " +
             "This screen does not yet pass the phase publication gate: nonlinear energy equilibrium, calibrated spring preload-curvature, and force-path roll-center/jacking work remain pending. " +
-            $"Inputs GR86 {a.InputHash[..12]} / BRZ {b.InputHash[..12]}. Bump stops and tire physics are excluded. Log: {App.LogPath}";
+            $"Inputs GR86 {a.InputHash[..12]} / BRZ {b.InputHash[..12]}. Geometry-derived high-finite travel limits and configured parallel elastic curves are active; calibrated OEM bump/rebound curves and tire physics remain excluded. Log: {App.LogPath}";
     }
 
     private string CaptureUiState(long attempt) => JsonSerializer.Serialize(new
@@ -183,6 +196,8 @@ public partial class MainWindow : Window
         {
             axisCapG = SweepCap.Text,
             combinedCapG = TotalGCap.Text,
+            frontUnsprungMassKgPerCorner=FrontUnsprungMass.Text,
+            rearUnsprungMassKgPerCorner=RearUnsprungMass.Text,
             setupA = new { frontSpringKgfPerMm = AFrontSpring.Text, rearSpringKgfPerMm = ARearSpring.Text, frontBarOdMm = AFrontOd.Text, frontBarIdMm = AFrontId.Text, rearBarOdMm = ARearOd.Text, rearBarIdMm = ARearId.Text },
             setupB = new { frontSpringKgfPerMm = BFrontSpring.Text, rearSpringKgfPerMm = BRearSpring.Text, frontBarOdMm = BFrontOd.Text, frontBarIdMm = BFrontId.Text, rearBarOdMm = BRearOd.Text, rearBarIdMm = BRearId.Text }
         }

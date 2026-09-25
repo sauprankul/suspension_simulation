@@ -6,11 +6,12 @@ namespace SuspensionSimulation.Solvers;
 
 public sealed record CornerResult(
     string Corner, double StaticLoadN, double DeltaLoadN, double NormalLoadN,
-    double RelativeCompressionM, double BumpStopForceN, bool IsLifted);
+    double RelativeCompressionM, double BumpStopForceN, bool IsLifted,
+    double ParallelElementForceN = 0, IReadOnlyList<string>? ActiveParallelElements = null);
 
 public sealed record AxleBalance(string Axle, double TangentRollStiffnessNmPerRad,
     double LoadTransferN, double SpringLoadTransferN, double ArbLoadTransferN,
-    double BumpStopLoadTransferN);
+    double BumpStopLoadTransferN, double ParallelElementLoadTransferN = 0);
 
 public sealed record QuasiStaticResult(
     LoadCase LoadCase, double HeaveCompressionM, double RollRad, double PitchRad,
@@ -38,11 +39,12 @@ public sealed class FourStrutQuasiStaticSolver
         var springByCorner = package.Springs.Corners.ToDictionary(c => c.Corner, StringComparer.OrdinalIgnoreCase);
         var bars = package.AntiRollBars.ToDictionary(b => b.Axle, StringComparer.OrdinalIgnoreCase);
         var baseLoads = StaticLoads(package.Chassis);
+        var sprungMass=package.Chassis.SprungMassKg;
         var target = new[]
         {
-            package.Chassis.MassKg * GravityMPerS2 * loadCase.VerticalG,
-            package.Chassis.MassKg * GravityMPerS2 * loadCase.LateralG * package.Chassis.CgHeightM,
-            -package.Chassis.MassKg * GravityMPerS2 * loadCase.LongitudinalG * package.Chassis.CgHeightM
+            sprungMass * GravityMPerS2 * loadCase.VerticalG,
+            sprungMass * GravityMPerS2 * loadCase.LateralG * package.Chassis.SprungCgHeightM,
+            -sprungMass * GravityMPerS2 * loadCase.LongitudinalG * package.Chassis.SprungCgHeightM
         };
 
         var solve = SolveNewton(geometry, springByCorner, bars, target);
@@ -53,11 +55,14 @@ public sealed class FourStrutQuasiStaticSolver
         if (!solve.Converged) warnings.Add("Newton iteration limit reached; result is not valid for engineering interpretation.");
         var cornerResults = geometry.Select((g, i) => new CornerResult(
             g.Corner, baseLoads[g.Corner], force.TotalDeltaLoads[i], baseLoads[g.Corner] + force.TotalDeltaLoads[i],
-            Compression(g, state), force.BumpStopForces[i], baseLoads[g.Corner] + force.TotalDeltaLoads[i] <= 0)).ToList();
+            Compression(g, state), force.BumpStopForces[i], baseLoads[g.Corner] + force.TotalDeltaLoads[i] <= 0,
+            force.ParallelElementForces[i], force.ActiveParallelElements[i])).ToList();
         foreach (var corner in cornerResults.Where(c => c.IsLifted)) warnings.Add($"{corner.Corner} has non-positive normal load; tire lift-off is reported but not solved as an active constraint.");
         var activeStops = cornerResults.Where(c => c.BumpStopForceN > 0).Select(c => c.Corner).ToArray();
         if (activeStops.Length > 0) warnings.Add($"Active bump-stop branch: {string.Join(", ", activeStops)}. Tangent RSD reflects this engagement and can change from the linear baseline.");
         if (force.BumpStopForces.Any(f => f > 0)) warnings.Add("Bump-stop forces are relative to the uncalibrated static reference state.");
+        foreach(var corner in cornerResults.Where(x=>x.ActiveParallelElements is { Count: > 0 }))
+            warnings.Add($"{corner.Corner} active parallel element(s): {string.Join(", ",corner.ActiveParallelElements!)}.");
         warnings.Add("No tire model: normal-load changes are not traction, balance, or lap-time predictions.");
         warnings.AddRange(package.Scope.OmittedEffects.Select(x => $"Omitted: {x}"));
 
@@ -96,14 +101,24 @@ public sealed class FourStrutQuasiStaticSolver
     private static ForceAssembly Forces(IReadOnlyList<CornerGeometry> g, IReadOnlyDictionary<string, CornerSpring> springs,
         IReadOnlyDictionary<string, AntiRollBarModel> bars, double[] q)
     {
-        var delta = new double[4]; var springsOnly = new double[4]; var stops = new double[4]; var arb = new double[4]; var activeStops = new bool[4];
+        var delta = new double[4]; var springsOnly = new double[4]; var stops = new double[4];
+        var parallel = new double[4]; var parallelTangents=new double[4]; var activeParallel=new IReadOnlyList<string>[4];
+        var arb = new double[4]; var activeStops = new bool[4];
         for (var i = 0; i < 4; i++)
         {
             var s = springs[g[i].Corner]; var c = Compression(g[i], q);
             activeStops[i] = c > s.BumpStopGapM;
             stops[i] = activeStops[i] ? s.BumpStopRateNPerM * (c - s.BumpStopGapM) : 0;
             springsOnly[i] = s.WheelRateNPerM * c;
-            delta[i] = springsOnly[i] + stops[i];
+            var active=new List<string>();
+            foreach(var element in s.ParallelElements)
+            {
+                var evaluated=element.EvaluateWheelJounce(c);
+                parallel[i]+=evaluated.ForceN; parallelTangents[i]+=evaluated.TangentRateNPerM;
+                if(evaluated.IsEngaged) active.Add(element.Id);
+            }
+            activeParallel[i]=active;
+            delta[i] = springsOnly[i] + stops[i] + parallel[i];
         }
         foreach (var axle in new[] { ("front", 0, 1), ("rear", 2, 3) })
         {
@@ -114,7 +129,7 @@ public sealed class FourStrutQuasiStaticSolver
             delta[axle.Item2] += arb[axle.Item2];
             delta[axle.Item3] += arb[axle.Item3];
         }
-        return new(delta, springsOnly, stops, arb, activeStops, 0);
+        return new(delta, springsOnly, stops, parallel, parallelTangents, activeParallel, arb, activeStops, 0);
     }
 
     private static double[,] Jacobian(IReadOnlyList<CornerGeometry> g, IReadOnlyDictionary<string, CornerSpring> springs,
@@ -149,8 +164,10 @@ public sealed class FourStrutQuasiStaticSolver
             + arbTangent.RightSelfNPerM * g[1].Y * g[1].Y;
         var springLt = force.SpringOnlyDeltaLoads[left] - force.SpringOnlyDeltaLoads[right];
         var stopLt = force.BumpStopForces[left] - force.BumpStopForces[right];
+        var parallelLt = force.ParallelElementForces[left] - force.ParallelElementForces[right];
         var arbLt = force.ArbDeltaLoads[left] - force.ArbDeltaLoads[right];
-        return new(axle, tangent, -(force.TotalDeltaLoads[left] - force.TotalDeltaLoads[right]), -springLt, -arbLt, -stopLt);
+        tangent += force.ParallelElementTangents[left]*g[0].Y*g[0].Y + force.ParallelElementTangents[right]*g[1].Y*g[1].Y;
+        return new(axle, tangent, -(force.TotalDeltaLoads[left] - force.TotalDeltaLoads[right]), -springLt, -arbLt, -stopLt, -parallelLt);
     }
 
     private static TangentRollStiffnessDecomposition RollDecomposition(string axle, IReadOnlyList<CornerGeometry> g, IReadOnlyList<int> indices,
@@ -161,6 +178,7 @@ public sealed class FourStrutQuasiStaticSolver
         return TangentRollStiffnessCalculator.FromWheelPlane(axle, g[0].Y, g[1].Y,
             l.WheelRateNPerM, r.WheelRateNPerM,
             force.ActiveBumpStops[left] ? l.BumpStopRateNPerM : 0, force.ActiveBumpStops[right] ? r.BumpStopRateNPerM : 0,
+            force.ParallelElementTangents[left],force.ParallelElementTangents[right],
             matrix.LeftSelfNPerM, matrix.LeftCrossNPerM, matrix.RightCrossNPerM, matrix.RightSelfNPerM,
             "current quasi-static equilibrium tangent", ["ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."]);
     }
@@ -172,6 +190,7 @@ public sealed class FourStrutQuasiStaticSolver
         var spring = springs[geometry.Corner];
         var springTangent = spring.WheelRateNPerM;
         var stopTangent = force.ActiveBumpStops[index] ? spring.BumpStopRateNPerM : 0;
+        var parallelTangent=force.ParallelElementTangents[index];
         var axle = index < 2 ? "front" : "rear";
         var matrix = bars[axle].TangentMatrix();
         var arbTangent = index is 0 or 2 ? matrix.LeftSelfNPerM : matrix.RightSelfNPerM;
@@ -181,12 +200,14 @@ public sealed class FourStrutQuasiStaticSolver
             new(ComponentTangentValidity.Warning, "arb-coupled-local-tangent", "ARB self term is dF(corner)/d(jounce at that corner); its off-diagonal derivative to the opposite wheel is the negative ARB term. Do not sum corner totals for axle roll stiffness.")
         };
         if (force.ActiveBumpStops[index]) diagnostics.Add(new(ComponentTangentValidity.Valid, "bump-stop-active", "Bump-stop tangent is included exactly once in the total."));
+        if (force.ActiveParallelElements[index].Count>0) diagnostics.Add(new(ComponentTangentValidity.Valid,"parallel-elements-active",$"Active: {string.Join(", ",force.ActiveParallelElements[index])}."));
         if (corner.IsLifted) diagnostics.Add(new(ComponentTangentValidity.Warning, "pre-lift-contact", "Pre-lift tangent only: normal load is non-positive and contact constraint is not solved."));
         if (!converged) diagnostics.Add(new(ComponentTangentValidity.Invalid, "equilibrium-not-converged", "Equilibrium did not converge."));
         var validity = diagnostics.Any(x => x.Validity == ComponentTangentValidity.Invalid) ? ComponentTangentValidity.Invalid : diagnostics.Any(x => x.Validity == ComponentTangentValidity.Warning) ? ComponentTangentValidity.Warning : ComponentTangentValidity.Valid;
-        return new(geometry.Corner, springTangent, stopTangent, arbTangent, arbCross,
-            springTangent + arbTangent + stopTangent, validity, diagnostics, corner.RelativeCompressionM,
-            "positive wheel-centre jounce; opposite wheel on same axle held fixed");
+        return new ComponentCornerTangentWheelStiffness(geometry.Corner, springTangent, stopTangent, arbTangent, arbCross,
+            springTangent + arbTangent + stopTangent + parallelTangent, validity, diagnostics, corner.RelativeCompressionM,
+            "positive wheel-centre jounce; opposite wheel on same axle held fixed")
+            { ParallelElementOnlyNPerM=parallelTangent };
     }
 
     private static double Compression(CornerGeometry g, double[] q) => q[0] - g.Y * q[1] + g.X * q[2];
@@ -208,15 +229,16 @@ public sealed class FourStrutQuasiStaticSolver
     }
 
     private static List<CornerGeometry> Geometry(ChassisModel c) =>
-    [new("FL", c.WheelbaseM * (1 - c.StaticFrontWeightFraction), c.FrontTrackM / 2), new("FR", c.WheelbaseM * (1 - c.StaticFrontWeightFraction), -c.FrontTrackM / 2), new("RL", -c.WheelbaseM * c.StaticFrontWeightFraction, c.RearTrackM / 2), new("RR", -c.WheelbaseM * c.StaticFrontWeightFraction, -c.RearTrackM / 2)];
+    [new("FL", c.WheelbaseM * (1 - c.SprungStaticFrontWeightFraction), c.FrontTrackM / 2), new("FR", c.WheelbaseM * (1 - c.SprungStaticFrontWeightFraction), -c.FrontTrackM / 2), new("RL", -c.WheelbaseM * c.SprungStaticFrontWeightFraction, c.RearTrackM / 2), new("RR", -c.WheelbaseM * c.SprungStaticFrontWeightFraction, -c.RearTrackM / 2)];
     private static Dictionary<string, double> StaticLoads(ChassisModel c) => new(StringComparer.OrdinalIgnoreCase) { ["FL"] = c.MassKg * GravityMPerS2*c.StaticFrontWeightFraction/2, ["FR"] = c.MassKg*GravityMPerS2*c.StaticFrontWeightFraction/2, ["RL"] = c.MassKg*GravityMPerS2*(1-c.StaticFrontWeightFraction)/2, ["RR"] = c.MassKg*GravityMPerS2*(1-c.StaticFrontWeightFraction)/2 };
     private static void Validate(VehiclePackage p)
     {
         if (p.Springs.Corners.Count != 4 || p.Springs.Corners.Select(x => x.Corner).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 4) throw new InvalidDataException("Exactly one spring per FL/FR/RL/RR corner is required.");
-        if (p.AntiRollBars.Count != 2 || p.Chassis.MassKg <= 0 || p.Chassis.CgHeightM < 0 || p.Chassis.StaticFrontWeightFraction is <= 0 or >= 1) throw new InvalidDataException("Invalid chassis or ARB model.");
+        if (p.AntiRollBars.Count != 2 || p.Chassis.MassKg <= 0 || p.Chassis.SprungMassKg <= 0 || p.Chassis.CgHeightM < 0 || p.Chassis.SprungCgHeightM < 0 || p.Chassis.StaticFrontWeightFraction is <= 0 or >= 1 || p.Chassis.SprungStaticFrontWeightFraction is <= 0 or >= 1) throw new InvalidDataException("Invalid chassis, sprung/unsprung allocation, or ARB model.");
     }
     private sealed record CornerGeometry(string Corner, double X, double Y);
     private sealed record ForceAssembly(double[] TotalDeltaLoads, double[] SpringOnlyDeltaLoads,
-        double[] BumpStopForces, double[] ArbDeltaLoads, bool[] ActiveBumpStops, int Iterations);
+        double[] BumpStopForces, double[] ParallelElementForces, double[] ParallelElementTangents,
+        IReadOnlyList<string>[] ActiveParallelElements, double[] ArbDeltaLoads, bool[] ActiveBumpStops, int Iterations);
     private sealed record NewtonSolution(double[] State, int Iterations, bool Converged);
 }

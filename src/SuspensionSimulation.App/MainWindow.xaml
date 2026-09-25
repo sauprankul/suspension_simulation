@@ -37,8 +37,8 @@
         <DockPanel><TextBlock Text="SHARED G CONTROLLER" Style="{StaticResource Section}" Margin="0"/><Button Content="Center" Click="CenterGClick" DockPanel.Dock="Right"/></DockPanel>
         <Grid Grid.Row="1" Margin="0,8,0,5">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
-          <StackPanel><TextBlock Text="Axis cap (G)"/><TextBlock Text="Combined cap (G)"/></StackPanel>
-          <StackPanel Grid.Column="1"><TextBox x:Name="SweepCap" Text="2.0" LostFocus="SharedInputChanged"/><TextBox x:Name="TotalGCap" Text="2.0" LostFocus="SharedInputChanged"/></StackPanel>
+          <StackPanel><TextBlock Text="Axis cap (G)"/><TextBlock Text="Combined cap (G)"/><TextBlock Text="Front unsprung (kg/corner)"/><TextBlock Text="Rear unsprung (kg/corner)"/></StackPanel>
+          <StackPanel Grid.Column="1"><TextBox x:Name="SweepCap" Text="2.0" LostFocus="SharedInputChanged"/><TextBox x:Name="TotalGCap" Text="2.0" LostFocus="SharedInputChanged"/><TextBox x:Name="FrontUnsprungMass" LostFocus="SharedInputChanged"/><TextBox x:Name="RearUnsprungMass" LostFocus="SharedInputChanged"/></StackPanel>
         </Grid>
         <Canvas Grid.Row="2" x:Name="GCircleCanvas" Background="#0D1116" MinHeight="250" MouseLeftButtonDown="GCirclePointer" MouseMove="GCirclePointer"/>
         <Grid Grid.Row="3" Margin="0,8,0,0">

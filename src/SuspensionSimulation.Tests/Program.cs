@@ -574,7 +574,7 @@ Run("head-to-head UI has one shared controller and two independent setups", () =
 {
     var xaml = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml"));
     if (Count(xaml, "x:Name=\"GCircleCanvas\"") != 1) throw new Exception("Exactly one shared G-circle is required.");
-    foreach(var marker in new[]{"STOCK GR86","STOCK BRZ","Front spring (kgf/mm)","REFERENCE ROW 7","REFERENCE ROW 8"})
+    foreach(var marker in new[]{"STOCK GR86","STOCK BRZ","Front spring (kgf/mm)","REFERENCE ROW 7","REFERENCE ROW 8","FrontUnsprungMass","RearUnsprungMass"})
         if(!xaml.Contains(marker,StringComparison.Ordinal)) throw new Exception($"Stock reference UI is missing {marker}.");
     foreach (var name in new[] { "AFrontSpring", "ARearSpring", "AFrontOd", "AFrontId", "ARearOd", "ARearId", "BFrontSpring", "BRearSpring", "BFrontOd", "BFrontId", "BRearOd", "BRearId" })
         if (!xaml.Contains($"x:Name=\"{name}\"", StringComparison.Ordinal)) throw new Exception($"Missing head-to-head input {name}.");
@@ -651,10 +651,71 @@ Run("head-to-head pointer motion reuses startup geometry and coalesces display r
     var window = File.ReadAllText(Path.Combine("src", "SuspensionSimulation.App", "MainWindow.xaml.cs"));
     if (Count(window, "new HeadToHeadComparisonSolver(") != 1)
         throw new Exception("The 3D head-to-head solver must be constructed only once during startup.");
-    foreach (var marker in new[] { "DispatcherTimer", "ScheduleRender()", ".Solve(_vehicle" })
+    foreach (var marker in new[] { "DispatcherTimer", "ScheduleRender()", ".Solve(vehicle" })
         if (!window.Contains(marker, StringComparison.Ordinal)) throw new Exception($"Pointer refresh path is missing {marker}.");
     if (!window.Contains("if (!_renderTimer.IsEnabled) _renderTimer.Start();", StringComparison.Ordinal))
         throw new Exception("Continuous pointer motion must be throttled, not indefinitely debounced.");
+});
+
+Run("parallel elastic curve preserves static reference and reports force tangent", () =>
+{
+    var config=new ParallelElasticElementConfig
+    {
+        Id="gas-spring",Corners=[Corner.FL],
+        ForceCurve=[new(-100,1000),new(0,1500),new(100,3500)]
+    };
+    var element=new CurveParallelElasticElement(config);
+    var reference=element.EvaluateWheelJounce(0); var bump=element.EvaluateWheelJounce(.050);
+    Equal(0,reference.ForceN,1e-12);
+    Equal(1000,bump.ForceN,1e-9);
+    Equal(20_000,bump.TangentRateNPerM,1e-9);
+});
+
+Run("stock-twin unsprung masses are explicit and alter sprung-body equilibrium", () =>
+{
+    var directory=Path.Combine("data","synthetic","gr86"); var vehicle=ModularSetupLoader.Load(directory);
+    Equal(35,vehicle.Chassis.FrontUnsprungMassPerCornerKg,1e-12); Equal(38,vehicle.Chassis.RearUnsprungMassPerCornerKg,1e-12);
+    var reference=Stock86BrzReferenceLoader.Load(Path.Combine("data","reference","stock-86-brz","reference-sheet.json")); var stock=reference.Setups[0];
+    var input=new HeadToHeadSetupInput(stock.Name,stock.FrontSpringRateKgfPerMm*9800,stock.RearSpringRateKgfPerMm*9800,stock.FrontArb.OutsideDiameterM,stock.FrontArb.InsideDiameterM,stock.RearArb.OutsideDiameterM,stock.RearArb.InsideDiameterM);
+    var solver=new HeadToHeadComparisonSolver(directory); var withUnsprung=solver.Solve(vehicle,input,input,new LoadCase("one-g",0,1,0)).A.State;
+    var allSprung=vehicle with { Chassis=vehicle.Chassis with { FrontUnsprungMassPerCornerKg=0,RearUnsprungMassPerCornerKg=0 } };
+    var withoutUnsprung=solver.Solve(allSprung,input,input,new LoadCase("one-g",0,1,0)).A.State;
+    if(Math.Abs(withUnsprung.RollRad)>=Math.Abs(withoutUnsprung.RollRad))
+        throw new Exception("Removing declared unsprung mass should increase the inertia carried through the sprung suspension.");
+});
+
+Run("GR86 physical travel limits come from component stroke intersected with geometry", () =>
+{
+    var solver=new HeadToHeadComparisonSolver(Path.Combine("data","synthetic","gr86"));
+    if(solver.PhysicalTravelLimits.Count!=4) throw new Exception("Expected one derived travel limit per corner.");
+    foreach(var (corner,limit) in solver.PhysicalTravelLimits)
+    {
+        if(limit.MinimumJounceM>=0 || limit.MaximumJounceM<=0) throw new Exception($"{corner} travel window does not span static.");
+        var map=solver.TravelMaps[corner];
+        var rebound=map.Evaluate(limit.MinimumJounceM); var bump=map.Evaluate(limit.MaximumJounceM); var reference=map.Evaluate(0);
+        Equal(limit.ReboundComponentTravelM, rebound.SpringLengthM-reference.SpringLengthM, 1e-8);
+        Equal(limit.CompressionComponentTravelM, reference.SpringLengthM-bump.SpringLengthM, 1e-8);
+        if(limit.HardStopRateNPerM<1_000_000) throw new Exception($"{corner} hard-stop penalty is not decisively higher than the road spring.");
+    }
+});
+
+Run("geometry-derived top and bottom stops keep the stock comparison solvable around 2 G", () =>
+{
+    var directory=Path.Combine("data","synthetic","gr86"); var vehicle=ModularSetupLoader.Load(directory);
+    var reference=Stock86BrzReferenceLoader.Load(Path.Combine("data","reference","stock-86-brz","reference-sheet.json"));
+    HeadToHeadSetupInput Input(StockSetupReference x)=>new(x.Name,x.FrontSpringRateKgfPerMm*9800,x.RearSpringRateKgfPerMm*9800,x.FrontArb.OutsideDiameterM,x.FrontArb.InsideDiameterM,x.RearArb.OutsideDiameterM,x.RearArb.InsideDiameterM);
+    var solver=new HeadToHeadComparisonSolver(directory); var a=Input(reference.Setups[0]); var b=Input(reference.Setups[1]);
+    for(var degree=0;degree<360;degree+=15)
+    {
+        var angle=degree*Math.PI/180;
+        var result=solver.Solve(vehicle,a,b,new LoadCase($"2g-{degree}",2*Math.Cos(angle),2*Math.Sin(angle),0));
+        foreach(var side in new[]{result.A,result.B}) foreach(var corner in side.State.Corners)
+        {
+            var limit=solver.PhysicalTravelLimits[corner.Corner];
+            if(corner.RelativeCompressionM<limit.MinimumJounceM-.002 || corner.RelativeCompressionM>limit.MaximumJounceM+.002)
+                throw new Exception($"{degree} deg {side.Input.Name} {corner.Corner} penetrated its high-rate travel stop by more than 2 mm ({corner.RelativeCompressionM:G6} m). ");
+        }
+    }
 });
 
 Run("3D MacPherson rigid constraints close and continue through travel", () =>

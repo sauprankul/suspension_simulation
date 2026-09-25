@@ -1,0 +1,10 @@
+{
+  "validity": "verified-analytic",
+  "coordinate": "wheel jounce from static; positive bump",
+  "curve": [
+    { "travel_mm": -50.0, "force_n": 500.0 },
+    { "travel_mm": 0.0, "force_n": 1000.0 },
+    { "travel_mm": 50.0, "force_n": 2000.0 }
+  ],
+  "check": { "travel_mm": 25.0, "reference_relative_force_n": 500.0, "tangent_n_per_m": 20000.0 }
+}

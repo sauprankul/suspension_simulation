@@ -9,5 +9,9 @@
   "rearTrackM": 1.5494,
   "cgFromRearAxleM": 1.41655818930366,
   "cgHeightM": 0.460,
-  "staticFrontWeightFraction": 0.5500000735
+  "staticFrontWeightFraction": 0.5500000735,
+  "frontUnsprungMassPerCornerKg": 35.0,
+  "rearUnsprungMassPerCornerKg": 38.0,
+  "frontUnsprungCgHeightM": 0.30,
+  "rearUnsprungCgHeightM": 0.30
 }

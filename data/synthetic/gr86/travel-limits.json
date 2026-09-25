@@ -1,0 +1,24 @@
+{
+  "id": "stock-twins-provisional-component-stroke",
+  "schemaVersion": "1.0",
+  "limits": [
+    {
+      "id": "front-damper-stroke",
+      "corners": ["fl", "fr"],
+      "reboundComponentTravelMm": 85.0,
+      "compressionComponentTravelMm": 50.0,
+      "hardStopRateNPerMm": 10000.0,
+      "provenance": "estimated",
+      "sourceNote": "Editable ZD8/ZN8-twin proxy. Owner teardown measured about 135 mm effective OEM front damper stroke and estimated about 50 mm remaining bump stroke at 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6769428/note.aspx); Toyota independently confirms the GR86 front strut contains a rebound spring (https://pressroom.toyota.com/toyota-announces-pricing-on-all-new-2022-gr86/). Not an OEM dimension."
+    },
+    {
+      "id": "rear-damper-stroke",
+      "corners": ["rl", "rr"],
+      "reboundComponentTravelMm": 62.0,
+      "compressionComponentTravelMm": 62.0,
+      "hardStopRateNPerMm": 10000.0,
+      "provenance": "estimated",
+      "sourceNote": "Editable ZD8/ZN8-twin proxy. Owner teardown measured about 124 mm OEM rear damper stroke and about 80 mm wheel droop from 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6768203/note.aspx); the 62/62 mm component split is a provisional centered approximation using the 0.78 static installation ratio. Not an OEM dimension."
+    }
+  ]
+}

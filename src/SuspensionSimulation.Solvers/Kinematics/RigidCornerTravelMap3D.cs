@@ -68,6 +68,38 @@ public sealed class RigidCornerTravelMap3D
             [$"Interpolated on the startup-validated {Topology} branch at {StepM*1000:F1} mm sample spacing."]);
     }
 
+    /// <summary>
+    /// Finds the wheel jounce where the solved spring/damper axis has compressed by the requested
+    /// amount relative to static. The limit is therefore a component-stroke intersection with the
+    /// rigid mechanism, not a wheel-travel assumption.
+    /// </summary>
+    public double FindWheelJounceForSpringCompression(double targetCompressionM)
+    {
+        if (!double.IsFinite(targetCompressionM)) throw new ArgumentOutOfRangeException(nameof(targetCompressionM));
+        if (Math.Abs(targetCompressionM) < 1e-15) return 0;
+        var staticLength=Evaluate(0).SpringLengthM;
+        double Compression(double jounce) => staticLength-Evaluate(jounce).SpringLengthM;
+        var candidates = targetCompressionM > 0
+            ? _samples.Where(x=>x.WheelJounceM>=0).OrderBy(x=>x.WheelJounceM).Select(x=>x.WheelJounceM).ToArray()
+            : _samples.Where(x=>x.WheelJounceM<=0).OrderByDescending(x=>x.WheelJounceM).Select(x=>x.WheelJounceM).ToArray();
+        var previous=0.0; var previousResidual=Compression(0)-targetCompressionM;
+        foreach(var current in candidates.Skip(1))
+        {
+            var residual=Compression(current)-targetCompressionM;
+            if (Math.Sign(previousResidual)==Math.Sign(residual) && Math.Abs(residual)>1e-12)
+            { previous=current; previousResidual=residual; continue; }
+            var low=Math.Min(previous,current); var high=Math.Max(previous,current);
+            for(var i=0;i<50;i++)
+            {
+                var middle=.5*(low+high); var middleResidual=Compression(middle)-targetCompressionM;
+                var lowResidual=Compression(low)-targetCompressionM;
+                if(Math.Sign(lowResidual)==Math.Sign(middleResidual)) low=middle; else high=middle;
+            }
+            return .5*(low+high);
+        }
+        throw new InvalidOperationException($"{Corner} component compression {targetCompressionM*1000:F2} mm is not reached on the validated [{MinimumJounceM*1000:F1}, {MaximumJounceM*1000:F1}] mm mechanism branch.");
+    }
+
     private static double Cubic(double p0,double p1,double p2,double p3,double t) => .5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t*t+(-p0+3*p1-3*p2+p3)*t*t*t);
     private static double CubicFirst(double p0,double p1,double p2,double p3,double t) => .5*((-p0+p2)+2*(2*p0-5*p1+4*p2-p3)*t+3*(-p0+3*p1-3*p2+p3)*t*t);
     private static double CubicSecond(double p0,double p1,double p2,double p3,double t) => .5*(2*(2*p0-5*p1+4*p2-p3)+6*(-p0+3*p1-3*p2+p3)*t);

@@ -588,9 +588,9 @@ Run("GR86 rigid travel is traced once into four continuous startup maps", () =>
         throw new Exception("The head-to-head solver must own exactly four precomputed corner travel maps.");
     foreach (var (corner, map) in solver.TravelMaps)
     {
-        Equal(-.080, map.MinimumJounceM, 1e-12);
-        Equal(.080, map.MaximumJounceM, 1e-12);
-        if (map.Samples.Count != 161) throw new Exception($"{corner} map has {map.Samples.Count} samples instead of 161.");
+        Equal(RigidCornerTravelMapBuilder3D.DefaultMinimumJounceM, map.MinimumJounceM, 1e-12);
+        Equal(RigidCornerTravelMapBuilder3D.DefaultMaximumJounceM, map.MaximumJounceM, 1e-12);
+        if (map.Samples.Count != 291) throw new Exception($"{corner} map has {map.Samples.Count} samples instead of 291.");
         if (map.MaximumConstraintResidualM >= 1e-4) throw new Exception($"{corner} map contains an unvalidated rigid pose ({map.MaximumConstraintResidualM:G6} m).");
     }
 });
@@ -609,6 +609,41 @@ Run("precomputed GR86 branch covers the former combined-G solver failure", () =>
     var result = solver.Solve(setup, a, b, new LoadCase("former-branch-failure", -.14805797101449256, -1.982608695652174, 0));
     if (!double.IsFinite(result.A.State.RollCoupleBiasPercentagePoints) || !double.IsFinite(result.B.State.RollCoupleBiasPercentagePoints))
         throw new Exception("The former branch-failure load state did not produce finite A/B RCB results.");
+});
+
+Run("stock GR86 and BRZ cover the combined-G travel failures captured in the run log", () =>
+{
+    var directory = Path.Combine("data", "synthetic", "gr86");
+    var setup = ModularSetupLoader.Load(directory);
+    var reference = Stock86BrzReferenceLoader.Load(Path.Combine("data", "reference", "stock-86-brz", "reference-sheet.json"));
+    HeadToHeadSetupInput Input(StockSetupReference x) => new(x.Name,
+        x.FrontSpringRateKgfPerMm*reference.Constants.SpringRateNPerMPerKgfPerMm,
+        x.RearSpringRateKgfPerMm*reference.Constants.SpringRateNPerMPerKgfPerMm,
+        x.FrontArb.OutsideDiameterM, x.FrontArb.InsideDiameterM,
+        x.RearArb.OutsideDiameterM, x.RearArb.InsideDiameterM);
+    var a = Input(reference.Setups.Single(x => x.Name.Contains("GR86", StringComparison.OrdinalIgnoreCase)));
+    var b = Input(reference.Setups.Single(x => x.Name.Contains("BRZ", StringComparison.OrdinalIgnoreCase)));
+    var solver = new HeadToHeadComparisonSolver(directory);
+
+    var loggedFailures = new[]
+    {
+        new LoadCase("logged-110mm-travel", .7562898550724639, -1.5304347826086957, 0),
+        new LoadCase("logged-86mm-travel", .8780289855072466, -.8869565217391304, 0)
+    };
+    foreach (var load in loggedFailures)
+    {
+        HeadToHeadComparisonResult result;
+        try
+        {
+            result = solver.Solve(setup, a, b, load);
+        }
+        catch (Exception error)
+        {
+            throw new Exception($"Captured load '{load.Name}' still fails: {error.Message}", error);
+        }
+        if (!double.IsFinite(result.A.State.RollCoupleBiasPercentagePoints) || !double.IsFinite(result.B.State.RollCoupleBiasPercentagePoints))
+            throw new Exception($"Captured load '{load.Name}' produced a non-finite result.");
+    }
 });
 
 Run("head-to-head pointer motion reuses startup geometry and coalesces display refreshes", () =>
@@ -668,6 +703,10 @@ Run("3D fixed-length ARB endlinks reject heave and produce a coupled energy Hess
     if (roll.Validity == "invalid" || roll.WheelTangentNPerM[0,0] <= 0 || roll.WheelTangentNPerM[1,1] <= 0 || roll.WheelTangentNPerM[0,1] >= 0)
         throw new Exception("3D ARB must expose a physical coupled wheel Hessian.");
     Equal(roll.WheelTangentNPerM[0,1], roll.WheelTangentNPerM[1,0], 1e-9);
+    Vector3 ImpossibleLeft(double jounce) => config.LeftLowerJointReference + new Vector3(1,0,(float)jounce);
+    var impossible = solver.Evaluate(config, ImpossibleLeft, Right, 0, 0);
+    if (impossible.Validity != "invalid" || impossible.Left.ConstraintResidualM < .1)
+        throw new Exception("An actually unreachable fixed-length endlink must remain invalid.");
 });
 
 Run("3D ARB tangent responds to solved endlink geometry and hollow tube ID", () =>

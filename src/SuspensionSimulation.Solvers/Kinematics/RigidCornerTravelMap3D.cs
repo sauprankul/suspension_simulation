@@ -77,13 +77,17 @@ public sealed class RigidCornerTravelMap3D
 
 public sealed class RigidCornerTravelMapBuilder3D
 {
+    public const double DefaultMinimumJounceM = -.130;
+    public const double DefaultMaximumJounceM = .160;
+    public const double DefaultStepM = .001;
+
     private readonly RigidMechanism3DSolver _solver = new();
 
-    public RigidCornerTravelMap3D Build(MacPhersonCorner3D geometry, double minimumJounceM=-.080, double maximumJounceM=.080, double stepM=.001) =>
+    public RigidCornerTravelMap3D Build(MacPhersonCorner3D geometry, double minimumJounceM=DefaultMinimumJounceM, double maximumJounceM=DefaultMaximumJounceM, double stepM=DefaultStepM) =>
         Build(geometry.Id,"macpherson-3d",minimumJounceM,maximumJounceM,stepM,
             (jounce,seed) => _solver.Solve(geometry,jounce,seed));
 
-    public RigidCornerTravelMap3D Build(DoubleWishboneCorner3D geometry, double minimumJounceM=-.080, double maximumJounceM=.080, double stepM=.001) =>
+    public RigidCornerTravelMap3D Build(DoubleWishboneCorner3D geometry, double minimumJounceM=DefaultMinimumJounceM, double maximumJounceM=DefaultMaximumJounceM, double stepM=DefaultStepM) =>
         Build(geometry.Id,"double-wishbone-multilink-3d",minimumJounceM,maximumJounceM,stepM,
             (jounce,seed) => _solver.Solve(geometry,jounce,seed));
 

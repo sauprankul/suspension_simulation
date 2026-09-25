@@ -13,6 +13,9 @@ public sealed class TubularArbMechanism3DSolver
     // Bar endpoints are Vector3 single-precision coordinates. A 0.2 mm energy
     // stencil is small relative to suspension travel but remains above its noise floor.
     private const double DerivativeStepM = 2e-4;
+    // All hard-point vectors are System.Numerics.Vector3 (single precision). One micron is
+    // below any supplied geometry precision while still rejecting a genuinely unreachable link.
+    private const double ConstraintToleranceM = 1e-6;
 
     public TubularArbMechanismState3D Evaluate(TubularArbMechanism3DConfig config,
         Func<double, Vector3> leftLowerJointAtJounce,
@@ -54,7 +57,7 @@ public sealed class TubularArbMechanism3DSolver
         var matrix = new[,] { { kll, klr }, { klr, krr } };
         var mechanismTwist = center.Left.ArmAngleRad-center.Right.ArmAngleRad;
         var torque = effectiveTorsional*mechanismTwist; var barTwist = torque/torsional;
-        var invalid = center.Left.ConstraintResidualM > 1e-7 || center.Right.ConstraintResidualM > 1e-7 || new[] { kll,krr,klr }.Any(x => !double.IsFinite(x));
+        var invalid = center.Left.ConstraintResidualM > ConstraintToleranceM || center.Right.ConstraintResidualM > ConstraintToleranceM || new[] { kll,krr,klr }.Any(x => !double.IsFinite(x));
         var nearToggle = center.Left.LimitClassification != "regular" || center.Right.LimitClassification != "regular";
         var diagnostics = new List<string> { "Full 3D fixed-length-link continuation; circular arm bending and torsion-section twist act in series, and the wheel tangent is the stored-energy Hessian." };
         if (Math.Abs(config.EnergyStiffnessScale-1) > 1e-12) diagnostics.Add($"Stored-energy stiffness scale {config.EnergyStiffnessScale:G6} is explicitly declared by the source convention.");
@@ -66,20 +69,36 @@ public sealed class TubularArbMechanism3DSolver
 
     private static ArbSideState3D SolveSide(Vector3 root, Vector3 referenceEnd, Vector3 lower, double linkLength, Vector3 axis)
     {
-        var arm = referenceEnd-root; var theta = 0.0;
-        for (var i = 0; i < 40; i++)
-        {
-            var end = root+Rotate(arm, axis, theta); var link = end-lower;
-            var f = Vector3.Dot(link,link)-(float)(linkLength*linkLength);
-            var tangent = Vector3.Cross(axis, end-root); var df = 2*Vector3.Dot(link,tangent);
-            if (Math.Abs(f) < 1e-12) break;
-            if (Math.Abs(df) < 1e-10) break;
-            var step = Math.Clamp(f/df, -.25, .25); theta -= step;
-        }
+        // A bar arm endpoint traces a circle about the torsion axis. Intersect that circle
+        // analytically with the fixed-length endlink sphere instead of launching an unseeded
+        // Newton solve, which could miss a reachable pose or jump branches as load direction changed.
+        var arm = referenceEnd-root;
+        var parallel = axis*Vector3.Dot(arm,axis);
+        var radial = arm-parallel;
+        var quarterTurn = Vector3.Cross(axis,radial);
+        var offset = root+parallel-lower;
+        var a = Vector3.Dot(offset,radial);
+        var b = Vector3.Dot(offset,quarterTurn);
+        var magnitude = Math.Sqrt(a*a+b*b);
+        var constant = Vector3.Dot(offset,offset)+Vector3.Dot(radial,radial)-linkLength*linkLength;
+        var ratio = magnitude > 1e-12 ? -constant/(2*magnitude) : double.PositiveInfinity;
+        var clamped = Math.Clamp(ratio,-1,1);
+        var phase = Math.Atan2(b,a);
+        var separation = Math.Acos(clamped);
+        var first = NormalizeAngle(phase+separation);
+        var second = NormalizeAngle(phase-separation);
+        var theta = Math.Abs(first) <= Math.Abs(second) ? first : second;
         var solvedEnd = root+Rotate(arm,axis,theta); var solvedLink = solvedEnd-lower; var length = solvedLink.Length();
         var derivative = Vector3.Dot(Vector3.Normalize(solvedLink), Vector3.Cross(axis,solvedEnd-root));
         var classification = Math.Abs(derivative) < 1e-4 ? "toggle-or-branch-limit" : Math.Abs(derivative) < 5e-3 ? "near-toggle" : "regular";
         return new(theta, solvedEnd, lower, Vector3.Normalize(solvedLink), linkLength, Math.Abs(length-linkLength), derivative, classification);
+    }
+
+    private static double NormalizeAngle(double angle)
+    {
+        while (angle > Math.PI) angle -= 2*Math.PI;
+        while (angle < -Math.PI) angle += 2*Math.PI;
+        return angle;
     }
 
     private static Vector3 Rotate(Vector3 vector, Vector3 axis, double angle) => Vector3.Transform(vector, Quaternion.CreateFromAxisAngle(axis,(float)angle));

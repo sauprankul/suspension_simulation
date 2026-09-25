@@ -177,7 +177,10 @@ public sealed class HeadToHeadComparisonSolver
             return new TubularArbMechanism3DSolver().Evaluate(configured, Left, Right, lj, rj);
         }
         var frontBar = EvaluateBar(_frontBar!,true); var rearBar = EvaluateBar(_rearBar!,false);
-        if (frontBar.Validity == "invalid" || rearBar.Validity == "invalid") throw new InvalidOperationException("A 3D ARB/endlink mechanism failed at the requested load state.");
+        if (frontBar.Validity == "invalid" || rearBar.Validity == "invalid")
+            throw new InvalidOperationException($"A 3D ARB/endlink mechanism failed at the requested load state " +
+                $"(front={frontBar.Validity}, residuals L/R={frontBar.Left.ConstraintResidualM*1000:G6}/{frontBar.Right.ConstraintResidualM*1000:G6} mm, limits L/R={frontBar.Left.LimitClassification}/{frontBar.Right.LimitClassification}; " +
+                $"rear={rearBar.Validity}, residuals L/R={rearBar.Left.ConstraintResidualM*1000:G6}/{rearBar.Right.ConstraintResidualM*1000:G6} mm, limits L/R={rearBar.Left.LimitClassification}/{rearBar.Right.LimitClassification}).");
         return new(rates, Matrix(frontBar), Matrix(rearBar), frontBar, rearBar);
     }
 

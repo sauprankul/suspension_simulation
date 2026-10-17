@@ -10,7 +10,7 @@ Unsprung masses are now first-class editable chassis inputs: 35 kg/front corner 
 - https://minkara.carview.co.jp/userid/2303134/car/3203507/6768203/note.aspx
 - https://pressroom.toyota.com/toyota-announces-pricing-on-all-new-2022-gr86/
 
-Beyond a derived endpoint, the current quasi-static active constraint uses the explicitly configured 10,000 N/mm finite penalty rate. This is intentionally high relative to the road spring but not mathematical infinity. Replace it with measured top-out/bottom-out hardware behavior when available.
+At a derived endpoint, the current quasi-static active-set solver enforces an exact unilateral rigid travel constraint and solves its reaction without penetration. This supersedes the original 10,000 N/mm penalty. The stroke dimensions remain estimates; compliant hardware curves, if later supplied, must be modeled separately from the rigid travel boundary.
 
 `parallel-springs.json` accepts any number of piecewise-linear wheel-parallel force curves. Travel is millimetres of wheel jounce from static (positive bump, negative droop); force is newtons of upward suspension force on the sprung body. The solver subtracts the curve's force at zero so a gas-charge preload does not move the calibrated static datum, while its force change and tangent participate in equilibrium and RSD/RCB.
 

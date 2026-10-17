@@ -1,0 +1,154 @@
+{
+  "schema": "suspension-component-editor/viewer-baseline/v1",
+  "sourceCommit": "1e93fb7d4a9f9ca15df9237c4cbf21a17b12f61c",
+  "coordinateFrame": "+X forward, +Y left, +Z up; metres",
+  "legacyRegressionChecks": 80,
+  "nativePointerVerified": true,
+  "pointerPhases": [
+    {
+      "phase": "initial",
+      "dpi": 1,
+      "pointer": true,
+      "selection": "FL.strut",
+      "cameraIndependent": true
+    },
+    {
+      "phase": "monitor-0-0",
+      "dpi": 1,
+      "pointer": true,
+      "selection": "FL.strut",
+      "cameraIndependent": true
+    },
+    {
+      "phase": "injected-dpi-120",
+      "dpi": 1.25,
+      "pointer": true,
+      "selection": "FL.tire",
+      "cameraIndependent": true
+    },
+    {
+      "phase": "injected-dpi-144",
+      "dpi": 1.5,
+      "pointer": true,
+      "selection": "FL.tire",
+      "cameraIndependent": true
+    },
+    {
+      "phase": "injected-dpi-96",
+      "dpi": 1,
+      "pointer": true,
+      "selection": "FL.strut",
+      "cameraIndependent": true
+    }
+  ],
+  "cameraBenchmarks": [
+    {
+      "labels": false,
+      "fps": 60.00098989184984,
+      "frames": 241,
+      "seconds": 4.0166004
+    },
+    {
+      "labels": true,
+      "fps": 60.00231345019328,
+      "frames": 241,
+      "seconds": 4.0165118
+    }
+  ],
+  "inputToAcceptedP95Milliseconds": 130.8086,
+  "inputSampleCount": 32,
+  "lifecycle": {
+    "success": true,
+    "seconds": 600.4461806,
+    "cycles": 287,
+    "sceneObjects": 297,
+    "resourceCounts": "ConstantBuffer Count: 8\nBlendState Count: 7\nDepthStencilState Count: 5\nRasterState Count: 8\nSamplerState Count: 7\nGeometryBuffer Count:302\nMaterialTexture Count:44\nMaterialVariable Count:302\n",
+    "minimumSteadyGpuBytes": 47341568,
+    "maximumSteadyGpuBytes": 58023936
+  },
+  "stateExportRecoveryVerified": true,
+  "rigidStopsAndMarkersVerified": true,
+  "limitations": [
+    "One physical monitor at 100%; additional 125/150% scales injected, not Windows display-setting or mixed-monitor tests.",
+    "60 fps foreground custom navigation; separate legacy force loop measured about 40 fps.",
+    "Synthetic hard points, estimated stroke/tire geometry, provisional equilibrium; legacy alignment inputs are not new-model physical setup adjustments."
+  ],
+  "packageHashes": [
+    {
+      "path": "data/synthetic/gr86/anti-roll-bars.json",
+      "sha256": "11ff243eb02935f778148ad4f93ef3fe472f91613333ed92d8f09554a4c4e002"
+    },
+    {
+      "path": "data/synthetic/gr86/bump-stops.json",
+      "sha256": "72528aae4f2192a497d45fdfee4ce8db939d70c8b5c3e32a1b10011d69ab88c3"
+    },
+    {
+      "path": "data/synthetic/gr86/chassis.json",
+      "sha256": "aa2bfe9b88380b194268e78fa4df35a90c1736827f6ff8287767b4af97a9dcd6"
+    },
+    {
+      "path": "data/synthetic/gr86/comparison-cases.json",
+      "sha256": "53e60de4fd4a68607fd9b72aa1d9782d6d52f06b4eb20269455d9a6b3c13f092"
+    },
+    {
+      "path": "data/synthetic/gr86/dampers.json",
+      "sha256": "8a3fe38fb98745a7edf5ca804593b694ecaf5913109877717c9f9a56cbfe5e53"
+    },
+    {
+      "path": "data/synthetic/gr86/front-strut-hard-points.json",
+      "sha256": "d0ea031b3ff96d207f829674d976f1ac829dfde924a1a33f400991a74991d86d"
+    },
+    {
+      "path": "data/synthetic/gr86/front-tubular-arb.json",
+      "sha256": "558cbbbe4e28081b2f2f553e16fb1331d380145129fefcaddd257256948f5fc5"
+    },
+    {
+      "path": "data/synthetic/gr86/parallel-springs.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "data/synthetic/gr86/rear-double-wishbone-hard-points.json",
+      "sha256": "1ee0c36aa0ab64bd07a4b2bc4305ca89b0082d4debb088fcf5f1538360922cb4"
+    },
+    {
+      "path": "data/synthetic/gr86/rear-tubular-arb.json",
+      "sha256": "4543f2287ee1bc4ce4f307184e55a0eefdbf63796a3bdb2d63b06d067ced2581"
+    },
+    {
+      "path": "data/synthetic/gr86/setup-a.json",
+      "sha256": "fa8bd514d954bb7af8548d7e1f32431d58fba75da9872f04ff3258f880ed580f"
+    },
+    {
+      "path": "data/synthetic/gr86/setup-b.json",
+      "sha256": "409c1b9af0a685f689df512e9724ba6af97528e35d4d7f5b904da67f212458f6"
+    },
+    {
+      "path": "data/synthetic/gr86/springs.json",
+      "sha256": "3200fcc2d7cb27b55961286b74a7dd63bb7812cfee5384591394f8774e3e57ef"
+    },
+    {
+      "path": "data/synthetic/gr86/static-reference.json",
+      "sha256": "4fc169b203ac704a023176e40e83d87cb6c6fec7800992bfe187118c8ce862e0"
+    },
+    {
+      "path": "data/synthetic/gr86/steering.json",
+      "sha256": "fd2d4ce1d1ff56861375958c57170d60777a2ee8e1808cf5520cf69fec3ef2d8"
+    },
+    {
+      "path": "data/synthetic/gr86/suspension-assembly.json",
+      "sha256": "77233061b55910e1e784c2e182a399967745dd9e32bf915f768caa4699110441"
+    },
+    {
+      "path": "data/synthetic/gr86/travel-limits.json",
+      "sha256": "4695768c2a05b612c689db4973c44d5ab027ff730394c1ee6b8d401d9b39105c"
+    },
+    {
+      "path": "data/synthetic/gr86/vehicle-envelope.json",
+      "sha256": "26d7e0709042b847f5c546020a9f0abc63ff3f9d55f49bd9367e1d8bd6f11931"
+    },
+    {
+      "path": "data/synthetic/gr86/visualization.json",
+      "sha256": "3412c237fedf06c8fada2242db88612deeebc4faaf457c77b2003830fce1f657"
+    }
+  ]
+}

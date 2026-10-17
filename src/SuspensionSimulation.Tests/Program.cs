@@ -22,6 +22,10 @@ if(args.Contains("--write-viz-limit-cases")) {SuspensionSimulation.Tests.Visuali
 
 var failures = new List<string>();
 var totalChecks = 0;
+Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);
+Run("Garage contracts reject geometry alignment rate overrides and double mass accounting",SuspensionSimulation.Tests.DesignContractChecks.Ownership);
+Run("design validation rejects duplicate IDs unresolved frames and invalid axes",SuspensionSimulation.Tests.DesignContractChecks.Structure);
+Run("assembly contracts retain nested kinds mirrors and exact frozen dependency manifests",SuspensionSimulation.Tests.DesignContractChecks.AssemblyAndManifest);
 Run("rigid travel stops enforce exact bounds and unilateral reactions, arrest loading and release on unloading",()=>SuspensionSimulation.Tests.HardStopChecks.Analytic(SymmetricPackage()));
 Run("spring stroke markers preserve mount points and meet the upper mount exactly at bottom-out",SuspensionSimulation.Tests.HardStopChecks.Strokes);
 Run("committed synthetic analytic fixture catalogue validates", () => SuspensionSimulation.Tests.TestdataFixtureHarness.Verify());

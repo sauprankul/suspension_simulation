@@ -48,6 +48,7 @@ public partial class App : Application
             // Restore afterwards so initialization cannot overwrite the saved view.
             if(restore>=0 && restore+1<e.Args.Length)
                 window.Loaded+=(_,_)=>window.RestoreLiveState(e.Args[restore+1]);
+            else if(e.Args.Length==0) window.Loaded+=(_,_)=>window.MainMenuClick(this,new RoutedEventArgs());
             window.Show();
             if(e.Args.Contains("--inspection-proof")) window.RunInspectionProof();
             if(e.Args.Contains("--steering-proof")) window.RunSteeringProof();
@@ -55,6 +56,7 @@ public partial class App : Application
             if(e.Args.Contains("--stage3-proof")) window.RunStage3Proof();
             if(e.Args.Contains("--stage3-nonpointer")) window.RunStage3Proof(false);
             if(e.Args.Contains("--inspection-soak")) window.RunInspectionSoak();
+            if(e.Args.Contains("--shell-proof")) window.RunShellProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

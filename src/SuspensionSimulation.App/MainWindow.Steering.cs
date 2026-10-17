@@ -82,6 +82,7 @@ public partial class MainWindow
             if(view.TryGetProperty("selectedComponent",out var selected) && selected.ValueKind==JsonValueKind.String) _inspectionViewport?.Select(selected.GetString()!);
         }
         if(ui.TryGetProperty("window",out var window) && window.TryGetProperty("state",out var state) && state.GetString()=="Maximized") WindowState=WindowState.Maximized;
+        RestoreShellState(ui);
     }
 }
 

@@ -32,6 +32,7 @@ public partial class MainWindow
                 if(_acceptedSnapshot is null) _inspectionViewport.SetScene(_sceneBuilder.BuildReference(_vehicle.Chassis.CgHeightM));
             }
             _inspectionEnabled=enabled;
+            if(RootGrid.Visibility==Visibility.Visible) _workspace=enabled?Workspace.Visualizer3D:Workspace.HeadToHead;
             ComparisonGrid.Visibility=StatusText.Visibility=enabled?Visibility.Collapsed:Visibility.Visible;
             RootGrid.RowDefinitions[2].Height=enabled?GridLength.Auto:new GridLength(210);
             AReferenceLabel.Visibility=BReferenceLabel.Visibility=enabled?Visibility.Collapsed:Visibility.Visible;
@@ -40,7 +41,7 @@ public partial class MainWindow
             InspectionHost.Visibility=enabled?Visibility.Visible:Visibility.Collapsed;
             ACarCanvas.Visibility=BCarCanvas.Visibility=enabled?Visibility.Collapsed:Visibility.Visible;
             MoveSelectedSetup();
-            _inspectionViewport?.SetActive(enabled && WindowState!=WindowState.Minimized);
+            _inspectionViewport?.SetActive(enabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);
             ViewModeButton.Content=enabled?"Dashboard":"Open 3D inspection";
             UpdateInspectionScene();
             if(!enabled && _rejectedRevision is null) ViewSummary.Text="Shared synthetic geometry";
@@ -201,7 +202,7 @@ public partial class MainWindow
         using(var drawing=visual.RenderOpen())
         {
             drawing.DrawImage(layout,new Rect(0,0,ActualWidth,ActualHeight));
-            if(_inspectionEnabled && _inspectionViewport is {} inspector)
+            if(_inspectionEnabled && RootGrid.Visibility==Visibility.Visible && _inspectionViewport is {} inspector)
             {
                 var origin=inspector.Viewport.TranslatePoint(new Point(0,0),this);
                 drawing.DrawImage(HelixToolkit.Wpf.SharpDX.ViewportExtensions.RenderBitmap(inspector.Viewport),new Rect(origin,new Size(inspector.Viewport.ActualWidth,inspector.Viewport.ActualHeight)));

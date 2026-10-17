@@ -39,9 +39,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         _renderTimer=new DispatcherTimer(DispatcherPriority.Render) { Interval=TimeSpan.FromMilliseconds(25) };
         _renderTimer.Tick+=(_,_)=>{ _renderTimer.Stop(); Render(); };
+        BuildShell();
         Loaded += (_, _) => Initialise();
         SizeChanged += (_, _) => ScheduleRender();
-        StateChanged += (_,_)=>_inspectionViewport?.SetActive(_inspectionEnabled && WindowState!=WindowState.Minimized);
+        StateChanged += (_,_)=>_inspectionViewport?.SetActive(_inspectionEnabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);
         Closed += (_,_)=>{_renderTimer.Stop();_inspectionViewport?.Dispose();};
     }
 

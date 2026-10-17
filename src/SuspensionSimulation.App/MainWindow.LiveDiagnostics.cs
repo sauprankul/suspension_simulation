@@ -7,6 +7,7 @@ public partial class MainWindow
     internal object CaptureLiveDiagnostics()=>new
     {
         window=new {title=Title,visible=IsVisible,state=WindowState.ToString(),active=IsActive},
+        shell=CaptureShellState(),
         inputs=JsonSerializer.Deserialize<JsonElement>(CaptureUiState(_renderAttempt)),
         acceptedRevision=_acceptedSnapshot?.Revision,rejectedRevision=_rejectedRevision,rejectedError=_rejectedError,
         acceptedSnapshot=_acceptedSnapshot,

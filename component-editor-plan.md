@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: execution started; Stage 0 complete. Stages 1–11 remain to be implemented.
+Prepared: 2026-10-16. Status: Stages 0–1 complete. Stages 2–11 remain to be implemented.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -514,7 +514,7 @@ The highest-risk work is the correctly constrained rear mechanism, the installed
 ## 14. Execution progress
 
 - [x] Stage 0 — preserve baseline and define contracts
-- [ ] Stage 1 — multi-screen shell
+- [x] Stage 1 — multi-screen shell
 - [ ] Stages 2–11 — subsequent gated implementation
 
 ### Stage 0 checkpoint — 2026-10-16
@@ -523,4 +523,13 @@ The highest-risk work is the correctly constrained rear mechanism, the installed
 - Added renderer-independent Core ownership records for components, assembly instances/joints/exported ports, Garage selections/mass policy and frozen result dependencies. Added strict readable JSON and local structural validation. This does not implement persistence, graph resolution/rank tests, adjustment paths, installed-force equilibrium or runnable editor screens.
 - Defined exact SI/kgf conversion, right-handed port frames, continuous versus discrete settings, explicit reflection, mass accounting and alignment/limit signs. Documented data/provenance and migration in `docs/component-editor-contracts.md`, explicitly identifying missing rear topology/joint/shock mounts and spring/install data. Legacy prescribed alignment and bar-arm bending remain isolated rather than silently becoming new-model physics.
 - Tests: **84/84 pass**, including four new contract/ownership checks alongside all 80 existing checks. App and tests build with zero warnings/errors into separate output directories; the accepted viewer session remains open.
-- Next package: Stage 1, five-destination shell/navigation with retained per-screen state. No editor/FEA placeholder counts as a completed feature. Push is awaiting confirmation of the exact configured GitHub destination after automatic approval review rejected the initial attempt.
+- Next package at that checkpoint: Stage 1, five-destination shell/navigation with retained per-screen state. No editor/FEA placeholder counts as a completed feature. The viewer and Stage 0 commits were subsequently pushed to the user-confirmed `sauprankul/suspension_simulation` repository.
+
+### Stage 1 checkpoint — 2026-10-16
+
+- Added a main menu with all five destinations and a return path from each. Normal startup opens the menu. The existing head-to-head and 3D views retain their accepted controls and share the existing lazy inspection renderer/navigation boundary; no second renderer or numerical pipeline was introduced. Specification editing remains in the legacy views until the planned Stage 8 migration.
+- Component Designer, Assembly Editor and Garage currently provide retained draft name/notes only and explicitly state that their authoring/setup tools are not available yet. This completes navigation infrastructure, not component design, assembly compilation, Garage solving or FEA.
+- Workspace views are retained during navigation. Existing G/setup fields, camera, selection and accepted physics revision survive switching. Hidden viewer rendering and high-resolution timer requests stop, including after minimize/restore. Shell workspace/draft state is included in the existing live diagnostics and `--restore-state` recovery path; older saved sessions remain supported.
+- `--shell-proof` passes through every menu destination, verifies retained metadata drafts/camera/selection/shared viewport, confirms navigation does not invoke physics, round-trips shell recovery, and checks hidden rendering. Captures under `artifacts/component-editor-shell` were inspected. All **84/84** regression checks pass; solution build has zero warnings/errors.
+- Normal startup into the menu and cross-process shell/draft/camera recovery also pass. The original user session was restored in the updated shortcut target. Usage checkpoint: 94% of the five-hour allowance used (about 6% remains); weekly 27%; no resets or credits used. Stop at this tested stage boundary before geometry authoring.
+- Next package: Stage 2 — actual rigid-link/wishbone/upright/top-mount authoring, geometry/frames/ports, any-two-point measurement, revision save/reopen and undo/drafts. Geometry authoring has not started in this checkpoint.

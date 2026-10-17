@@ -66,6 +66,16 @@ public static class DesignValidation
             if(joint.DistanceM is {} distance) {Require(joint.Kind==JointKind.RigidDistance,"Rest distance belongs only to a distance joint.");Positive(distance,"Joint rest distance");}
         }
         foreach(var port in assembly.Ports) Endpoint(port.Source);
+        Unique(assembly.EquipmentSlots??[],x=>x.Id);Unique(assembly.EquipmentSlots??[],x=>x.InstanceId);
+        foreach(var slot in assembly.EquipmentSlots??[])
+        {
+            Text(slot.Name);Text(slot.Description);Unique(slot.CompatibleAssetIds,x=>x);
+            var instance=assembly.Instances.SingleOrDefault(x=>x.Id==slot.InstanceId);
+            Require(instance is not null,$"Equipment slot {slot.Id} has no child instance.");
+            Require(slot.CompatibleAssetIds.Contains(instance!.Definition.AssetId),$"Slot {slot.Id} must accept its default hardware.");
+        }
+        Unique(assembly.SetupAdjustments??[],x=>x.InstancePath);
+        foreach(var exposure in assembly.SetupAdjustments??[]) {Text(exposure.Name);if(exposure.AdjustmentIds is {} ids) Unique(ids,x=>x);}
         Unique(assembly.GroundedInstances,x=>x);
         if(assembly.Vehicle is {} vehicle)
         {Unique(vehicle.Contacts,c=>c.Corner);Unique(vehicle.RideHeightDatums,p=>p.Id);foreach(var contact in vehicle.Contacts) {Text(contact.InstancePath);Text(contact.CenterPointId);}foreach(var datum in vehicle.RideHeightDatums) Require(datum.PositionM.IsFinite,"Ride-height datum must be finite.");}

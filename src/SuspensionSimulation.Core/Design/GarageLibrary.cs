@@ -28,7 +28,11 @@ public sealed class GarageLibrary(string directory)
         Directory.GetDirectories(DirectoryPath).Select(Path.GetFileName).Where(x=>Guid.TryParseExact(x,"N",out _))
             .Select(x=>Load(x!)!).Where(x=>x is not null).OrderBy(x=>x.Name,StringComparer.OrdinalIgnoreCase).ToArray();
     public GarageEntry Create(string name,string notes="")=>Save(new(Guid.NewGuid().ToString("N"),0,name,notes,false,null));
-    public GarageEntry Duplicate(GarageEntry entry)=>Save(entry with {Id=Guid.NewGuid().ToString("N"),Revision=0,Name=entry.Name+" copy",Archived=false});
+    public GarageEntry Duplicate(GarageEntry entry)
+    {
+        var id=Guid.NewGuid().ToString("N");var name=entry.Name+" copy";
+        return Save(entry with {Id=id,Revision=0,Name=name,Archived=false,Configuration=entry.Configuration is {} setup?setup with {Identity=setup.Identity with {AssetId=id,RevisionId="draft",Name=name}}:null});
+    }
     public GarageEntry Save(GarageEntry draft)
     {
         if(string.IsNullOrWhiteSpace(draft.Name) || draft.Name.Trim().Length>120 || draft.Notes is null) throw new ArgumentException("Enter a name of 1–120 characters and valid notes.");

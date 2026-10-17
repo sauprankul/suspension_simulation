@@ -70,6 +70,7 @@ public partial class MainWindow
     private void NavigateWorkspace(Workspace workspace)
     {
         if(!Enum.IsDefined(workspace)) throw new ArgumentOutOfRangeException(nameof(workspace));
+        if(_workspace==Workspace.Garage) CacheGarageDraft();
         if(workspace==Workspace.ComponentDesigner && _componentViewport is null) BuildComponentDesigner();
         if(workspace==Workspace.AssemblyEditor && _assemblyViewport is null) BuildAssemblyEditor();
         if(workspace==Workspace.ComponentDesigner) ComponentAction(RefreshComponentLibrary);
@@ -79,6 +80,7 @@ public partial class MainWindow
             if(_assemblyBaseRevision is not null&&_assemblyPublishedRaw==CaptureAssemblyRaw()) AssemblyAction(RefreshAssemblyDependencies);
         }
         _workspace=workspace;RootGrid.Visibility=IsSimulationWorkspace?Visibility.Visible:Visibility.Collapsed;
+        if(workspace==Workspace.Garage) RefreshGarage();
         foreach(var (destination,view) in _workspaceViews) view.Visibility=destination==workspace?Visibility.Visible:Visibility.Collapsed;
         if(IsSimulationWorkspace) {SetInspectionMode(workspace==Workspace.Visualizer3D);EnsureGarageAnalysisCurrent();}
         else _inspectionViewport?.SetActive(false);
@@ -92,6 +94,7 @@ public partial class MainWindow
         workspace=_workspace.ToString(),
         installedPreview=_installedPreview is null?null:new {garage=_installedPreviewGarage,result=_installedPreview},
         analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
+        garage=CapturePhysicalGarageWorkspace(),
         component=_componentReady?new {assetId=_componentId,baseRevision=_componentBaseRevision,rawDraft=CaptureComponentRaw(),camera=_componentViewport?.CaptureCamera()}:null,
         assembly=_assemblyReady?new {assetId=_assemblyId,baseRevision=_assemblyBaseRevision,rawDraft=CaptureAssemblyRaw(),camera=_assemblyViewport?.CaptureCamera(),manifest=_assemblyGraph?.Manifest,conflict=_assemblyConflict,motion=_twinsMotion,motionInputs=_twinsTravel.Select(x=>x.Text).Append(_twinsSteering.Text).ToArray()}:null,
         drafts=_workspaceDrafts.ToDictionary(x=>x.Key.ToString(),x=>new {name=x.Value.Name.Text,notes=x.Value.Notes.Text})
@@ -99,6 +102,7 @@ public partial class MainWindow
     private void RestoreShellState(JsonElement ui)
     {
         if(!ui.TryGetProperty("shell",out var shell)) {NavigateWorkspace(_inspectionEnabled?Workspace.Visualizer3D:Workspace.HeadToHead);return;}
+        if(shell.TryGetProperty("garage",out var garage)&&garage.ValueKind==JsonValueKind.Object) RestorePhysicalGarageWorkspace(garage);
         if(_analysisInitialized && shell.TryGetProperty("analysis",out var analysis))
         {
             _refreshingAnalysis=true;

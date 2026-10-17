@@ -89,7 +89,8 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
                 var identity=instance is ComponentInstance?mapped[(AssetKind.Component,instance.Definition.AssetId)]:ImportAssembly(instance.Definition.AssetId).Identity;
                 return instance with {Definition=new(identity.AssetId,identity.RevisionId)};
             }).ToImmutableArray();
-            var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children},null);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
+            var slots=source.EquipmentSlots is {} declared?declared.Select(slot=>slot with {CompatibleAssetIds=[..slot.CompatibleAssetIds.Select(asset=>mapped.GetValueOrDefault((source.Instances.Single(i=>i.Id==slot.InstanceId) is ComponentInstance?AssetKind.Component:AssetKind.Assembly,asset))?.AssetId??asset)]}).ToImmutableArray():(ImmutableArray<EquipmentSlot>?)null;
+            var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children,EquipmentSlots=slots},null);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
         }
         return ImportAssembly(bundle.Root.AssetId);
     }

@@ -20,6 +20,7 @@ if (args.Contains("--write-viz-baseline"))
 }
 if(args.Contains("--write-viz-limit-cases")) {SuspensionSimulation.Tests.VisualizerLimitCases.Write();return;}
 if(args.Contains("--check-installed-equilibrium")) {try {SuspensionSimulation.Tests.InstalledEquilibriumChecks.Verify();Console.WriteLine("Installed equilibrium checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-physical-garage")) {try {SuspensionSimulation.Tests.PhysicalGarageChecks.Verify();Console.WriteLine("Physical Garage checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
@@ -30,6 +31,7 @@ Run("elastic laws preserve physical units rigid bind stroke limits and locked ad
 Run("installed twins springs seats and rigid-arm torsion bars preserve closure heave and roll behavior",SuspensionSimulation.Tests.InstalledMechanicsChecks.Verify);
 Run("installed static and loaded equilibrium derive pose alignment and balanced unilateral ground reactions",SuspensionSimulation.Tests.InstalledEquilibriumChecks.Verify);
 Run("stock Garage seeding equipment selection frozen revisions and reference solving are consistent",SuspensionSimulation.Tests.GarageAnalysisChecks.Verify);
+Run("physical Garage migration selections exposed adjustments ownership and independent imports preserve saved setups",SuspensionSimulation.Tests.PhysicalGarageChecks.Verify);
 Run("Garage named entries round-trip independently with revisions archive recovery and conflict protection",SuspensionSimulation.Tests.GarageChecks.Persistence);
 Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);
 Run("Garage contracts reject geometry alignment rate overrides and double mass accounting",SuspensionSimulation.Tests.DesignContractChecks.Ownership);

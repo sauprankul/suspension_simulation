@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–6 implemented with the documented synthetic/estimated data scope; Stage 6 is the tested backend gate, with production Garage/analysis integration still pending. Stages 7–11 remain. Existing visualizers are Garage-driven through the explicitly provisional reference adapter.
+Prepared: 2026-10-16. Status: Stages 0–7 implemented with the documented synthetic/estimated data scope. Physical Garage controls and saved static readouts pass the isolated UI proof; Stage 8 production visualizer integration is next. Stages 8–11 remain. Existing visualizers are Garage-driven through the explicitly provisional reference adapter until Stage 8 passes.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -517,7 +517,9 @@ Priority change: the user requested Garage before component authoring. The first
 
 - [x] Stage 0 — preserve baseline and define contracts
 - [x] Stage 1 — multi-screen shell
-- [ ] Stages 2–11 — subsequent gated implementation
+- [x] Stages 2–6 — authoring, explicit topology, installed mechanics and static solver
+- [x] Stage 7 — physical Garage hardware/adjustment/mass controls and migration
+- [ ] Stages 8–11 — production analysis integration, FEA, Studio and final integration
 
 ### Stage 0 checkpoint — 2026-10-16
 
@@ -603,3 +605,11 @@ Priority change: the user requested Garage before component authoring. The first
 - CalculiX 2.23/SPOOLES reproduces the analytic small-strain coupon force (0.4 N) and an independently differentiated compressible neo-Hookean homogeneous 30% compression case (534.888155 N analytic versus 534.8882 N solver). Support reactions balance. Coefficients are educational synthetic values, not manufacturer data or correlated material cards. These homogeneous cases do not establish locking or contact performance.
 - Gmsh 4.15.2/OpenCASCADE exports and reimports a synthetic asymmetric grooved STEP solid, checks explicit mm-to-m units (40 mm height), and generates three quadratic-tet meshes: 1775, 3131 and 6188 elements. Explicit healing is disabled. This proves geometry/mesh preparation, **not** mesh convergence of a compression force curve.
 - Reports are under `artifacts/fea-coupon-spike` and `artifacts/fea-step-mesh-spike`. Remaining gates: locking/contact sensitivity, fitted foam, axisymmetric whole-part reaction convention, grooved fold/self-contact, actual asymmetric STEP contact compression, force convergence across meshes, cancellation/crash recovery and independent physical correlation. The backend is not selected for production until those gates pass; Bump Stop Studio remains unimplemented.
+
+### Stage 7 checkpoint — 2026-10-17
+
+- Assemblies declare equipment slots with explicit compatible asset IDs and adjustment exposures. Nested/mirrored instance paths remain independent. Garage can select equipment and exposed settings only; a missing slot, changed interface, unknown adjustment, out-of-range setting or incomplete component-sum mass rejects before a physical job. Grouping/import preserve and remap setup interfaces.
+- Stock GR86/BRZ entries migrate by appending a physical configuration revision, preserving the previous saved reference equipment selections, notes and history. Repeated migration is idempotent. Duplication creates a separate setup identity. Estimated dimensions/CG and synthetic hard points remain clearly labeled.
+- Garage shows a vehicle-assembly picker, per-corner spring/damper/top-mount equipment, axle bars, hardware-generated bounded adjusters, aggregate/component-sum mass choice and added payload locations. Example adjustable dampers/camber plates are explicitly synthetic alternatives; stock fixed mounts do not acquire imaginary adjustments. Assembly Editor has equipment/exposure authoring tabs.
+- Saved static readouts use the new installed-equilibrium solver. Raw invalid input survives navigation and live-state restore, and cannot be saved as an accepted setting. Targeted physical Garage checks and `--physical-garage-proof` pass; proof records/captures are under `artifacts/physical-garage-ui`. The full regression run is in progress at this checkpoint.
+- Stage 8 still needs to replace the provisional production analysis path, freeze selected equipment plus exact source definitions, and handle async/cancel/stale results atomically.

@@ -91,7 +91,15 @@ public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArra
     public ImmutableArray<string> GroundedInstances {get;init;}=[];
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SpringSeatBinding>? SpringSeats {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public VehicleGeometry? Vehicle {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<EquipmentSlot>? EquipmentSlots {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SetupAdjustmentExposure>? SetupAdjustments {get;init;}
 }
+// Slots replace direct children only. Compatibility is explicitly granted by the owning assembly.
+public sealed record EquipmentSlot(string Id,string Name,string InstanceId,ImmutableArray<string> CompatibleAssetIds,string Description);
+// Null IDs expose all adjustments declared by the selected hardware; an empty list exposes none.
+public sealed record SetupAdjustmentExposure(string InstancePath,string Name,ImmutableArray<string>? AdjustmentIds=null);
+public sealed record ResolvedEquipmentSlot(string InstancePath,EquipmentSlot Definition,AssetKind Kind,AssetReference Default,AssetReference Selected);
+public sealed record ResolvedSetupAdjustment(string InstancePath,string Name,GeometryAdjustment Definition);
 public sealed record SpringSeatBinding(string SpringPath,string DamperPath);
 public sealed record WheelGroundContact(string Corner,string InstancePath,string CenterPointId);
 public sealed record VehicleGeometry(ImmutableArray<WheelGroundContact> Contacts,ImmutableArray<NamedDesignPoint> RideHeightDatums);

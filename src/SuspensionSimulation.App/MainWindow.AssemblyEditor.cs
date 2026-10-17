@@ -15,7 +15,7 @@ using SuspensionSimulation.Solvers.Design;
 namespace SuspensionSimulation.App;
 
 internal sealed record AssemblyRecovery(string Id,string? BaseRevision,string Name,string Notes,string Grounds,string ExpectedDof,
-    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null,AssemblyDefinition? Metadata=null);
+    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null,AssemblyDefinition? Metadata=null,AssemblySlotRow[]? Slots=null,AssemblyExposureRow[]? Exposures=null);
 internal sealed record AssemblyCatalogChoice(string Name,AssetReference Reference,bool IsAssembly);
 
 public partial class MainWindow
@@ -73,6 +73,7 @@ public partial class MainWindow
         mate.Children.Add(new TextBlock {Text="Instance coordinates and mirror origins are mm. Axis and reference vectors are orthogonal unit vectors (+Z and +X). Empty revision follows latest; an exact hash pins a version. Nested joints appear in the checks/tree view.",TextWrapping=TextWrapping.Wrap});
         tabs.Items.Add(new TabItem {Header="Mate",Content=mate});
         AddTwinsMotionTools(tabs,left);
+        AddAssemblyGarageContracts(tabs);
         _workspaceViews[Workspace.AssemblyEditor]=layout;layout.Visibility=Visibility.Collapsed;_shell.Children.Add(layout);
         _assemblyAutosave.Tick+=(_,_)=>{_assemblyAutosave.Stop();try {_designLibrary.SaveDraft("assembly-workspace",CaptureAssemblyRaw());}catch(Exception error) {_assemblyStatus.Text="Draft recovery could not save: "+error.Message;}};
         foreach(var box in new[]{metadata.Name,metadata.Notes,_assemblyGrounds,_assemblyExpectedDof}) box.TextChanged+=(_,_)=>ScheduleAssemblyDraft();
@@ -93,7 +94,8 @@ public partial class MainWindow
         var metadata=_workspaceDrafts[Workspace.AssemblyEditor];
         var result=new AssemblyDefinition(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
             {GroundedInstances=[.._assemblyGrounds.Text.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)]};
-        return _assemblyMetadataSeed is {} original?original with {Identity=result.Identity,Instances=result.Instances,Joints=result.Joints,Ports=result.Ports,GroundedInstances=result.GroundedInstances}:result;
+        result=_assemblyMetadataSeed is {} original?original with {Identity=result.Identity,Instances=result.Instances,Joints=result.Joints,Ports=result.Ports,GroundedInstances=result.GroundedInstances}:result;
+        return result with {EquipmentSlots=_assemblySlots.Count>0?[.._assemblySlots.Select(s=>s.Read())]:null,SetupAdjustments=_assemblyExposures.Count>0?[.._assemblyExposures.Select(s=>s.Read())]:null};
     }
     private int? AssemblyExpectedDof()=>string.IsNullOrWhiteSpace(_assemblyExpectedDof.Text)?null:int.TryParse(_assemblyExpectedDof.Text,out var n)&&n>=0?n:throw new ArgumentException("Expected freedoms must be a nonnegative integer or blank.");
     private void ApplyAssemblyPreview(bool undo)
@@ -117,7 +119,7 @@ public partial class MainWindow
     private void NewAssembly()
     {
         _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;_assemblyMetadataSeed=null;
-        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();_assemblyGrounds.Text="";ApplyAssemblyPreview(false);
+        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();FillAssemblyGarageContracts(null);_assemblyGrounds.Text="";ApplyAssemblyPreview(false);
     }
     private void RefreshAssemblyCatalog()
     {
@@ -147,6 +149,7 @@ public partial class MainWindow
         {
             var metadata=_workspaceDrafts[Workspace.AssemblyEditor];metadata.Name.Text=a.Identity.Name;metadata.Notes.Text=a.Identity.Provenance.Note;
             _assemblyProvenanceSource=a.Identity.Provenance.Source;
+            FillAssemblyGarageContracts(a);
             _assemblyInstances.Clear();foreach(var x in a.Instances) _assemblyInstances.Add(AssemblyInstanceRow.From(x));_assemblyJoints.Clear();foreach(var x in a.Joints) _assemblyJoints.Add(AssemblyJointRow.From(x));
             _assemblyPorts.Clear();foreach(var x in a.Ports) _assemblyPorts.Add(AssemblyPortRow.From(x));_assemblyGrounds.Text=string.Join(",",a.GroundedInstances);
         }
@@ -215,7 +218,7 @@ public partial class MainWindow
         if(dialog.ShowDialog(this)==true) {File.WriteAllText(dialog.FileName,DesignJson.Serialize(bundle));_assemblyStatus.Text="Exported exact revisions and transitive dependency hashes.";}
     }
     private string CaptureAssemblyRaw()=>JsonSerializer.Serialize(new AssemblyRecovery(_assemblyId,_assemblyBaseRevision,_workspaceDrafts[Workspace.AssemblyEditor].Name.Text,_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text,
-        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource,_assemblyMetadataSeed));
+        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource,_assemblyMetadataSeed,_assemblySlots.ToArray(),_assemblyExposures.ToArray()));
     private void ImportAssembly()
     {
         var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Suspension assembly (*.json)|*.json",InitialDirectory=App.RepositoryRoot};
@@ -231,6 +234,7 @@ public partial class MainWindow
             if(identity) {_assemblyId=raw.Id;_assemblyBaseRevision=raw.BaseRevision;}_workspaceDrafts[Workspace.AssemblyEditor].Name.Text=raw.Name;_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text=raw.Notes;
             _assemblyProvenanceSource=raw.Source;
             _assemblyMetadataSeed=raw.Metadata;
+            FillAssemblyGarageContracts(raw.Metadata,raw.Slots,raw.Exposures);
             _assemblyGrounds.Text=raw.Grounds;_assemblyExpectedDof.Text=raw.ExpectedDof;_assemblyInstances.Clear();foreach(var x in raw.Instances) _assemblyInstances.Add(x);_assemblyJoints.Clear();foreach(var x in raw.Joints) _assemblyJoints.Add(x);_assemblyPorts.Clear();foreach(var x in raw.Ports) _assemblyPorts.Add(x);
         }
         finally {_assemblyUpdating=false;}

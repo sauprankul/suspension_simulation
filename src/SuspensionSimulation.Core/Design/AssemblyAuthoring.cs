@@ -26,10 +26,14 @@ public static class AssemblyAuthoring
         string GroupedPath(string path)=>Inside(path)?instanceId+"/"+path:path;
         var childSeats=(parent.SpringSeats??[]).Where(s=>Inside(s.SpringPath)&&Inside(s.DamperPath)).ToImmutableArray();
         var parentSeats=(parent.SpringSeats??[]).Except(childSeats).Select(s=>new SpringSeatBinding(GroupedPath(s.SpringPath),GroupedPath(s.DamperPath))).ToImmutableArray();
-        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]) {SpringSeats=childSeats.IsEmpty?null:childSeats};
+        var childSlots=(parent.EquipmentSlots??[]).Where(s=>ids.Contains(s.InstanceId)).ToImmutableArray();
+        var childAdjustments=(parent.SetupAdjustments??[]).Where(s=>Inside(s.InstancePath)).ToImmutableArray();
+        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]) {SpringSeats=childSeats.IsEmpty?null:childSeats,EquipmentSlots=parent.EquipmentSlots is null?null:childSlots,SetupAdjustments=parent.SetupAdjustments is null?null:childAdjustments};
         var instances=parent.Instances.Where(x=>!ids.Contains(x.Id)).Append(new AssemblyInstance(instanceId,new(childIdentity.AssetId),IdentityPlacement)).ToImmutableArray();
         var grounded=parent.GroundedInstances.Select(path=>ids.Any(id=>path==id||path.StartsWith(id+"/",StringComparison.Ordinal))?instanceId+"/"+path:path).ToImmutableArray();
-        return new(parent with {Instances=instances,Joints=outsideJoints,Ports=parentPorts,GroundedInstances=grounded,SpringSeats=parentSeats.IsEmpty?null:parentSeats},child);
+        return new(parent with {Instances=instances,Joints=outsideJoints,Ports=parentPorts,GroundedInstances=grounded,SpringSeats=parentSeats.IsEmpty?null:parentSeats,
+            EquipmentSlots=parent.EquipmentSlots is {} slots?[..slots.Except(childSlots)]:null,SetupAdjustments=parent.SetupAdjustments is {} adjustments?[..adjustments.Except(childAdjustments)]:null,
+            Vehicle=parent.Vehicle is {} vehicle?vehicle with {Contacts=[..vehicle.Contacts.Select(c=>c with {InstancePath=GroupedPath(c.InstancePath)})]}:null},child);
     }
     public static AssemblyDefinition MirrorInstance(AssemblyDefinition assembly,string sourceId,string newId,MirrorPlane plane)
     {

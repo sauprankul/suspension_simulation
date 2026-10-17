@@ -21,14 +21,14 @@ public partial class MainWindow
 
     private FrameworkElement BuildGarage(FrameworkElement details)
     {
-        var test=Environment.GetCommandLineArgs().Contains("--garage-analysis-proof");
+        var test=Environment.GetCommandLineArgs().Any(x=>x.Contains("proof",StringComparison.Ordinal));
         _garage=new GarageLibrary(Path.Combine(App.RepositoryRoot,test?"artifacts/garage-analysis-proof/"+App.RunId:"library/garage"));
         _garageCatalog=new ReferenceGarageCatalog(Path.Combine(App.RepositoryRoot,"data/reference/stock-86-brz/reference-sheet.json"));
         _garageCatalog.Seed(_garage);
         var editor=(StackPanel)((ScrollViewer)details).Content;
-        ((TextBlock)editor.Children[2]).Text="Reference vehicle model · synthetic geometry / provisional equilibrium";
+        ((TextBlock)editor.Children[2]).Text="Saved physical setups · hardware-owned adjustments";
         ((TextBlock)editor.Children[3]).Text="Only saved Garage revisions are used by the visualizers.";
-        var equipment=new StackPanel {Margin=new Thickness(0,0,0,15)};
+        var equipment=new StackPanel {Margin=new Thickness(0,0,0,15),Visibility=Visibility.Collapsed};
         foreach(var role in new[]{"front-spring","rear-spring","front-bar","rear-bar"})
         {
             equipment.Children.Add(new TextBlock {Text=role.Replace('-',' ')});
@@ -36,6 +36,7 @@ public partial class MainWindow
             _garageEquipment.Add(role,picker);equipment.Children.Add(picker);
         }
         editor.Children.Insert(6,equipment);
+        InitializePhysicalGarage(editor);
         var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(300)});grid.ColumnDefinitions.Add(new());
         var left=new StackPanel {Margin=new Thickness(24)};left.Children.Add(new TextBlock {Text="Find a car"});left.Children.Add(_garageSearch);
         left.Children.Add(_garageArchived);left.Children.Add(_garageList);
@@ -51,7 +52,7 @@ public partial class MainWindow
         return grid;
     }
     private void CacheGarageDraft()
-    {if(_garageSelected is {} entry) {var fields=_workspaceDrafts[Workspace.Garage];_garageDrafts[entry.Id]=(fields.Name.Text,fields.Notes.Text);_garageEquipmentDrafts[entry.Id]=ReadGarageEquipment();}}
+    {if(_garageSelected is {} entry) {var fields=_workspaceDrafts[Workspace.Garage];_garageDrafts[entry.Id]=(fields.Name.Text,fields.Notes.Text);_garageEquipmentDrafts[entry.Id]=ReadGarageEquipment();CachePhysicalGarageDraft();}}
     private ReferenceGarageEquipment? ReadGarageEquipment()
     {
         string Id(string role)=>_garageEquipment[role].SelectedValue as string??"";
@@ -67,7 +68,8 @@ public partial class MainWindow
         var selected=_garageEquipmentDrafts.GetValueOrDefault(entry.Id,entry.ReferenceEquipment);
         _garageEquipment["front-spring"].SelectedValue=selected?.FrontSpringId;_garageEquipment["rear-spring"].SelectedValue=selected?.RearSpringId;
         _garageEquipment["front-bar"].SelectedValue=selected?.FrontBarId;_garageEquipment["rear-bar"].SelectedValue=selected?.RearBarId;
-        _garageStatus.Text=$"Saved revision {entry.Revision}. "+(entry.Archived?"Archived — recover with Restore.":entry.ReferenceEquipment is null?"Needs assembly — cannot run yet.":"Ready · reference model, provisional equilibrium.");
+        _garageStatus.Text=$"Saved revision {entry.Revision}. "+(entry.Archived?"Archived — recover with Restore.":entry.Configuration is null?"Needs physical assembly.":"Physical setup · estimated geometry; check equilibrium before analysis.");
+        FillPhysicalGarage(entry);
     }
     private void RefreshGarage(string? selectId=null)
     {
@@ -88,16 +90,17 @@ public partial class MainWindow
                 var entry=_garageSelected??throw new InvalidOperationException("Select a saved Garage entry first.");_= _garageCatalog!.Resolve(entry);
                 RefreshAnalysisChoices();_analysisA.SelectedValue=entry.Id;NavigateWorkspace(action=="Open 3D"?Workspace.Visualizer3D:Workspace.HeadToHead);return;
             }
-            if(action=="New") saved=_garage!.Save(new(Guid.NewGuid().ToString("N"),0,"New car","",false,null,_garageCatalog!.Stock(false)));
+            if(action=="New") saved=_garage!.Save(new(Guid.NewGuid().ToString("N"),0,"New car","",false,_physicalGarageCatalog!.Create("New car"),_garageCatalog!.Stock(false)));
             else
             {
                 var current=_garageSelected??throw new InvalidOperationException("Select an entry first.");
-                var draft=current with {Name=fields.Name.Text,Notes=fields.Notes.Text,ReferenceEquipment=ReadGarageEquipment()};
+                var draft=current with {Name=fields.Name.Text,Notes=fields.Notes.Text,ReferenceEquipment=ReadGarageEquipment(),Configuration=ReadPhysicalGarage(current)};
                 if(draft.ReferenceEquipment is not null) _=_garageCatalog!.Resolve(draft with {Archived=false});
                 saved=action switch {"Duplicate"=>_garage!.Duplicate(draft),"Archive"=>_garage!.Save(draft with {Archived=true}),
                     "Restore"=>_garage!.Save(draft with {Archived=false}),_=>_garage!.Save(draft)};
                 _garageDrafts.Remove(current.Id);
                 _garageEquipmentDrafts.Remove(current.Id);
+                _garagePhysicalDrafts.Remove(current.Id);
                 // Keep the newly saved values when refreshing the selected row.
                 if(action!="Duplicate") _garageSelected=saved;
             }

@@ -109,6 +109,6 @@ public static class TwinsInstalledCatalog
                     [new("FL","front/left/wheel","center"),new("FR","front/right/wheel","center"),new("RL","rear-left/wheel","center"),new("RR","rear-right/wheel","center")],
                     [new("front-left","Estimated front-left chassis datum",new(.9,.3,.15)),new("front-right","Estimated front-right chassis datum",new(.9,-.3,.15)),new("rear-left","Estimated rear-left chassis datum",new(-.9,.3,.15)),new("rear-right","Estimated rear-right chassis datum",new(-.9,-.3,.15))])});
         }
-        var setups=reference.RootElement.GetProperty("setups").EnumerateArray().ToArray();return new(Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-gr86-2022"),"gr86"),Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-brz-2022"),"brz"));
+        var setups=reference.RootElement.GetProperty("setups").EnumerateArray().ToArray();return TwinsGarageHardware.Configure(library,new(Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-gr86-2022"),"gr86"),Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-brz-2022"),"brz")));
     }
 }

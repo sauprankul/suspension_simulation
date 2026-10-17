@@ -17,6 +17,9 @@ public sealed record ResolvedAssemblyGraph(AssemblyDefinition Root,ImmutableArra
     public ImmutableArray<ResolvedElasticElement> ElasticElements {get;init;}=[];
     public ImmutableArray<ResolvedAdjustment> AppliedAdjustments {get;init;}=[];
     public ImmutableArray<SpringSeatBinding> SpringSeats {get;init;}=[];
+    public ImmutableArray<ResolvedEquipmentSlot> EquipmentSlots {get;init;}=[];
+    public ImmutableArray<ResolvedSetupAdjustment> SetupAdjustments {get;init;}=[];
+    public ImmutableArray<EquipmentSelection> SelectedEquipment {get;init;}=[];
 }
 public sealed record GraphResolution(ResolvedAssemblyGraph? Graph,bool IsStale,string? Conflict);
 public sealed record PortableDesignBundle(string SchemaVersion,AssetReference Root,ImmutableArray<ComponentDefinition> Components,
@@ -37,15 +40,19 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         catch(Exception error) when(error is ArgumentException or InvalidOperationException or IOException or System.Text.Json.JsonException)
         {return new(lastGood?.Root.Identity.AssetId==root.AssetId?lastGood:null,true,error.Message);}
     }
-    public ResolvedAssemblyGraph Compile(AssetReference root)=>Compile(root,null);
-    public ResolvedAssemblyGraph CompileDraft(AssemblyDefinition draft)=>Compile(new(draft.Identity.AssetId,draft.Identity.RevisionId),draft);
-    private ResolvedAssemblyGraph Compile(AssetReference root,AssemblyDefinition? draft)
+    public ResolvedAssemblyGraph Compile(AssetReference root)=>Compile(root,null,[]);
+    public ResolvedAssemblyGraph Compile(AssetReference root,IEnumerable<EquipmentSelection> equipment)=>Compile(root,null,equipment.ToArray());
+    public ResolvedAssemblyGraph CompileDraft(AssemblyDefinition draft)=>Compile(new(draft.Identity.AssetId,draft.Identity.RevisionId),draft,[]);
+    private ResolvedAssemblyGraph Compile(AssetReference root,AssemblyDefinition? draft,EquipmentSelection[] equipment)
     {
         var components=new Dictionary<string,ComponentDefinition>(StringComparer.Ordinal);var assemblies=new Dictionary<string,AssemblyDefinition>(StringComparer.Ordinal);
         var heads=new Dictionary<(Type,string),object>();
         var bodies=new List<ResolvedBody>();var joints=new List<ResolvedJoint>();var active=new HashSet<string>(StringComparer.Ordinal);
         var interfaces=new Dictionary<string,ResolvedPort>(StringComparer.Ordinal);
         var seatBindings=new List<SpringSeatBinding>();
+        if(equipment.GroupBy(x=>(x.InstancePath,x.SlotId)).Any(g=>g.Count()>1)) throw new ArgumentException("Duplicate equipment selection.");
+        var usedEquipment=new HashSet<EquipmentSelection>();var slots=new List<ResolvedEquipmentSlot>();
+        var exposures=new List<(string Path,SetupAdjustmentExposure Definition)>();
         static void Segment(string value) {if(string.IsNullOrWhiteSpace(value)||value.Contains('/')||value.Contains(':')||value.Contains('\0')) throw new ArgumentException("Instance and port IDs must be nonempty path segments without '/' or ':'.");}
         T Fetch<T>(AssetReference reference,Dictionary<string,T> cache,Func<string,string?,T?> load,Func<T,RevisionIdentity> identity) where T:class
         {
@@ -65,22 +72,41 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
             DesignValidation.Validate(a);
             string PathOf(string relative)=>path.Length==0?relative:path+"/"+relative;
             foreach(var binding in a.SpringSeats??[]) seatBindings.Add(new(PathOf(binding.SpringPath),PathOf(binding.DamperPath)));
+            foreach(var exposure in a.SetupAdjustments??[]) exposures.Add((PathOf(exposure.InstancePath),exposure));
             if(!active.Add(a.Identity.AssetId)) throw new InvalidOperationException("Assembly cycle at "+path+" ("+a.Identity.AssetId+").");
             var ports=new Dictionary<string,Dictionary<string,ResolvedPort>>(StringComparer.Ordinal);
             foreach(var instance in a.Instances)
             {
                 Segment(instance.Id);var childPath=path.Length==0?instance.Id:path+"/"+instance.Id;
+                var reference=instance.Definition;
+                if((a.EquipmentSlots??[]).SingleOrDefault(s=>s.InstanceId==instance.Id) is {} slot)
+                {
+                    var selection=equipment.SingleOrDefault(e=>e.InstancePath==childPath&&e.SlotId==slot.Id);
+                    if(selection is not null)
+                    {
+                        if(!slot.CompatibleAssetIds.Contains(selection.Component.AssetId)) throw new InvalidOperationException("Incompatible equipment at "+childPath+" ("+slot.Name+").");
+                        reference=selection.Component;usedEquipment.Add(selection);
+                    }
+                    slots.Add(new(childPath,slot,instance is ComponentInstance?AssetKind.Component:AssetKind.Assembly,instance.Definition,reference));
+                }
                 var transform=DesignTransform.From(instance.Placement).Then(parent);
                 if(instance is ComponentInstance)
                 {
-                    var c=Fetch(instance.Definition,components,library.LoadComponent,x=>x.Identity);ComponentAuthoring.ValidateForPublish(c);
+                    var c=Fetch(reference,components,library.LoadComponent,x=>x.Identity);ComponentAuthoring.ValidateForPublish(c);
+                    if(reference.AssetId!=instance.Definition.AssetId)
+                    {
+                        var original=library.LoadComponent(instance.Definition.AssetId,instance.Definition.RevisionId)??throw new InvalidOperationException("Missing slot default at "+childPath);
+                        if(c.Kind!=original.Kind) throw new InvalidOperationException("Equipment kind changed at "+childPath);
+                        foreach(var port in original.Ports)
+                        {var next=c.Ports.SingleOrDefault(p=>p.Id==port.Id);if(next is null||next.Role!=port.Role||port.SupportedJoints.Except(next.SupportedJoints).Any()) throw new InvalidOperationException("Equipment interface changed at "+childPath+":"+port.Id);}
+                    }
                     bodies.Add(new(childPath,c,transform));var mapped=new Dictionary<string,ResolvedPort>(StringComparer.Ordinal);
                     foreach(var port in c.Ports) {Segment(port.Id);mapped.Add(port.Id,new(childPath,port.Id,port.Role,port.SupportedJoints,transform.Frame(c.Frames.Single(x=>x.Id==port.FrameId).Frame)));}
                     ports.Add(instance.Id,mapped);
                 }
                 else
                 {
-                    var child=Fetch(instance.Definition,assemblies,library.LoadAssembly,x=>x.Identity);
+                    var child=Fetch(reference,assemblies,library.LoadAssembly,x=>x.Identity);
                     ports.Add(instance.Id,Walk(child,childPath,transform));
                 }
                 foreach(var port in ports[instance.Id]) interfaces.Add(childPath+":"+port.Key,port.Value);
@@ -103,6 +129,17 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var rootDefinition=draft??Fetch(root,assemblies,library.LoadAssembly,x=>x.Identity);
         assemblies[rootDefinition.Identity.AssetId]=rootDefinition;
         var exported=Walk(rootDefinition,"",DesignTransform.Identity);
+        if(usedEquipment.Count!=equipment.Length) throw new ArgumentException("Equipment selection does not match an exposed slot: "+equipment.First(e=>!usedEquipment.Contains(e)).InstancePath);
+        var setupAdjustments=new List<ResolvedSetupAdjustment>();
+        foreach(var exposure in exposures)
+        {
+            var body=bodies.SingleOrDefault(b=>b.Path==exposure.Path)??throw new InvalidOperationException("Adjustment exposure has no component at "+exposure.Path);
+            var definitions=body.Component.Adjustments??[];
+            if(exposure.Definition.AdjustmentIds is {} ids&&ids.Any(id=>!definitions.Any(a=>a.Id==id))) throw new InvalidOperationException("Exposed adjustment is missing at "+exposure.Path);
+            foreach(var adjustment in definitions.Where(a=>exposure.Definition.AdjustmentIds is not {} allowed||allowed.Contains(a.Id)))
+                setupAdjustments.Add(new(exposure.Path,exposure.Definition.Name,adjustment));
+        }
+        if(setupAdjustments.GroupBy(x=>(x.InstancePath,x.Definition.Id)).Any(g=>g.Count()>1)) throw new InvalidOperationException("Adjustment exposed more than once.");
         // Massless force-element ends follow their mates independently. They must never be welded into one rigid body.
         var elasticBodies=bodies.Where(b=>b.Component.Behavior is not null).ToDictionary(b=>b.Path,StringComparer.Ordinal);
         var consumed=new HashSet<string>(StringComparer.Ordinal);
@@ -152,7 +189,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var dependencies=components.Values.Select(c=>new ResolvedDependency(AssetKind.Component,c.Identity.AssetId,c.Identity.RevisionId,Sha(DesignJson.Serialize(c))))
             .Concat(assemblies.Values.Select(a=>new ResolvedDependency(AssetKind.Assembly,a.Identity.AssetId,a.Identity.RevisionId,Sha(DesignJson.Serialize(a)))))
             .OrderBy(x=>x.Kind).ThenBy(x=>x.AssetId,StringComparer.Ordinal).ToImmutableArray();
-        return new(rootDefinition,[..bodies],[..joints],mappedExports.ToImmutableDictionary(StringComparer.Ordinal),[..grounded.Order(StringComparer.Ordinal)],new(root.AssetId,dependencies),[..components.Values],[..assemblies.Values]) {Interfaces=interfaces.ToImmutableDictionary(StringComparer.Ordinal),ElasticElements=[..elements],SpringSeats=[..seatBindings]};
+        return new(rootDefinition,[..bodies],[..joints],mappedExports.ToImmutableDictionary(StringComparer.Ordinal),[..grounded.Order(StringComparer.Ordinal)],new(root.AssetId,dependencies),[..components.Values],[..assemblies.Values]) {Interfaces=interfaces.ToImmutableDictionary(StringComparer.Ordinal),ElasticElements=[..elements],SpringSeats=[..seatBindings],EquipmentSlots=[..slots],SetupAdjustments=[..setupAdjustments],SelectedEquipment=[..equipment]};
     }
     private static void CheckInterfaces(ResolvedAssemblyGraph old,ResolvedAssemblyGraph next)
     {
@@ -171,7 +208,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
     }
     public static PortableDesignBundle Export(ResolvedAssemblyGraph graph)
     {
-        if(graph.AppliedAdjustments.Length>0) throw new InvalidOperationException("Export the source assembly bundle and setup settings separately; runtime adjusted geometry is not source data.");
+        if(graph.AppliedAdjustments.Length>0||graph.SelectedEquipment.Length>0) throw new InvalidOperationException("Export the source assembly bundle and setup settings separately; runtime installed geometry is not source data.");
         if(graph.Root.Identity.RevisionId.Length!=64) throw new InvalidOperationException("Publish the root before exporting.");
         return new(DesignConventions.SchemaVersion,new(graph.Root.Identity.AssetId,graph.Root.Identity.RevisionId),graph.Components,graph.Assemblies,graph.Manifest);
     }

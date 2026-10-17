@@ -33,6 +33,7 @@ public sealed record ComponentCornerTangentWheelStiffness(
     string PerturbationConvention = "positive wheel-centre jounce; opposite wheel held fixed")
 {
     public double ParallelElementOnlyNPerM { get; init; }
+    public double HardStopOnlyNPerM { get; init; }
 }
 
 public sealed record ComponentAxleTangentWheelStiffness(

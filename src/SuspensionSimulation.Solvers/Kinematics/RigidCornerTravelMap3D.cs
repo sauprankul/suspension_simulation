@@ -8,7 +8,10 @@ public sealed record RigidCornerTravelMapSample3D(
     double SpringLengthM,
     Vector3 ArbLowerPointM,
     double ConstraintResidualM,
-    int SolverIterations);
+    int SolverIterations)
+{
+    public required RigidCornerPose3D Pose { get; init; }
+}
 
 public sealed record RigidCornerTravelMapEvaluation3D(
     string Corner,
@@ -30,6 +33,7 @@ public sealed record RigidCornerTravelMapEvaluation3D(
 public sealed class RigidCornerTravelMap3D
 {
     private readonly RigidCornerTravelMapSample3D[] _samples;
+    private readonly Func<double,RigidPoseState3D?,RigidCornerPose3D> _solve;
     public string Corner { get; }
     public string Topology { get; }
     public double MinimumJounceM => _samples[0].WheelJounceM;
@@ -38,12 +42,39 @@ public sealed class RigidCornerTravelMap3D
     public IReadOnlyList<RigidCornerTravelMapSample3D> Samples => _samples;
     public double MaximumConstraintResidualM { get; }
 
-    internal RigidCornerTravelMap3D(string corner, string topology, double stepM, IEnumerable<RigidCornerTravelMapSample3D> samples)
+    internal RigidCornerTravelMap3D(string corner, string topology, double stepM, IEnumerable<RigidCornerTravelMapSample3D> samples,
+        Func<double,RigidPoseState3D?,RigidCornerPose3D> solve)
     {
         Corner = corner; Topology = topology; StepM = stepM;
+        _solve=solve;
         _samples = samples.OrderBy(x => x.WheelJounceM).ToArray();
         if (_samples.Length < 5) throw new ArgumentException("A travel map requires at least five samples.", nameof(samples));
         MaximumConstraintResidualM = _samples.Max(x => x.ConstraintResidualM);
+    }
+
+    /// <summary>SLERP a seed on the traced branch, then bounded rigid-constraint correction.
+    /// Attachments are reconstructed by the mechanism, including rear lower-arm pickups.</summary>
+    public RigidCornerPose3D EvaluatePose(double jounceM)
+    {
+        if(!double.IsFinite(jounceM)||jounceM<MinimumJounceM||jounceM>MaximumJounceM)
+            throw new ArgumentOutOfRangeException(nameof(jounceM),$"{Corner}: outside validated rigid branch.");
+        var position=(jounceM-MinimumJounceM)/StepM;
+        var i=Math.Clamp((int)Math.Floor(position),0,_samples.Length-2);
+        var a=_samples[i].Pose;var b=_samples[i+1].Pose;
+        var t=(float)Math.Clamp((jounceM-a.WheelJounceM)/(b.WheelJounceM-a.WheelJounceM),0,1);
+        if(t<1e-7) return a;if(t>1-1e-7) return b;
+        var rotation=Quaternion.Slerp(InspectionSceneBuilder.Rotation(a.UprightPose.RotationVectorRad),InspectionSceneBuilder.Rotation(b.UprightPose.RotationVectorRad),t);
+        if(rotation.W<0) rotation=new(-rotation.X,-rotation.Y,-rotation.Z,-rotation.W);
+        var angle=2*MathF.Acos(Math.Clamp(rotation.W,-1,1));
+        var axis=new Vector3(rotation.X,rotation.Y,rotation.Z);
+        var vector=axis.Length()<1e-9f?Vector3.Zero:Vector3.Normalize(axis)*angle;
+        var seed=new RigidPoseState3D(Vector3.Lerp(a.UprightPose.TranslationM,b.UprightPose.TranslationM,t),vector);
+        var corrected=_solve(jounceM,seed);
+        if(!corrected.Converged||corrected.MaximumConstraintResidualM>1e-4 ||
+            Vector3.Distance(corrected.UprightPose.TranslationM,seed.TranslationM)>.002 ||
+            Vector3.Distance(corrected.UprightPose.RotationVectorRad,seed.RotationVectorRad)>.02)
+            throw new InvalidOperationException($"{Corner}: bounded pose correction failed at {jounceM*1000:0.000} mm.");
+        return corrected;
     }
 
     public RigidCornerTravelMapEvaluation3D Evaluate(double jounceM)
@@ -130,7 +161,7 @@ public sealed class RigidCornerTravelMapBuilder3D
         var reference=solve(0,null); Require(reference,corner,0);
         var negative=Trace(reference,minimum,-step,solve); var positive=Trace(reference,maximum,step,solve);
         var samples=negative.AsEnumerable().Reverse().Concat([Sample(reference)]).Concat(positive).ToArray();
-        return new(corner,topology,step,samples);
+        return new(corner,topology,step,samples,solve);
     }
 
     private static List<RigidCornerTravelMapSample3D> Trace(RigidCornerPose3D reference,double limit,double signedStep,
@@ -169,5 +200,5 @@ public sealed class RigidCornerTravelMapBuilder3D
 
     private static bool Usable(RigidCornerPose3D pose) => pose.Converged && pose.MaximumConstraintResidualM<1e-4;
     private static void Require(RigidCornerPose3D pose,string corner,double jounce) { if(!Usable(pose)) throw new InvalidOperationException($"{corner} reference solve failed at {jounce:G4} m."); }
-    private static RigidCornerTravelMapSample3D Sample(RigidCornerPose3D pose) => new(pose.WheelJounceM,pose.SpringLengthM,pose.SolvedPoints["arbLinkLower"],pose.MaximumConstraintResidualM,pose.Iterations);
+    private static RigidCornerTravelMapSample3D Sample(RigidCornerPose3D pose) => new(pose.WheelJounceM,pose.SpringLengthM,pose.SolvedPoints["arbLinkLower"],pose.MaximumConstraintResidualM,pose.Iterations) {Pose=pose};
 }

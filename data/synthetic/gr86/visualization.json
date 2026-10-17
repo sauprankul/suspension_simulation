@@ -1,0 +1,7 @@
+{
+  "schema": "suspension-inspection-visual-estimates/v1",
+  "tireRadiusM": 0.310,
+  "tireWidthM": 0.215,
+  "provenance": "estimated",
+  "note": "Configurable visual estimates only: circular rigid tire, static wheel axle +Y. Bearings are schematic axis-end supports. No measured rear damper mounts."
+}

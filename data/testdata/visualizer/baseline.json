@@ -1,0 +1,1577 @@
+{
+  "schema": "visualizer-numerical-baseline/v1",
+  "frontUnsprungKg": 35,
+  "rearUnsprungKg": 38,
+  "a": {
+    "Name": "2022 GR86 stock",
+    "FrontSpringNPerM": 28420,
+    "RearSpringNPerM": 39200,
+    "FrontArbOutsideDiameterM": 0.018,
+    "FrontArbInsideDiameterM": 0,
+    "RearArbOutsideDiameterM": 0.015,
+    "RearArbInsideDiameterM": 0
+  },
+  "b": {
+    "Name": "2022 BRZ stock",
+    "FrontSpringNPerM": 28420,
+    "RearSpringNPerM": 39200,
+    "FrontArbOutsideDiameterM": 0.0183,
+    "FrontArbInsideDiameterM": 0.0086,
+    "RearArbOutsideDiameterM": 0.014,
+    "RearArbInsideDiameterM": 0
+  },
+  "frontRightReboundThresholdLateralG": {
+    "a": -1.0279393045893812,
+    "b": -1.0551456649009197
+  },
+  "limits": [
+    {
+      "Corner": "FL",
+      "SourceId": "front-damper-stroke",
+      "MinimumJounceM": -0.0921714093315957,
+      "MaximumJounceM": 0.05154180990857811,
+      "ReboundComponentTravelM": 0.085,
+      "CompressionComponentTravelM": 0.05,
+      "HardStopRateNPerM": 10000000,
+      "Provenance": "Estimated: Editable ZD8/ZN8-twin proxy. Owner teardown measured about 135 mm effective OEM front damper stroke and estimated about 50 mm remaining bump stroke at 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6769428/note.aspx); Toyota independently confirms the GR86 front strut contains a rebound spring (https://pressroom.toyota.com/toyota-announces-pricing-on-all-new-2022-gr86/). Not an OEM dimension."
+    },
+    {
+      "Corner": "FR",
+      "SourceId": "front-damper-stroke",
+      "MinimumJounceM": -0.09217181681762066,
+      "MaximumJounceM": 0.051543714575410945,
+      "ReboundComponentTravelM": 0.085,
+      "CompressionComponentTravelM": 0.05,
+      "HardStopRateNPerM": 10000000,
+      "Provenance": "Estimated: Editable ZD8/ZN8-twin proxy. Owner teardown measured about 135 mm effective OEM front damper stroke and estimated about 50 mm remaining bump stroke at 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6769428/note.aspx); Toyota independently confirms the GR86 front strut contains a rebound spring (https://pressroom.toyota.com/toyota-announces-pricing-on-all-new-2022-gr86/). Not an OEM dimension."
+    },
+    {
+      "Corner": "RL",
+      "SourceId": "rear-damper-stroke",
+      "MinimumJounceM": -0.08034567377429958,
+      "MaximumJounceM": 0.07849837369293397,
+      "ReboundComponentTravelM": 0.062,
+      "CompressionComponentTravelM": 0.062,
+      "HardStopRateNPerM": 10000000,
+      "Provenance": "Estimated: Editable ZD8/ZN8-twin proxy. Owner teardown measured about 124 mm OEM rear damper stroke and about 80 mm wheel droop from 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6768203/note.aspx); the 62/62 mm component split is a provisional centered approximation using the 0.78 static installation ratio. Not an OEM dimension."
+    },
+    {
+      "Corner": "RR",
+      "SourceId": "rear-damper-stroke",
+      "MinimumJounceM": -0.08034508590389958,
+      "MaximumJounceM": 0.07849858246398114,
+      "ReboundComponentTravelM": 0.062,
+      "CompressionComponentTravelM": 0.062,
+      "HardStopRateNPerM": 10000000,
+      "Provenance": "Estimated: Editable ZD8/ZN8-twin proxy. Owner teardown measured about 124 mm OEM rear damper stroke and about 80 mm wheel droop from 1G (https://minkara.carview.co.jp/userid/2303134/car/3203507/6768203/note.aspx); the 62/62 mm component split is a provisional centered approximation using the 0.78 static installation ratio. Not an OEM dimension."
+    }
+  ],
+  "cases": [
+    {
+      "load": {
+        "Name": "zero",
+        "LongitudinalG": 0,
+        "LateralG": 0,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": 0,
+        "RollRad": 0,
+        "PitchRad": 0,
+        "RollStiffnessDistributionFront": 0.63963313915427,
+        "RollCoupleBiasPercentagePoints": 8.963306565426999,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3669.785723184254,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3669.785723184254,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3002.551063665746,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3002.551063665746,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30316.068851866185,
+            "ArbNmPerRad": 33867.05229221501,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 64183.1211440812,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28576.57469582693,
+            "ArbNmPerRad": 7583.949939522304,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36160.52463534923,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": 0,
+        "RollRad": 0,
+        "PitchRad": 0,
+        "RollStiffnessDistributionFront": 0.653443609114252,
+        "RollCoupleBiasPercentagePoints": 10.344353561425201,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3669.785723184254,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3669.785723184254,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3002.551063665746,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0,
+            "NormalLoadN": 3002.551063665746,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30316.068851866185,
+            "ArbNmPerRad": 34417.18880450145,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 64733.257656367634,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28576.57469582693,
+            "ArbNmPerRad": 5754.963375342002,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34331.538071168936,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "acceleration",
+        "LongitudinalG": 0.5,
+        "LateralG": 0,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.0022387501546783923,
+        "RollRad": 2.693880976909255E-05,
+        "PitchRad": -0.017479650929623218,
+        "RollStiffnessDistributionFront": 0.6171949404605883,
+        "RollCoupleBiasPercentagePoints": 6.71948669605883,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": -0.022136624514390732,
+            "NormalLoadN": 3115.44453331153,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.022095329474119497,
+            "NormalLoadN": 3115.820646865936,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.022883043258117144,
+            "NormalLoadN": 3556.8902532959964,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0.022924782249973377,
+            "NormalLoadN": 3556.5181402265375,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 29439.444273482484,
+            "ArbNmPerRad": 28897.489014352712,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 58336.9332878352,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 29041.417128560417,
+            "ArbNmPerRad": 7141.11088103603,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36182.52800959645,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.0022387492085943644,
+        "RollRad": 2.729923519000874E-05,
+        "PitchRad": -0.017479650062915884,
+        "RollStiffnessDistributionFront": 0.6305182325872879,
+        "RollCoupleBiasPercentagePoints": 8.051815908728788,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": -0.022136898834386583,
+            "NormalLoadN": 3115.4402920059674,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.022095051290779117,
+            "NormalLoadN": 3115.8248881714985,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.02288276373595908,
+            "NormalLoadN": 3556.8944494894413,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0.02292506117096248,
+            "NormalLoadN": 3556.513944033093,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 29439.444273482484,
+            "ArbNmPerRad": 29366.899923900513,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 58806.344197383,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 29041.417128560417,
+            "ArbNmPerRad": 5418.921789745783,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34460.3389183062,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "braking",
+        "LongitudinalG": -0.5,
+        "LateralG": 0,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": 0.001246586214431043,
+        "RollRad": -8.53577689566415E-06,
+        "PitchRad": 0.017272785622232296,
+        "RollStiffnessDistributionFront": 0.652964679857541,
+        "RollCoupleBiasPercentagePoints": 10.296460635754102,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.02089511563983067,
+            "NormalLoadN": 4223.206406037472,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0.020882030976711766,
+            "NormalLoadN": 4224.671306522077,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": -0.023591909762564322,
+            "NormalLoadN": 2449.1225901968096,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.023605135095286462,
+            "NormalLoadN": 2447.67327094364,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 31169.517682408285,
+            "ArbNmPerRad": 36986.73276812324,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 68156.25045053153,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28186.55201067093,
+            "ArbNmPerRad": 8036.886904846186,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36223.438915517116,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": 0.0012465864621118603,
+        "RollRad": -8.965130307968314E-06,
+        "PitchRad": 0.01727278590792707,
+        "RollStiffnessDistributionFront": 0.6672703794773714,
+        "RollCoupleBiasPercentagePoints": 11.727030597737143,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.020895445294609644,
+            "NormalLoadN": 4223.224079325615,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0.020881702467057953,
+            "NormalLoadN": 4224.653633233936,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": -0.023591577305737257,
+            "NormalLoadN": 2449.105104888394,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.023605467878636426,
+            "NormalLoadN": 2447.6907562520555,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 31169.517682408285,
+            "ArbNmPerRad": 37587.54538063995,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 68757.06306304823,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28186.55201067093,
+            "ArbNmPerRad": 6098.667601710047,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34285.21961238098,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "left",
+        "LongitudinalG": 0,
+        "LateralG": 0.5,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.0011959652506572588,
+        "RollRad": 0.028822688797572972,
+        "PitchRad": -0.0009576406222025017,
+        "RollStiffnessDistributionFront": 0.6362787813172126,
+        "RollCoupleBiasPercentagePoints": 8.627870781721258,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": -0.02437639758641965,
+            "NormalLoadN": 2487.161753103207,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0.019806478525155914,
+            "NormalLoadN": 4852.409693265301,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": -0.022147435661191775,
+            "NormalLoadN": 2330.2641456753227,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0.02251043836176779,
+            "NormalLoadN": 3674.8379816561687,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30330.2400799385,
+            "ArbNmPerRad": 32894.230953533486,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 63224.471033471986,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28589.318971500317,
+            "ArbNmPerRad": 7552.200013720211,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36141.51898522053,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.0022873702664027713,
+        "RollRad": 0.029405227906452884,
+        "PitchRad": -0.0015488879423148712,
+        "RollStiffnessDistributionFront": 0.6479107197255911,
+        "RollCoupleBiasPercentagePoints": 9.791064622559109,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": -0.026586640595973262,
+            "NormalLoadN": 2469.8994777385883,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": 0.018489221366386494,
+            "NormalLoadN": 4869.67196862992,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": -0.022839685845213946,
+            "NormalLoadN": 2347.342812999404,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": 0.022720774273044156,
+            "NormalLoadN": 3657.759314332088,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30320.869170409773,
+            "ArbNmPerRad": 33209.76467599454,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 63530.633846404315,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28583.1517118326,
+            "ArbNmPerRad": 5940.8258445677275,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34523.97755640033,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "right",
+        "LongitudinalG": 0,
+        "LateralG": -0.5,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.001592390595651946,
+        "RollRad": -0.0290308312831899,
+        "PitchRad": -0.0011962286234337698,
+        "RollStiffnessDistributionFront": 0.633832692967728,
+        "RollCoupleBiasPercentagePoints": 8.383261946772802,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.019298272423850123,
+            "NormalLoadN": 4846.426271136669,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.02520366946677734,
+            "NormalLoadN": 2493.145175231839,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.02261844506699469,
+            "NormalLoadN": 3680.7577618610376,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.022361924923179746,
+            "NormalLoadN": 2324.3443654704542,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30297.51727431812,
+            "ArbNmPerRad": 32359.886581374234,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 62657.403855692355,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28576.6527707744,
+            "ArbNmPerRad": 7620.742993158726,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36197.39576393313,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.0024348635807162435,
+        "RollRad": -0.029731499075090054,
+        "PitchRad": -0.001596154855541727,
+        "RollStiffnessDistributionFront": 0.64571332326968,
+        "RollCoupleBiasPercentagePoints": 9.571324976967999,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.018538051627797432,
+            "NormalLoadN": 4865.178734200322,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.027037957934389616,
+            "NormalLoadN": 2474.3927121681863,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.022894031779915225,
+            "NormalLoadN": 3662.2047570336617,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.023171952887029307,
+            "NormalLoadN": 2342.89737029783,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30359.724695551806,
+            "ArbNmPerRad": 32296.011665975195,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 62655.736361527,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28561.875462931315,
+            "ArbNmPerRad": 5815.752833806662,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34377.62829673798,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "combined",
+        "LongitudinalG": 0.3,
+        "LateralG": -0.6,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.005968790462887012,
+        "RollRad": -0.03916401962255497,
+        "PitchRad": -0.014015385954640488,
+        "RollStiffnessDistributionFront": 0.6163682206421298,
+        "RollCoupleBiasPercentagePoints": 6.63681471421298,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.008111074012727662,
+            "NormalLoadN": 4657.847692417947,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.051924234947079304,
+            "NormalLoadN": 2016.7399942359361,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.044531252983751365,
+            "NormalLoadN": 4239.333467592129,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.016149479019435302,
+            "NormalLoadN": 2430.7524194539883,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 29753.00396690648,
+            "ArbNmPerRad": 27903.109943364365,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 57656.11391027084,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28882.392488342466,
+            "ArbNmPerRad": 7003.165575008155,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 35885.55806335062,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.007522407921923356,
+        "RollRad": -0.04050300790498169,
+        "PitchRad": -0.01463777143781579,
+        "RollStiffnessDistributionFront": 0.6245038038459552,
+        "RollCoupleBiasPercentagePoints": 7.450373034595515,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.00687598325138257,
+            "NormalLoadN": 4657.837106393939,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.05521188762632196,
+            "NormalLoadN": 2016.750580259943,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.044910186640900455,
+            "NormalLoadN": 4239.34394101921,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.017845173807078184,
+            "NormalLoadN": 2430.741946026907,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 29765.204606295923,
+            "ArbNmPerRad": 27615.21336564577,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 57380.41797194169,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28874.371596763973,
+            "ArbNmPerRad": 5626.825272659792,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34501.196869423766,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "reported-top-out",
+        "LongitudinalG": 0.07733333333333318,
+        "LateralG": -1.1304347826086956,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.016184000003240467,
+        "RollRad": -0.07675930142989323,
+        "PitchRad": -0.015137621096021183,
+        "RollStiffnessDistributionFront": 0.9937674124087447,
+        "RollCoupleBiasPercentagePoints": 44.37673389087446,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.025434978952236724,
+            "NormalLoadN": 5938.017990295771,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09223088939567521,
+            "NormalLoadN": 1230.135420235369,
+            "ParallelElementForceN": -590.725780545559,
+            "ActiveParallelElements": [
+              "front-damper-stroke-FR"
+            ]
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.06505532698608736,
+            "NormalLoadN": 4924.628673200165,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.053875534649389226,
+            "NormalLoadN": 1251.8914899688746,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30240.941042908533,
+            "ArbNmPerRad": 21420.716908067458,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 5874609.316000001,
+            "TotalNmPerRad": 5926270.9739509765,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28775.399908401312,
+            "ArbNmPerRad": 8392.253682830804,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 37167.65359123211,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.016270314499265758,
+        "RollRad": -0.07809854055077499,
+        "PitchRad": -0.014168535259663837,
+        "RollStiffnessDistributionFront": 0.9941729913537813,
+        "RollCoupleBiasPercentagePoints": 44.41729178537813,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.02747714703636766,
+            "NormalLoadN": 6025.6161127568175,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09224166774472634,
+            "NormalLoadN": 1142.537297774134,
+            "ParallelElementForceN": -698.5092710568019,
+            "ActiveParallelElements": [
+              "front-damper-stroke-FR"
+            ]
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.06461259168388585,
+            "NormalLoadN": 4837.9622772514185,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.056393287045484936,
+            "NormalLoadN": 1338.5578859176208,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30257.73780682261,
+            "ArbNmPerRad": 20781.7627274557,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 5874609.316000001,
+            "TotalNmPerRad": 5925648.816534279,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28777.684778600844,
+            "ArbNmPerRad": 5953.501029798909,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34731.18580839975,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "a-before-top-out",
+        "LongitudinalG": 0.07733333333333318,
+        "LateralG": -1.0279293045893811,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.014127396687951346,
+        "RollRad": -0.06789516092220416,
+        "PitchRad": -0.012048957959790439,
+        "RollStiffnessDistributionFront": 0.6113393643528642,
+        "RollCoupleBiasPercentagePoints": 6.133929085286416,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.024209889142890892,
+            "NormalLoadN": 5793.876924755652,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.07986796093797431,
+            "NormalLoadN": 1374.276485775309,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.05580215943180772,
+            "NormalLoadN": 4689.538344201062,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.04939460290105541,
+            "NormalLoadN": 1486.9818189679777,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30256.056752308872,
+            "ArbNmPerRad": 27204.585342865583,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 57460.64209517445,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28735.395034016015,
+            "ArbNmPerRad": 7795.361831351943,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36530.756865367955,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.017962531718864246,
+        "RollRad": -0.07292421593628824,
+        "PitchRad": -0.014569759682256678,
+        "RollStiffnessDistributionFront": 0.613486862773859,
+        "RollCoupleBiasPercentagePoints": 6.3486789273858975,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.021362759070714544,
+            "NormalLoadN": 5758.446766965677,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09042423002234043,
+            "NormalLoadN": 1409.7066435652828,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.05948894485726257,
+            "NormalLoadN": 4724.591653533324,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.05349983531442244,
+            "NormalLoadN": 1451.9285096357155,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30290.22122087443,
+            "ArbNmPerRad": 24869.22297066457,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 55159.444191539005,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28760.33702628074,
+            "ArbNmPerRad": 5991.588590716254,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34751.925616996996,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "a-after-top-out",
+        "LongitudinalG": 0.07733333333333318,
+        "LateralG": -1.0279493045893813,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.01624650579576063,
+        "RollRad": -0.07041280456881348,
+        "PitchRad": -0.013440684342801703,
+        "RollStiffnessDistributionFront": 0.6077833044938732,
+        "RollCoupleBiasPercentagePoints": 5.7783230993873165,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.022437832277149725,
+            "NormalLoadN": 5754.728676846045,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.08549936410247584,
+            "NormalLoadN": 1413.4247336849153,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.05763532275274309,
+            "NormalLoadN": 4728.343889933005,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.051462276646176516,
+            "NormalLoadN": 1448.1762732360335,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30256.20195320146,
+            "ArbNmPerRad": 25644.82965960329,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 55901.03161280475,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28735.416913772344,
+            "ArbNmPerRad": 7338.818315206087,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36074.23522897843,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.0182382085703398,
+        "RollRad": -0.07315003427627466,
+        "PitchRad": -0.014807880672145066,
+        "RollStiffnessDistributionFront": 0.6152074262673041,
+        "RollCoupleBiasPercentagePoints": 6.520735276730405,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.02098938036667635,
+            "NormalLoadN": 5758.940899031978,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09114377017611061,
+            "NormalLoadN": 1409.2125114989822,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.05973072179306281,
+            "NormalLoadN": 4724.17647052339,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.05360794131459716,
+            "NormalLoadN": 1452.3436926456495,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30290.159237658758,
+            "ArbNmPerRad": 25087.709745712633,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 55377.86898337139,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28760.361730401335,
+            "ArbNmPerRad": 5876.724598730314,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34637.08632913165,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "b-before-top-out",
+        "LongitudinalG": 0.07733333333333318,
+        "LateralG": -1.0551356649009196,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.017831625328179553,
+        "RollRad": -0.07394876307912955,
+        "PitchRad": -0.015534024741897188,
+        "RollStiffnessDistributionFront": 0.9940271529683333,
+        "RollCoupleBiasPercentagePoints": 44.40270794683333,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.021182412513862495,
+            "NormalLoadN": 5796.184754014609,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09217512538539678,
+            "NormalLoadN": 1371.9686563709902,
+            "ParallelElementForceN": -33.08567776125204,
+            "ActiveParallelElements": [
+              "front-damper-stroke-FR"
+            ]
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.06180056308587525,
+            "NormalLoadN": 4787.501361323319,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.05277565042892809,
+            "NormalLoadN": 1389.0188018491096,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30205.718741684974,
+            "ArbNmPerRad": 25988.362924018973,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 5874609.316000001,
+            "TotalNmPerRad": 5930803.397665705,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28755.831825666755,
+            "ArbNmPerRad": 6880.801804878078,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 35636.633630544835,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.017404153697032312,
+        "RollRad": -0.0759707996650661,
+        "PitchRad": -0.014565144796324151,
+        "RollStiffnessDistributionFront": 0.9942491269682233,
+        "RollCoupleBiasPercentagePoints": 44.42490534682233,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.024261469538678526,
+            "NormalLoadN": 5814.941156506513,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.0921956886838946,
+            "NormalLoadN": 1353.212254024515,
+            "ParallelElementForceN": -238.71866273950104,
+            "ActiveParallelElements": [
+              "front-damper-stroke-FR"
+            ]
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.0624008732595393,
+            "NormalLoadN": 4768.944458962461,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.05530828374151412,
+            "NormalLoadN": 1407.5757042065784,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30208.524982605784,
+            "ArbNmPerRad": 20988.55031188858,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 5874609.316000001,
+            "TotalNmPerRad": 5925806.391294495,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28747.46203673916,
+            "ArbNmPerRad": 5528.213186775205,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34275.675223514365,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "load": {
+        "Name": "b-after-top-out",
+        "LongitudinalG": 0.07733333333333318,
+        "LateralG": -1.0551556649009197,
+        "VerticalG": 0
+      },
+      "a": {
+        "HeaveCompressionM": -0.017114142320364942,
+        "RollRad": -0.07379459966168307,
+        "PitchRad": -0.014918367088637544,
+        "RollStiffnessDistributionFront": 0.5933952743458836,
+        "RollCoupleBiasPercentagePoints": 4.339520084588355,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.022481839045148205,
+            "NormalLoadN": 5746.31061479818,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09063937866823901,
+            "NormalLoadN": 1421.8427957327813,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.06151305608517178,
+            "NormalLoadN": 4836.918713749488,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.052824296630639984,
+            "NormalLoadN": 1339.6014494195513,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30205.639551140517,
+            "ArbNmPerRad": 23423.453126290584,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 53629.0926774311,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28755.772786606074,
+            "ArbNmPerRad": 7991.810920094735,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 36747.58370670081,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      },
+      "b": {
+        "HeaveCompressionM": -0.017803782234666,
+        "RollRad": -0.07480342959485069,
+        "PitchRad": -0.01499708260882592,
+        "RollStiffnessDistributionFront": 0.9941483014208156,
+        "RollCoupleBiasPercentagePoints": 44.41482279208155,
+        "Converged": true,
+        "corners": [
+          {
+            "Corner": "FL",
+            "RelativeCompressionM": 0.022475914478818578,
+            "NormalLoadN": 5811.414757069805,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "FR",
+            "RelativeCompressionM": -0.09219175881571995,
+            "NormalLoadN": 1356.7386534610005,
+            "ParallelElementForceN": -199.419980992932,
+            "ActiveParallelElements": [
+              "front-damper-stroke-FR"
+            ]
+          },
+          {
+            "Corner": "RL",
+            "RelativeCompressionM": 0.06171818082266784,
+            "NormalLoadN": 4772.507043573276,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          },
+          {
+            "Corner": "RR",
+            "RelativeCompressionM": -0.054182252991593835,
+            "NormalLoadN": 1404.0131195957624,
+            "ParallelElementForceN": 0,
+            "ActiveParallelElements": []
+          }
+        ],
+        "stiffness": [
+          {
+            "Axle": "front",
+            "SpringNmPerRad": 30208.622095229235,
+            "ArbNmPerRad": 23341.914272976945,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 5874609.316000001,
+            "TotalNmPerRad": 5928159.852368207,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          },
+          {
+            "Axle": "rear",
+            "SpringNmPerRad": 28747.491646406852,
+            "ArbNmPerRad": 6146.502072339961,
+            "BumpStopNmPerRad": 0,
+            "ParallelElementNmPerRad": 0,
+            "TotalNmPerRad": 34893.99371874682,
+            "OperatingPoint": "current quasi-static equilibrium tangent",
+            "Warnings": [
+              "ARB is a coupled two-wheel Hessian; its contribution is not the sum of per-corner self terms."
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

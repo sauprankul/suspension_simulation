@@ -13,8 +13,17 @@ using SuspensionSimulation.Reference;
 using System.Numerics;
 using SuspensionSimulation.Core.Kinematics;
 
+if (args.Contains("--write-viz-baseline"))
+{
+    SuspensionSimulation.Tests.VisualizerBaseline.Write();
+    return;
+}
+if(args.Contains("--write-viz-limit-cases")) {SuspensionSimulation.Tests.VisualizerLimitCases.Write();return;}
+
 var failures = new List<string>();
 var totalChecks = 0;
+Run("rigid travel stops enforce exact bounds and unilateral reactions, arrest loading and release on unloading",()=>SuspensionSimulation.Tests.HardStopChecks.Analytic(SymmetricPackage()));
+Run("spring stroke markers preserve mount points and meet the upper mount exactly at bottom-out",SuspensionSimulation.Tests.HardStopChecks.Strokes);
 Run("committed synthetic analytic fixture catalogue validates", () => SuspensionSimulation.Tests.TestdataFixtureHarness.Verify());
 Run("ideal ARB rejects equal heave", () =>
 {
@@ -695,7 +704,7 @@ Run("GR86 physical travel limits come from component stroke intersected with geo
         var rebound=map.Evaluate(limit.MinimumJounceM); var bump=map.Evaluate(limit.MaximumJounceM); var reference=map.Evaluate(0);
         Equal(limit.ReboundComponentTravelM, rebound.SpringLengthM-reference.SpringLengthM, 1e-8);
         Equal(limit.CompressionComponentTravelM, reference.SpringLengthM-bump.SpringLengthM, 1e-8);
-        if(limit.HardStopRateNPerM<1_000_000) throw new Exception($"{corner} hard-stop penalty is not decisively higher than the road spring.");
+        Equal(limit.MinimumJounceM,limit.Constraint.MinimumJounceM,0);Equal(limit.MaximumJounceM,limit.Constraint.MaximumJounceM,0);
     }
 });
 
@@ -712,8 +721,9 @@ Run("geometry-derived top and bottom stops keep the stock comparison solvable ar
         foreach(var side in new[]{result.A,result.B}) foreach(var corner in side.State.Corners)
         {
             var limit=solver.PhysicalTravelLimits[corner.Corner];
-            if(corner.RelativeCompressionM<limit.MinimumJounceM-.002 || corner.RelativeCompressionM>limit.MaximumJounceM+.002)
-                throw new Exception($"{degree} deg {side.Input.Name} {corner.Corner} penetrated its high-rate travel stop by more than 2 mm ({corner.RelativeCompressionM:G6} m). ");
+            if(corner.RelativeCompressionM<limit.MinimumJounceM-1e-10 || corner.RelativeCompressionM>limit.MaximumJounceM+1e-10)
+                throw new Exception($"{degree} deg {side.Input.Name} {corner.Corner} penetrated its rigid travel stop ({corner.RelativeCompressionM:G6} m). ");
+            if(!side.State.Converged || Math.Abs(side.State.VerticalResidualN)>1e-6 || Math.Abs(side.State.RollResidualNm)>1e-6 || Math.Abs(side.State.PitchResidualNm)>1e-6) throw new Exception("Rigid equilibrium did not close.");
         }
     }
 });
@@ -792,6 +802,55 @@ Run("3D ARB tangent responds to solved endlink geometry and hollow tube ID", () 
         throw new Exception("Changing fixed-link geometry must change the derived wheel tangent.");
 });
 
+Run("historical free-travel visualizer cases retain their numerical baseline", SuspensionSimulation.Tests.VisualizerBaseline.Verify);
+Run("full branch poses reconstruct rigid off-grid arms and repeat forward/reverse", SuspensionSimulation.Tests.InspectionChecks.Branches);
+Run("accepted snapshots preserve A/B metrics final travel endlinks and FR top-out identity", SuspensionSimulation.Tests.InspectionChecks.Snapshots);
+Run("inspection brackets bump engagement and rejects invalid tubes springs pre-lift and non-convergence", SuspensionSimulation.Tests.InspectionChecks.FailureAndBumpCases);
+Run("rack steering preserves rigid constraints through lock and bump; rack height changes bump steer", SuspensionSimulation.Tests.SteeringChecks.Constraints);
+Run("static alignment and live axle toe thrust use actual constrained wheel orientations", SuspensionSimulation.Tests.SteeringChecks.AlignmentAndSnapshots);
+Run("cube orbit and viewing-axis roll preserve target distance and camera frame", SuspensionSimulation.Tests.SteeringChecks.Camera);
+Run("verified limit fixture pairs switch actual active state in accepted scenes", SuspensionSimulation.Tests.VisualizerLimitCases.Verify);
+Run("reference inspection includes four corners both bars and explicit unsupported topology", () =>
+{
+    var builder=new InspectionSceneBuilder("data/synthetic/gr86");var scene=builder.BuildReference(.5);
+    if(scene.Wheels.Length!=4 || scene.Segments.Count(x=>x.Id.EndsWith(".axis"))!=2) throw new Exception("Missing wheels or bars.");
+    if(scene.Segments.Select(x=>x.Id).Distinct().Count()!=scene.Segments.Length) throw new Exception("Component IDs must be stable and unique.");
+    foreach(var id in new[]{"FL","FR","RL","RR"})
+    {
+        if(!scene.Segments.Any(x=>x.Id==id+".spring") || !scene.Segments.Any(x=>x.Id==id+".endlink")) throw new Exception("Missing spring or endlink.");
+        var wheel=scene.Wheels.Single(x=>x.Corner==id);
+        var axle=Vector3.Transform(Vector3.UnitY,wheel.Orientation);
+        Equal(wheel.CenterM.Z-wheel.RadiusM*Math.Sqrt(1-axle.Z*axle.Z)-wheel.WidthM*.5*Math.Abs(axle.Z),wheel.GroundGapM,1e-7);
+        if(Math.Sign(wheel.CenterM.Y)!=(id.EndsWith("L")?1:-1)) throw new Exception("Wrong corner placement.");
+    }
+    if(scene.Segments.Any(x=>x.Corner.StartsWith("R")&&x.Label.Contains("strut",StringComparison.OrdinalIgnoreCase))) throw new Exception("Rear alias must never create a strut.");
+    if(scene.Segments.Count(x=>x.Source==SceneSource.UnconstrainedReference)!=2) throw new Exception("Trailing links must be explicit references.");
+});
+Run("visualizer frame agrees with compression signs and preserves rigid distances", () =>
+{
+    var p=new Vector3(1.2f,.7f,.3f);
+    var pose=new InspectionBodyPose(.002,.00001,-.00002,.5);
+    var dz=pose.ToWorld(p).Z-p.Z;
+    Equal(-.002+p.Y*.00001-p.X*(-.00002),dz,1e-7);
+    var q=new Vector3(-1.4f,-.7f,.6f);
+    Equal(Vector3.Distance(p,q),Vector3.Distance(pose.ToWorld(p),pose.ToWorld(q)),1e-6);
+    var geometry=Gr86HardPointPackageLoader.Load("data/synthetic/gr86");
+    Equal(geometry.Front["FL"].Upright.WheelCenter.X,geometry.Front["FR"].Upright.WheelCenter.X,1e-8);
+    Equal(geometry.Front["FL"].Upright.WheelCenter.Y,-geometry.Front["FR"].Upright.WheelCenter.Y,1e-8);
+});
+Run("rigid travel diagnostics distinguish loaded stops from an unloaded boundary", () =>
+{
+    var limit=new SuspensionSimulation.Components.GeometryDerivedWheelTravelLimit("FR","stroke",-.09,.05,.085,.05,"estimated");
+    var rebound=CornerLimitDiagnostic.Create(limit,-.09,1.52,-1000,"rebound");
+    if(!rebound.Active || rebound.Direction!="rebound" || !rebound.Message.Contains("topped out")) throw new Exception("Top-out must be named correctly.");
+    Equal(-1000,rebound.ReactionForceN,1e-6);Equal(0,rebound.PenetrationM,0);
+    if(!double.IsPositiveInfinity(rebound.TangentNPerM)||!double.IsPositiveInfinity(rebound.RollStiffnessContributionNmPerRad)) throw new Exception("Stop tangent must be infinite.");
+    var boundary=CornerLimitDiagnostic.Create(limit,-.09,1.52);
+    if(boundary.Active) throw new Exception("An unloaded boundary is not an active stop.");
+    var bump=CornerLimitDiagnostic.Create(limit,.05,1.52,1000,"bump");
+    if(bump.Direction!="bump" || !bump.Message.Contains("bottomed out")) throw new Exception("Bottom-out must be named correctly.");
+    Equal(1000,bump.ReactionForceN,1e-6);Equal(0,bump.PenetrationM,0);
+});
 Console.WriteLine($"{totalChecks - failures.Count}/{totalChecks} regression checks passed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;

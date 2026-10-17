@@ -31,8 +31,10 @@ public static class BalanceMetrics
 
     private static double Fraction(double front, double rear, string frontName, string rearName)
     {
-        if (!double.IsFinite(front) || front < 0) throw new ArgumentOutOfRangeException(frontName, "Must be finite and non-negative.");
-        if (!double.IsFinite(rear) || rear < 0) throw new ArgumentOutOfRangeException(rearName, "Must be finite and non-negative.");
+        if (double.IsNaN(front) || front < 0) throw new ArgumentOutOfRangeException(frontName, "Must be non-negative (positive infinity denotes a rigid constraint).");
+        if (double.IsNaN(rear) || rear < 0) throw new ArgumentOutOfRangeException(rearName, "Must be non-negative (positive infinity denotes a rigid constraint).");
+        if(double.IsPositiveInfinity(front)) return double.IsPositiveInfinity(rear)?double.NaN:1;
+        if(double.IsPositiveInfinity(rear)) return 0;
         var sum = front + rear;
         return sum == 0 ? double.NaN : front / sum;
     }

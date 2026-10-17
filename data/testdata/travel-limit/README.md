@@ -1,3 +1,3 @@
-# Bilateral high-finite travel-limit fixture
+# Rigid unilateral travel-limit fixture
 
-The element is inactive inside `[-50, +60] mm`. One millimetre past either endpoint at 10 MN/m produces a signed 10 kN restoring force. The value is intentionally finite and user-visible.
+Travel stays within `[-50, +60] mm`. At either boundary, body equilibrium determines a signed stop reaction without penetration. Bump reaction is nonnegative and rebound reaction nonpositive. The one-sided loading tangent is infinite; unloading releases the stop. `HardStopChecks` verifies analytic load/reaction closure, increasing load at fixed travel and release.

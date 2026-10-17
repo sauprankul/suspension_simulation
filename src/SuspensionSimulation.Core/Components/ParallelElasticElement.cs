@@ -52,39 +52,11 @@ public sealed class CurveParallelElasticElement : IWheelParallelElasticElement
     }
 }
 
-/// <summary>A high-but-finite bilateral penalty spring outside a geometry-derived travel window.</summary>
-public sealed class WheelTravelLimitElement : IWheelParallelElasticElement
-{
-    public string Id { get; }
-    public string Kind => "travel-limit";
-    public double MinimumJounceM { get; }
-    public double MaximumJounceM { get; }
-    public double RateNPerM { get; }
-
-    public WheelTravelLimitElement(string id, double minimumJounceM, double maximumJounceM, double rateNPerM)
-    {
-        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("An id is required.", nameof(id));
-        if (!double.IsFinite(minimumJounceM) || !double.IsFinite(maximumJounceM) || minimumJounceM >= maximumJounceM)
-            throw new ArgumentOutOfRangeException(nameof(minimumJounceM), "Travel limits require minimum < maximum.");
-        Guard.Positive(nameof(rateNPerM), rateNPerM);
-        Id=id; MinimumJounceM=minimumJounceM; MaximumJounceM=maximumJounceM; RateNPerM=rateNPerM;
-    }
-
-    public ElementEvaluation EvaluateWheelJounce(double wheelJounceM)
-    {
-        if (!double.IsFinite(wheelJounceM)) throw new ArgumentOutOfRangeException(nameof(wheelJounceM));
-        if (wheelJounceM < MinimumJounceM) return new(RateNPerM*(wheelJounceM-MinimumJounceM),RateNPerM,true);
-        if (wheelJounceM > MaximumJounceM) return new(RateNPerM*(wheelJounceM-MaximumJounceM),RateNPerM,true);
-        return new(0,0,false);
-    }
-}
-
 public sealed record ComponentTravelLimitConfig(
     string Id,
     IReadOnlyList<Corner> Corners,
     double ReboundComponentTravelMm,
     double CompressionComponentTravelMm,
-    double HardStopRateNPerMm,
     DataProvenance Provenance,
     string SourceNote);
 
@@ -102,5 +74,7 @@ public sealed record GeometryDerivedWheelTravelLimit(
     double MaximumJounceM,
     double ReboundComponentTravelM,
     double CompressionComponentTravelM,
-    double HardStopRateNPerM,
-    string Provenance);
+    string Provenance)
+{
+    public WheelTravelConstraint Constraint=>new($"{SourceId}-{Corner}",MinimumJounceM,MaximumJounceM);
+}

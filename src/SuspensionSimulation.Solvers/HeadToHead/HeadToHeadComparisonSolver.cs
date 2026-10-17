@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Numerics;
+using System.Collections.Immutable;
 using SuspensionSimulation.Components;
 using SuspensionSimulation.Configuration;
 using SuspensionSimulation.Core;
@@ -28,7 +29,10 @@ public sealed record HeadToHeadSideResult(
     double RearArbRollStiffnessNmPerRad,
     string InputHash,
     string Validity,
-    IReadOnlyList<string> Diagnostics);
+    IReadOnlyList<string> Diagnostics)
+{
+    public HeadToHeadInspectionDiagnostics? Inspection { get; init; }
+}
 
 public sealed record HeadToHeadDelta(
     double FrontRsdPercentagePoints,
@@ -64,13 +68,14 @@ public sealed class HeadToHeadComparisonSolver
 
     public HeadToHeadComparisonSolver() { }
 
-    public HeadToHeadComparisonSolver(string packageDirectory)
+    public HeadToHeadComparisonSolver(string packageDirectory,SteeringGeometry? steering=null)
     {
         var geometry = Gr86HardPointPackageLoader.Load(packageDirectory);
+        steering??=SteeringGeometry.Load(packageDirectory);
         _frontBar = TubularArbMechanism3DLoader.Load(Path.Combine(packageDirectory, "front-tubular-arb.json"));
         _rearBar = TubularArbMechanism3DLoader.Load(Path.Combine(packageDirectory, "rear-tubular-arb.json"));
         var builder=new RigidCornerTravelMapBuilder3D();
-        var maps=geometry.Front.ToDictionary(x=>x.Key,x=>builder.Build(x.Value),StringComparer.OrdinalIgnoreCase);
+        var maps=geometry.Front.ToDictionary(x=>x.Key,x=>builder.Build(steering.Apply(x.Value)),StringComparer.OrdinalIgnoreCase);
         foreach(var pair in geometry.Rear) maps[pair.Key]=builder.Build(pair.Value);
         _travelMaps=maps;
         (_parallelByCorner,PhysicalTravelLimits)=LoadParallelElements(packageDirectory,maps);
@@ -98,12 +103,15 @@ public sealed class HeadToHeadComparisonSolver
         Validate(input);
         var package = BuildScalarPackage(vehicle, input);
         var state = new FourStrutQuasiStaticSolver().Solve(package, load);
+        var evaluationState = state;
+        GeometryTangentEvaluation? geometryEvaluation=null;
         var geometryLive = _travelMaps is not null && _frontBar is not null && _rearBar is not null;
         if (geometryLive)
         {
             // One explicit local-tangent update. Repeated fixed-point iteration is not a substitute
             // for the pending nonlinear energy equilibrium and can jump kinematic branches.
             var evaluated = EvaluateGeometry(vehicle, input, state);
+            geometryEvaluation=evaluated;
             package = BuildGeometryPackage(vehicle, evaluated);
             state = new FourStrutQuasiStaticSolver().Solve(package, load);
         }
@@ -116,11 +124,25 @@ public sealed class HeadToHeadComparisonSolver
                 ? "Startup-precomputed 3D front-strut and rear-multilink branches supply local spring derivatives; fixed-length 3D endlinks plus declared arm-bending/torsion compliance supply each ARB energy Hessian."
                 : "PROVISIONAL FALLBACK: declared scalar spring/ARB attachment motion ratios are in use because no 3D package was supplied.",
             "PROVISIONAL: the whole-car equilibrium uses one explicit 3D local-tangent update; full nonlinear component force integration and force-path roll-center/jacking gates remain pending.",
-            "Configured parallel elastic curves and geometry-derived top/bottom travel penalties are active; calibrated OEM bump-stop and rebound-spring curves remain pending. Tire physics, damping, compliance and aero are excluded."
+            "Configured parallel elastic curves and exact geometry-derived rigid top/bottom travel constraints are active; stop reactions are solved without penetration. Calibrated OEM bump-stop and rebound-spring curves remain pending. Tire physics, damping, compliance and aero are excluded."
         };
         if (!state.Converged) diagnostics.Add("Quasi-static equilibrium did not converge.");
+        var hash=Hash(input, load, vehicle);
+        GeometryEvaluationState Pose(QuasiStaticResult result, string phase) => new(hash+":"+phase,
+            result.HeaveCompressionM,result.RollRad,result.PitchRad,
+            result.Corners.ToImmutableDictionary(c=>c.Corner,c=>c.RelativeCompressionM));
         return new(input, state, front.SpringNmPerRad, rear.SpringNmPerRad, front.ArbNmPerRad, rear.ArbNmPerRad,
-            Hash(input, load, vehicle), geometryLive ? "provisional-3d-local-tangent-equilibrium" : "provisional-scalar-attachment-geometry", diagnostics);
+            hash, geometryLive ? "provisional-3d-local-tangent-equilibrium" : "provisional-scalar-attachment-geometry", diagnostics)
+        {
+            Inspection=new(Pose(evaluationState,"stiffness"),Pose(state,"final"),
+                state.Corners.Where(c=>PhysicalTravelLimits.ContainsKey(c.Corner)).Select(c=>
+                    CornerLimitDiagnostic.Create(PhysicalTravelLimits[c.Corner],c.RelativeCompressionM,
+                        c.Corner is "FL" or "FR" ? vehicle.Chassis.FrontTrackM : vehicle.Chassis.RearTrackM,c.HardStopReactionN,c.TravelLimitDirection)).ToImmutableArray())
+            {
+                StiffnessEvaluationBars=geometryEvaluation is null?[]:new[]{geometryEvaluation.FrontArbState,geometryEvaluation.RearArbState}
+                    .Select(x=>new InspectionBarPose(x.Id,x.Left,x.Right,x.BarTwistRad,x.BarTorqueNm)).ToImmutableArray()
+            }
+        };
     }
 
     private VehiclePackage BuildScalarPackage(ModularSetup source, HeadToHeadSetupInput input)
@@ -131,7 +153,7 @@ public sealed class HeadToHeadComparisonSolver
             var axle = c.Corner is Corner.FL or Corner.FR ? "front" : "rear";
             var corner=c.Corner.ToString();
             return new CornerSpring(corner, springRates[axle] * c.MotionRatio * c.MotionRatio, 1.0, 0)
-            { ParallelElements = _parallelByCorner.GetValueOrDefault(corner,[]) };
+            { ParallelElements = _parallelByCorner.GetValueOrDefault(corner,[]),HardTravelLimit=PhysicalTravelLimits.GetValueOrDefault(corner)?.Constraint };
         }).ToArray();
         var frontConfig = EditBar(source.AntiRollBars.Single(x => x.Id == source.Assembly.FrontAntiRollBarId), input.FrontArbOutsideDiameterM, input.FrontArbInsideDiameterM);
         var rearConfig = EditBar(source.AntiRollBars.Single(x => x.Id == source.Assembly.RearAntiRollBarId), input.RearArbOutsideDiameterM, input.RearArbInsideDiameterM);
@@ -197,7 +219,7 @@ public sealed class HeadToHeadComparisonSolver
         {
             var corner=c.Corner.ToString();
             return new CornerSpring(corner, evaluated.CornerSpringTangentNPerM[corner],1,0)
-            { ParallelElements = _parallelByCorner.GetValueOrDefault(corner,[]) };
+            { ParallelElements = _parallelByCorner.GetValueOrDefault(corner,[]),HardTravelLimit=PhysicalTravelLimits.GetValueOrDefault(corner)?.Constraint };
         }).ToArray();
         var c=source.Chassis;
         return new(Chassis(c),
@@ -239,16 +261,14 @@ public sealed class HeadToHeadComparisonSolver
             foreach(var item in configured.Limits)
             foreach(var corner in item.Corners.Select(x=>x.ToString()))
             {
-                if(item.ReboundComponentTravelMm<=0 || item.CompressionComponentTravelMm<=0 || item.HardStopRateNPerMm<=0)
-                    throw new InvalidDataException($"Travel limit '{item.Id}' requires positive rebound/compression stroke and hard-stop rate.");
+                if(!double.IsFinite(item.ReboundComponentTravelMm)||!double.IsFinite(item.CompressionComponentTravelMm)||item.ReboundComponentTravelMm<=0 || item.CompressionComponentTravelMm<=0)
+                    throw new InvalidDataException($"Travel limit '{item.Id}' requires finite positive rebound/compression stroke.");
                 if(limits.ContainsKey(corner)) throw new InvalidDataException($"Corner {corner} has more than one travel-limit definition.");
                 var map=maps[corner];
                 var minimum=map.FindWheelJounceForSpringCompression(-item.ReboundComponentTravelMm/1000);
                 var maximum=map.FindWheelJounceForSpringCompression(item.CompressionComponentTravelMm/1000);
-                var rate=item.HardStopRateNPerMm*1000;
-                var result=new GeometryDerivedWheelTravelLimit(corner,item.Id,minimum,maximum,item.ReboundComponentTravelMm/1000,item.CompressionComponentTravelMm/1000,rate,$"{item.Provenance}: {item.SourceNote}");
+                var result=new GeometryDerivedWheelTravelLimit(corner,item.Id,minimum,maximum,item.ReboundComponentTravelMm/1000,item.CompressionComponentTravelMm/1000,$"{item.Provenance}: {item.SourceNote}");
                 limits[corner]=result;
-                mutable[corner].Add(new WheelTravelLimitElement($"{item.Id}-{corner}",minimum,maximum,rate));
             }
         }
         return (mutable.ToDictionary(x=>x.Key,x=>(IReadOnlyList<IWheelParallelElasticElement>)x.Value,StringComparer.OrdinalIgnoreCase),limits);
@@ -265,7 +285,7 @@ public sealed class HeadToHeadComparisonSolver
 
     private static void Validate(HeadToHeadSetupInput input)
     {
-        if (input.FrontSpringNPerM <= 0 || input.RearSpringNPerM <= 0) throw new ArgumentOutOfRangeException(nameof(input), "Spring rates must be positive.");
+        if (!double.IsFinite(input.FrontSpringNPerM) || !double.IsFinite(input.RearSpringNPerM) || input.FrontSpringNPerM <= 0 || input.RearSpringNPerM <= 0) throw new ArgumentOutOfRangeException(nameof(input), "Spring rates must be finite and positive.");
         ValidateTube(input.FrontArbOutsideDiameterM, input.FrontArbInsideDiameterM, "front");
         ValidateTube(input.RearArbOutsideDiameterM, input.RearArbInsideDiameterM, "rear");
     }

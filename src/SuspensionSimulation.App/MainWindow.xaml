@@ -19,28 +19,34 @@
     <Style x:Key="Section" TargetType="TextBlock"><Setter Property="FontWeight" Value="Bold"/><Setter Property="Foreground" Value="#9ED4FF"/><Setter Property="Margin" Value="0,8,0,4"/></Style>
     <Style x:Key="MetricValue" TargetType="TextBlock"><Setter Property="FontSize" Value="26"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
     <Style TargetType="DataGrid"><Setter Property="Background" Value="#11161C"/><Setter Property="Foreground" Value="#EDF2F6"/><Setter Property="RowBackground" Value="#171D24"/><Setter Property="AlternatingRowBackground" Value="#1D242D"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="BorderBrush" Value="#3E4A57"/></Style>
+    <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#26313D"/><Setter Property="Foreground" Value="#EAF0F5"/><Setter Property="Padding" Value="6,3"/></Style>
   </Window.Resources>
 
-  <Grid Margin="16">
+  <Grid x:Name="RootGrid" Margin="16">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="210"/></Grid.RowDefinitions>
     <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 
     <Grid Grid.ColumnSpan="3" Margin="0,0,0,12">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <StackPanel><TextBlock Text="STOCK GR86 vs BRZ" FontSize="27" FontWeight="Bold"/><TextBlock Text="Reference-sheet springs, frequencies, flexible-arm tubular bars, and independently derived roll balance" Foreground="{StaticResource Muted}"/></StackPanel>
+      <StackPanel><TextBlock Text="STOCK GR86 vs BRZ" FontSize="27" FontWeight="Bold"/><StackPanel Orientation="Horizontal"><Button x:Name="ViewModeButton" Content="Open 3D inspection" Click="ViewModeClick"/><TextBlock x:Name="ViewSummary" Text="Shared synthetic geometry" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel></StackPanel>
       <Border Grid.Column="1" Background="#352B17" BorderBrush="#B68832" BorderThickness="1" CornerRadius="5" Padding="10,6" VerticalAlignment="Center"><TextBlock x:Name="ValidityBadge" Text="3D GEOMETRY LIVE • PROVISIONAL EQUILIBRIUM" Foreground="#FFD37E" FontWeight="Bold"/></Border>
     </Grid>
 
     <Border Grid.Row="1" Background="{StaticResource Panel}" CornerRadius="8" Padding="12" Margin="0,0,12,0">
       <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <DockPanel><TextBlock Text="SHARED G CONTROLLER" Style="{StaticResource Section}" Margin="0"/><Button Content="Center" Click="CenterGClick" DockPanel.Dock="Right"/></DockPanel>
+        <StackPanel>
+          <DockPanel><TextBlock Text="STEERING WHEEL (°)" Style="{StaticResource Section}" Margin="0"/><TextBox x:Name="SteeringAngle" Text="0" Width="70" LostFocus="SteeringTextChanged"/><Button Content="Zero" Click="CenterSteeringClick" Padding="6,2"/></DockPanel>
+          <Slider x:Name="SteeringControl" Minimum="-450" Maximum="450" Value="0" TickFrequency="15" ValueChanged="SteeringSliderChanged"/>
+          <Button Content="Rack geometry + static alignment…" Click="SteeringGeometryClick" Padding="4,3" Margin="0,4,0,6"/>
+          <DockPanel><Button Content="Center" Click="CenterGClick" DockPanel.Dock="Right" Padding="8,5"/><TextBlock Text="SHARED G CONTROLLER" Style="{StaticResource Section}" Margin="0"/></DockPanel>
+        </StackPanel>
         <Grid Grid.Row="1" Margin="0,8,0,5">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
-          <StackPanel><TextBlock Text="Axis cap (G)"/><TextBlock Text="Combined cap (G)"/><TextBlock Text="Front unsprung (kg/corner)"/><TextBlock Text="Rear unsprung (kg/corner)"/></StackPanel>
+          <StackPanel><TextBlock Text="Axis cap (G)" Height="30"/><TextBlock Text="Combined cap (G)" Height="30"/><TextBlock Text="Front unsprung (kg/corner)" Height="30"/><TextBlock Text="Rear unsprung (kg/corner)" Height="30"/></StackPanel>
           <StackPanel Grid.Column="1"><TextBox x:Name="SweepCap" Text="2.0" LostFocus="SharedInputChanged"/><TextBox x:Name="TotalGCap" Text="2.0" LostFocus="SharedInputChanged"/><TextBox x:Name="FrontUnsprungMass" LostFocus="SharedInputChanged"/><TextBox x:Name="RearUnsprungMass" LostFocus="SharedInputChanged"/></StackPanel>
         </Grid>
-        <Canvas Grid.Row="2" x:Name="GCircleCanvas" Background="#0D1116" MinHeight="250" MouseLeftButtonDown="GCirclePointer" MouseMove="GCirclePointer"/>
+        <Canvas Grid.Row="2" x:Name="GCircleCanvas" Background="#0D1116" MinHeight="120" MouseLeftButtonDown="GCirclePointer" MouseMove="GCirclePointer"/>
         <Grid Grid.Row="3" Margin="0,8,0,0">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel><TextBlock Text="LONGITUDINAL" Foreground="{StaticResource Muted}"/><TextBlock x:Name="LongitudinalReadout" FontSize="18"/></StackPanel>
@@ -50,9 +56,9 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" CornerRadius="8" Padding="13" Margin="0,0,6,0">
+    <Border x:Name="ASetupPanel" Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" CornerRadius="8" Padding="13" Margin="0,0,6,0">
       <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-        <DockPanel><TextBlock Text="STOCK GR86" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentA}"/><TextBlock Text="REFERENCE ROW 7" DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></DockPanel>
+        <DockPanel><TextBlock Text="STOCK GR86" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentA}"/><TextBlock x:Name="AReferenceLabel" Text="REFERENCE ROW 7" DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></DockPanel>
         <Grid Margin="0,8,0,6">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions>
           <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
@@ -69,9 +75,9 @@
       </StackPanel></ScrollViewer>
     </Border>
 
-    <Border Grid.Row="1" Grid.Column="2" Background="{StaticResource Panel}" CornerRadius="8" Padding="13" Margin="6,0,0,0">
+    <Border x:Name="BSetupPanel" Grid.Row="1" Grid.Column="2" Background="{StaticResource Panel}" CornerRadius="8" Padding="13" Margin="6,0,0,0">
       <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-        <DockPanel><TextBlock Text="STOCK BRZ" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentB}"/><TextBlock Text="REFERENCE ROW 8" DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></DockPanel>
+        <DockPanel><TextBlock Text="STOCK BRZ" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentB}"/><TextBlock x:Name="BReferenceLabel" Text="REFERENCE ROW 8" DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></DockPanel>
         <Grid Margin="0,8,0,6">
           <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions>
           <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
@@ -90,12 +96,20 @@
 
     <Border Grid.Row="2" Grid.ColumnSpan="3" Background="{StaticResource Panel2}" CornerRadius="8" Padding="10" Margin="0,12,0,0">
       <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <DockPanel Margin="0,0,0,5"><TextBlock Text="DIRECT COMPARISON" FontWeight="Bold" Foreground="#9ED4FF"/><TextBlock x:Name="DeltaHeadline" DockPanel.Dock="Right" FontWeight="Bold"/></DockPanel>
+        <DockPanel Margin="0,0,0,5"><Button Content="Show / hide comparison" Click="ComparisonToggleClick" DockPanel.Dock="Right" Padding="8,2"/><TextBlock Text="DIRECT COMPARISON" FontWeight="Bold" Foreground="#9ED4FF" Margin="0,0,14,0"/><TextBlock x:Name="DeltaHeadline" FontWeight="Bold"/></DockPanel>
         <DataGrid Grid.Row="1" x:Name="ComparisonGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column">
           <DataGrid.Columns><DataGridTextColumn Header="Metric" Binding="{Binding Metric}" Width="2*"/><DataGridTextColumn Header="Stock GR86" Binding="{Binding A}" Width="*"/><DataGridTextColumn Header="Stock BRZ" Binding="{Binding B}" Width="*"/><DataGridTextColumn Header="BRZ − GR86" Binding="{Binding Delta}" Width="*"/><DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="*"/></DataGrid.Columns>
         </DataGrid>
         <TextBlock Grid.Row="2" x:Name="StatusText" Foreground="#FFD58A" Margin="0,7,0,0" TextWrapping="Wrap"/>
       </Grid>
     </Border>
+    <Grid x:Name="InspectionHost" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Visibility="Collapsed">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="245"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <ComboBox x:Name="InspectionSetup" SelectedIndex="0" SelectionChanged="InspectionSetupChanged" Margin="0,0,8,6"><ComboBoxItem Content="A · Stock GR86"/><ComboBoxItem Content="B · Stock BRZ"/></ComboBox>
+        <ContentControl x:Name="InspectionSetupHost" Grid.Row="1"/>
+      </Grid>
+      <ContentControl x:Name="InspectionViewportHost" Grid.Column="1"/>
+    </Grid>
   </Grid>
 </Window>

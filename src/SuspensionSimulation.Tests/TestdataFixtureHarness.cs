@@ -40,8 +40,8 @@ internal static class TestdataFixtureHarness
         Equal(-1000, damper.EvaluateForce(.5)); Equal(1500, damper.EvaluateForce(-.5)); Equal(0, damper.EvaluateForce(0));
         var parallel = new CurveParallelElasticElement(new ParallelElasticElementConfig { Id="parallel",Corners=[Corner.FL],ForceCurve=[new(-50,500),new(0,1000),new(50,2000)] });
         Equal(500,parallel.EvaluateWheelJounce(.025).ForceN); Equal(20_000,parallel.EvaluateWheelJounce(.025).TangentRateNPerM);
-        var limit = new WheelTravelLimitElement("limit",-.05,.06,10_000_000);
-        Equal(0,limit.EvaluateWheelJounce(0).ForceN); Equal(10_000,limit.EvaluateWheelJounce(.061).ForceN); Equal(-10_000,limit.EvaluateWheelJounce(-.051).ForceN);
+        var limit = new WheelTravelConstraint("limit",-.05,.06);
+        Equal(-.05,limit.MinimumJounceM);Equal(.06,limit.MaximumJounceM);
         VerifyGeometryBackedFixtures(root);
         VerifyCaymanFourCornerGeometry(root);
     }

@@ -1,0 +1,56 @@
+[
+  {
+    "Name": "A-FR-rebound",
+    "Setup": "A",
+    "Corner": "FR",
+    "Direction": "rebound",
+    "Inactive": {
+      "Name": "verified-rebound",
+      "LongitudinalG": 0.07733333333333318,
+      "LateralG": -1.0119683055877693,
+      "VerticalG": 0
+    },
+    "Active": {
+      "Name": "verified-rebound",
+      "LongitudinalG": 0.07733333333333318,
+      "LateralG": -1.0119683074951178,
+      "VerticalG": 0
+    }
+  },
+  {
+    "Name": "B-FR-rebound",
+    "Setup": "B",
+    "Corner": "FR",
+    "Direction": "rebound",
+    "Inactive": {
+      "Name": "verified-rebound",
+      "LongitudinalG": 0.07733333333333318,
+      "LateralG": -1.0059750595092782,
+      "VerticalG": 0
+    },
+    "Active": {
+      "Name": "verified-rebound",
+      "LongitudinalG": 0.07733333333333318,
+      "LateralG": -1.0059750614166267,
+      "VerticalG": 0
+    }
+  },
+  {
+    "Name": "A-FL-bump",
+    "Setup": "A",
+    "Corner": "FL",
+    "Direction": "bump",
+    "Inactive": {
+      "Name": "verified-bump",
+      "LongitudinalG": -1.286000000000001,
+      "LateralG": 0,
+      "VerticalG": 0
+    },
+    "Active": {
+      "Name": "verified-bump",
+      "LongitudinalG": -1.290000000000001,
+      "LateralG": 0,
+      "VerticalG": 0
+    }
+  }
+]

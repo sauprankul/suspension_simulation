@@ -12,7 +12,10 @@ public sealed record TangentRollStiffnessDecomposition(
     double ParallelElementNmPerRad,
     double TotalNmPerRad,
     string OperatingPoint,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings)
+{
+    public double HardStopNmPerRad {get;init;}
+}
 
 public static class TangentRollStiffnessCalculator
 {

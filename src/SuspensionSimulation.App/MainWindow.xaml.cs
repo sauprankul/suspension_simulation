@@ -37,10 +37,12 @@ public partial class MainWindow : Window
     {
         App.Log("Constructing stock GR86 vs BRZ head-to-head MainWindow.");
         InitializeComponent();
-        _renderTimer=new DispatcherTimer(DispatcherPriority.Render) { Interval=TimeSpan.FromMilliseconds(50) };
+        _renderTimer=new DispatcherTimer(DispatcherPriority.Render) { Interval=TimeSpan.FromMilliseconds(25) };
         _renderTimer.Tick+=(_,_)=>{ _renderTimer.Stop(); Render(); };
         Loaded += (_, _) => Initialise();
         SizeChanged += (_, _) => ScheduleRender();
+        StateChanged += (_,_)=>_inspectionViewport?.SetActive(_inspectionEnabled && WindowState!=WindowState.Minimized);
+        Closed += (_,_)=>{_renderTimer.Stop();_inspectionViewport?.Dispose();};
     }
 
     private void Initialise()
@@ -52,7 +54,10 @@ public partial class MainWindow : Window
         _stockBrz=Stock86BrzReferenceCalculator.Calculate(_stockReference,_stockReference.Setups.Single(x=>x.Id=="stock-brz-2022"));
         App.Log(JsonSerializer.Serialize(new { eventName="stock-reference-derivation", gr86=_stockGr86, brz=_stockBrz }),"REFERENCE");
         var precompute=Stopwatch.StartNew();
+        _steeringGeometry=SuspensionSimulation.Kinematics.SteeringGeometry.Load(_packageDirectory);
+        SteeringControl.Minimum=-_steeringGeometry.SteeringWheelLockDegrees;SteeringControl.Maximum=_steeringGeometry.SteeringWheelLockDegrees;
         _headToHeadSolver=new HeadToHeadComparisonSolver(_packageDirectory);
+        _sceneBuilder=new SuspensionSimulation.Solvers.Kinematics.InspectionSceneBuilder(_packageDirectory);
         precompute.Stop();
         App.Log(JsonSerializer.Serialize(new { eventName="geometry-precompute", elapsedMs=precompute.Elapsed.TotalMilliseconds,
             maps=_headToHeadSolver.TravelMaps.ToDictionary(x=>x.Key,x=>new { minimumJounceM=x.Value.MinimumJounceM,maximumJounceM=x.Value.MaximumJounceM,stepM=x.Value.StepM,samples=x.Value.Samples.Count,maximumResidualM=x.Value.MaximumConstraintResidualM }) }),"GEOMETRY");
@@ -72,7 +77,11 @@ public partial class MainWindow : Window
     private void GCirclePointer(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed && e.RoutedEvent != Mouse.MouseDownEvent) return;
-        var p = e.GetPosition(GCircleCanvas); var radius = Radius(); var cap = ReadPositive(SweepCap, "G axis cap");
+        QueueGPoint(e.GetPosition(GCircleCanvas));
+    }
+    private void QueueGPoint(Point p)
+    {
+        var radius = Radius(); var cap = ReadPositive(SweepCap, "G axis cap");
         // Screen axes are intentionally inverted: positive longitudinal is up and positive
         // lateral (leftward vehicle acceleration) is left on the displayed overhead view.
         _ay = -(p.X - GCircleCanvas.ActualWidth / 2) / radius * cap;
@@ -83,7 +92,7 @@ public partial class MainWindow : Window
     private void ScheduleRender()
     {
         if(!IsLoaded) return;
-        // Coalesce pointer events into a steady 20 Hz display refresh. Do not restart the
+        // Coalesce pointer events into a bounded 40 Hz display refresh. Do not restart the
         // timer for every MouseMove or a continuous drag would never reach the tick.
         if (!_renderTimer.IsEnabled) _renderTimer.Start();
     }
@@ -110,8 +119,19 @@ public partial class MainWindow : Window
                 FrontUnsprungMassPerCornerKg=ReadNonNegative(FrontUnsprungMass,"front unsprung mass"),
                 RearUnsprungMassPerCornerKg=ReadNonNegative(RearUnsprungMass,"rear unsprung mass")
             }};
-            _comparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
+            var calculation=Stopwatch.StartNew();
+            var nextComparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
                 .Solve(vehicle, inputA, inputB, new LoadCase("shared-dashboard", _ax, _ay, 0));
+            var nextSnapshot=(_sceneBuilder??throw new InvalidOperationException("Scene geometry is not initialized."))
+                .CreateSnapshot(attempt,nextComparison,vehicle,_headToHeadSolver.TravelMaps,0,ReadSteering());
+            calculation.Stop();
+            nextSnapshot=nextSnapshot with {SolveMilliseconds=calculation.Elapsed.TotalMilliseconds};
+            _comparison=nextComparison;
+            _acceptedSnapshot=nextSnapshot;
+            _rejectedRevision=null;_rejectedError=null;
+            UpdateInspectionScene();
+            App.Log(JsonSerializer.Serialize(new {eventName="scene-accepted",attempt,nextSnapshot.PackageFingerprint,nextSnapshot.SolveMilliseconds,
+                gapA=nextSnapshot.A.Scene.Wheels.ToDictionary(x=>x.Corner,x=>x.GroundGapM),gapB=nextSnapshot.B.Scene.Wheels.ToDictionary(x=>x.Corner,x=>x.GroundGapM)}),"SCENE");
             DrawG(point, radius);
             DrawCar(ACarCanvas, _comparison.A.State, Brushes.DeepSkyBlue);
             DrawCar(BCarCanvas, _comparison.B.State, Brushes.Orange);
@@ -122,6 +142,9 @@ public partial class MainWindow : Window
         {
             App.LogException($"Head-to-head render failed attempt={attempt}; inputSnapshot={inputSnapshot}", exception);
             StatusText.Text = $"Input/solve error; previous valid plots retained: {exception.Message}  •  Log: {App.LogPath}";
+            ViewSummary.Text=$"STALE · accepted revision {_acceptedSnapshot?.Revision.ToString()??"none"} · rejected revision {attempt}: {exception.Message}";
+            _rejectedRevision=attempt;_rejectedError=exception.Message;
+            _inspectionViewport?.MarkStale(attempt,exception.Message);
             try
             {
                 var point = GCircleMapper.Map(_ax, _ay, radius, ReadPositive(SweepCap, "G axis cap"), ReadPositive(TotalGCap, "combined G cap"));
@@ -136,6 +159,7 @@ public partial class MainWindow : Window
         var a = comparison.A; var b = comparison.B;
         ARsd.Text = Percent(a.State.RollStiffnessDistributionFront); BRsd.Text = Percent(b.State.RollStiffnessDistributionFront);
         ARcb.Text = Signed(a.State.RollCoupleBiasPercentagePoints, " pp"); BRcb.Text = Signed(b.State.RollCoupleBiasPercentagePoints, " pp");
+        if(_inspectionEnabled) ViewSummary.Text=$"A RSD {Percent(a.State.RollStiffnessDistributionFront)} / RCB {Signed(a.State.RollCoupleBiasPercentagePoints)} pp · B RSD {Percent(b.State.RollStiffnessDistributionFront)} / RCB {Signed(b.State.RollCoupleBiasPercentagePoints)} pp · revision {_acceptedSnapshot?.Revision}";
         DeltaHeadline.Text = $"B − A RCB  {Signed(comparison.BMinusA.RcbPercentagePoints, " pp")}";
         DeltaHeadline.Foreground = comparison.BMinusA.RcbPercentagePoints switch { > 0 => Brushes.Orange, < 0 => Brushes.DeepSkyBlue, _ => Brushes.White };
         AStateSummary.Text = Summary(a); BStateSummary.Text = Summary(b);
@@ -153,6 +177,8 @@ public partial class MainWindow : Window
             Row("Front parallel-element roll stiffness",a.State.TangentRollStiffnesses!.Single(x=>x.Axle=="front").ParallelElementNmPerRad*toPerDegree,b.State.TangentRollStiffnesses!.Single(x=>x.Axle=="front").ParallelElementNmPerRad*toPerDegree,"N·m/deg"),
             Row("Rear parallel-element roll stiffness",a.State.TangentRollStiffnesses!.Single(x=>x.Axle=="rear").ParallelElementNmPerRad*toPerDegree,b.State.TangentRollStiffnesses!.Single(x=>x.Axle=="rear").ParallelElementNmPerRad*toPerDegree,"N·m/deg")
         };
+        foreach(var axle in new[]{"front","rear"})
+            rows.Add(Row($"{axle} rigid-stop loading stiffness",a.State.TangentRollStiffnesses!.Single(x=>x.Axle==axle).HardStopNmPerRad,b.State.TangentRollStiffnesses!.Single(x=>x.Axle==axle).HardStopNmPerRad,"N·m/rad"));
         if(_stockGr86 is not null && _stockBrz is not null)
         {
             rows.Add(Row("Reference front spring wheel rate",_stockGr86.FrontSpringWheelRateKgfPerMm,_stockBrz.FrontSpringWheelRateKgfPerMm,"kgf/mm"));
@@ -175,13 +201,14 @@ public partial class MainWindow : Window
             rows.Add(Row($"{corner} point-contact normal load", av, bv, "N"));
             rows.Add(Row($"{corner} wheel jounce",1000*ac.RelativeCompressionM,1000*bc.RelativeCompressionM,"mm"));
             rows.Add(Row($"{corner} parallel-element force",ac.ParallelElementForceN,bc.ParallelElementForceN,"N"));
+            rows.Add(Row($"{corner} rigid-stop reaction",ac.HardStopReactionN,bc.HardStopReactionN,"N"));
             if(_headToHeadSolver?.PhysicalTravelLimits.TryGetValue(corner,out var limit)==true)
                 rows.Add(new($"{corner} geometry-derived travel window",$"{1000*limit.MinimumJounceM:0.0} to {1000*limit.MaximumJounceM:0.0}",$"{1000*limit.MinimumJounceM:0.0} to {1000*limit.MaximumJounceM:0.0}","0.000","mm"));
         }
         ComparisonGrid.ItemsSource = rows;
         StatusText.Text = "REFERENCE-CALIBRATED: stock GR86 and BRZ inputs reproduce the supplied workbook; shared synthetic hard points are calibrated to its 0.95/0.78 spring and 0.92/0.55 ARB static motion ratios. " +
             "This screen does not yet pass the phase publication gate: nonlinear energy equilibrium, calibrated spring preload-curvature, and force-path roll-center/jacking work remain pending. " +
-            $"Inputs GR86 {a.InputHash[..12]} / BRZ {b.InputHash[..12]}. Geometry-derived high-finite travel limits and configured parallel elastic curves are active; calibrated OEM bump/rebound curves and tire physics remain excluded. Log: {App.LogPath}";
+            $"Inputs GR86 {a.InputHash[..12]} / BRZ {b.InputHash[..12]}. Geometry-derived rigid travel constraints and configured parallel elastic curves are active; calibrated OEM bump/rebound curves and tire physics remain excluded. Log: {App.LogPath}";
     }
 
     private string CaptureUiState(long attempt) => JsonSerializer.Serialize(new
@@ -195,13 +222,15 @@ public partial class MainWindow : Window
         controls = new
         {
             axisCapG = SweepCap.Text,
+            steeringWheelDegrees=SteeringAngle.Text,
+            steeringGeometry=_steeringGeometry,
             combinedCapG = TotalGCap.Text,
             frontUnsprungMassKgPerCorner=FrontUnsprungMass.Text,
             rearUnsprungMassKgPerCorner=RearUnsprungMass.Text,
             setupA = new { frontSpringKgfPerMm = AFrontSpring.Text, rearSpringKgfPerMm = ARearSpring.Text, frontBarOdMm = AFrontOd.Text, frontBarIdMm = AFrontId.Text, rearBarOdMm = ARearOd.Text, rearBarIdMm = ARearId.Text },
             setupB = new { frontSpringKgfPerMm = BFrontSpring.Text, rearSpringKgfPerMm = BRearSpring.Text, frontBarOdMm = BFrontOd.Text, frontBarIdMm = BFrontId.Text, rearBarOdMm = BRearOd.Text, rearBarIdMm = BRearId.Text }
         }
-    });
+    },new JsonSerializerOptions {NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals});
 
     private static string CaptureResult(long attempt, HeadToHeadComparisonResult comparison) => JsonSerializer.Serialize(new
     {
@@ -212,7 +241,7 @@ public partial class MainWindow : Window
         setupA = ResultSide(comparison.A),
         setupB = ResultSide(comparison.B),
         delta = comparison.BMinusA
-    });
+    },new JsonSerializerOptions {NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals});
 
     private static object ResultSide(HeadToHeadSideResult side) => new
     {
@@ -220,6 +249,7 @@ public partial class MainWindow : Window
         side.InputHash,
         side.Validity,
         side.Diagnostics,
+        side.Inspection,
         rsdFront = side.State.RollStiffnessDistributionFront,
         rcbPercentagePoints = side.State.RollCoupleBiasPercentagePoints,
         side.State.HeaveCompressionM,
@@ -237,7 +267,8 @@ public partial class MainWindow : Window
 
     private static string Summary(HeadToHeadSideResult side) =>
         $"Roll {Degrees(side.State.RollRad):0.000}°  •  Pitch {Degrees(side.State.PitchRad):0.000}°  •  " +
-        $"residuals Fz {side.State.VerticalResidualN:E1} N / roll {side.State.RollResidualNm:E1} N·m / pitch {side.State.PitchResidualNm:E1} N·m";
+        $"residuals Fz {side.State.VerticalResidualN:E1} N / roll {side.State.RollResidualNm:E1} N·m / pitch {side.State.PitchResidualNm:E1} N·m" +
+        string.Concat(side.Inspection?.Limits.Where(x=>x.Active).Select(x=>$"\n{x.Message} Reaction {x.ReactionForceN:0.0} N; ∞ loading stiffness.") ?? []);
 
     private static ComparisonRow Row(string metric, double a, double b, string unit) =>
         new(metric, Format(a), Format(b), Signed(b - a), unit);
@@ -292,9 +323,9 @@ public partial class MainWindow : Window
     private static double ReadNonNegative(TextBox box, string name) { var value = Read(box, name); return value >= 0 ? value : throw new InvalidOperationException($"{name} must be non-negative."); }
     private static double Read(TextBox box, string name) => double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value) ? value : throw new InvalidOperationException($"{name} must be a finite number using . as the decimal separator.");
     private static void Set(TextBox box, double value) => box.Text = value.ToString("G", CultureInfo.InvariantCulture);
-    private static string Percent(double value) => (100 * value).ToString("F2", CultureInfo.InvariantCulture) + "%";
-    private static string Format(double value) => Math.Abs(value) >= 1000 ? value.ToString("N0", CultureInfo.InvariantCulture) : value.ToString("0.###", CultureInfo.InvariantCulture);
-    private static string Signed(double value, string suffix = "") => value.ToString("+0.###;-0.###;0", CultureInfo.InvariantCulture) + suffix;
+    private static string Percent(double value) => double.IsNaN(value)?"—":(100 * value).ToString("F2", CultureInfo.InvariantCulture) + "%";
+    private static string Format(double value) => double.IsNaN(value)?"—":double.IsPositiveInfinity(value)?"∞":double.IsNegativeInfinity(value)?"−∞":Math.Abs(value) >= 1000 ? value.ToString("N0", CultureInfo.InvariantCulture) : value.ToString("0.###", CultureInfo.InvariantCulture);
+    private static string Signed(double value, string suffix = "") => double.IsNaN(value)?"—":double.IsInfinity(value)?Format(value):value.ToString("+0.###;-0.###;0", CultureInfo.InvariantCulture) + suffix;
     private static double Degrees(double radians) => radians * 180 / Math.PI;
     private static void Add(Canvas canvas, UIElement element, double x, double y) { Canvas.SetLeft(element, x); Canvas.SetTop(element, y); canvas.Children.Add(element); }
 

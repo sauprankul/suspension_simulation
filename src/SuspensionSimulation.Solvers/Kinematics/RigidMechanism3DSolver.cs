@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Collections.Immutable;
 using SuspensionSimulation.Kinematics;
 
 namespace SuspensionSimulation.Solvers.Kinematics;
@@ -34,13 +35,15 @@ public sealed class RigidMechanism3DSolver
             [
                 Vector3.Distance(lbj, geometry.LowerArmFrontPivot) - lowerFrontLength,
                 Vector3.Distance(lbj, geometry.LowerArmRearPivot) - lowerRearLength,
-                Vector3.Distance(tie, geometry.TieRodInner) - tieLength,
+                Vector3.Distance(tie, geometry.TieRodInner+geometry.RackDisplacementM) - tieLength,
                 Vector3.Dot(topVector, e1),
                 Vector3.Dot(topVector, e2),
                 wheel.Z - (u.WheelCenter.Z + (float)wheelJounceM)
             ];
         }
-        var solution = Newton(Residual, Initial(seed, wheelJounceM));
+        // Steering can rotate the upright far beyond its travel-only branch. A larger
+        // centered derivative step avoids float-coordinate noise in that Jacobian.
+        var solution = Newton(Residual, Initial(seed, wheelJounceM),geometry.RackDisplacementM==Vector3.Zero?1e-6:1e-4);
         return Result(geometry.Id, wheelJounceM, solution, u, geometry.SpringUpper, "macpherson-3d",
             ["Rigid lower arm, tie rod and strut axis; steering rack and chassis are fixed in the body frame."]);
     }
@@ -127,7 +130,7 @@ public sealed class RigidMechanism3DSolver
             ["springLower"] = Transform(u.SpringLower, u.WheelCenter, pose),
             ["arbLinkLower"] = Transform(u.ArbLinkLower, u.WheelCenter, pose)
         };
-        return new(id, jounce, pose, points, Vector3.Distance(springUpper, points["springLower"]), solution.MaxResidual, solution.Iterations,
+        return new(id, jounce, pose, points.ToImmutableDictionary(), Vector3.Distance(springUpper, points["springLower"]), solution.MaxResidual, solution.Iterations,
             solution.Converged, topology, solution.Converged ? diagnostics : [.. diagnostics, "Constraint solve did not converge; do not use this pose for forces."]);
     }
 
@@ -151,11 +154,11 @@ public sealed class RigidMechanism3DSolver
             ["springLower"] = springLower,
             ["arbLinkLower"] = arbLower
         };
-        return new(geometry.Id, jounce, pose, points, Vector3.Distance(geometry.SpringUpper, springLower), solution.MaxResidual, solution.Iterations,
+        return new(geometry.Id, jounce, pose, points.ToImmutableDictionary(), Vector3.Distance(geometry.SpringUpper, springLower), solution.MaxResidual, solution.Iterations,
             solution.Converged, "double-wishbone-multilink-3d", solution.Converged ? diagnostics : [.. diagnostics, "Constraint solve did not converge; do not use this pose for forces."]);
     }
 
-    private static NewtonResult Newton(Func<double[], double[]> residual, double[] q)
+    private static NewtonResult Newton(Func<double[], double[]> residual, double[] q,double differenceStep=1e-6)
     {
         for (var iteration = 0; iteration < 40; iteration++)
         {
@@ -166,7 +169,7 @@ public sealed class RigidMechanism3DSolver
             var jacobian = new double[6, 6];
             for (var c = 0; c < 6; c++)
             {
-                var step = c < 3 ? 1e-6 : 1e-6;
+                var step = differenceStep;
                 var qp = (double[])q.Clone(); var qm = (double[])q.Clone(); qp[c] += step; qm[c] -= step;
                 var rp = residual(qp); var rm = residual(qm);
                 for (var row = 0; row < 6; row++) jacobian[row, c] = (rp[row] - rm[row]) / (2 * step);

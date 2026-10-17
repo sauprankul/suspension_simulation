@@ -1,0 +1,16 @@
+{
+  "RackCenterXM": 1.05025,
+  "RackCenterYM": 0,
+  "RackCenterZM": 0.29,
+  "InnerHalfSpacingM": 0.34,
+  "OuterOffsetXM": -0.05,
+  "OuterOffsetYM": -0.06,
+  "OuterOffsetZM": -0.04,
+  "RackTravelAtLockM": 0.01,
+  "SteeringWheelLockDegrees": 450,
+  "FrontStaticCamberDegrees": -3,
+  "RearStaticCamberDegrees": -2,
+  "FrontStaticTotalToeDegrees": 0,
+  "RearStaticTotalToeDegrees": 0,
+  "Provenance": "estimated; neutral rack/pickups match existing synthetic hard points; conservative 10 mm rack travel per 450 degrees fits the synthetic short ARB endlinks at static ride; editable, not an OEM measurement"
+}

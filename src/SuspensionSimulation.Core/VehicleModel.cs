@@ -35,6 +35,7 @@ public sealed record CornerSpring(
     double BumpStopRateNPerM)
 {
     public IReadOnlyList<IWheelParallelElasticElement> ParallelElements { get; init; } = [];
+    public WheelTravelConstraint? HardTravelLimit { get; init; }
 }
 
 public sealed record SpringsModel(IReadOnlyList<CornerSpring> Corners, string DataClassification, string? Notes);

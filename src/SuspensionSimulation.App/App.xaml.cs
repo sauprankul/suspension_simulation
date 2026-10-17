@@ -11,6 +11,10 @@ namespace SuspensionSimulation.App;
 
 public partial class App : Application
 {
+    private SingleInstanceLifetime? _instance;
+    private LiveDiagnostics? _liveDiagnostics;
+    private bool _exiting;
+    private int _activationCount;
     private static readonly object LogGate = new();
     public static string RepositoryRoot { get; } = ResolveRepositoryRoot();
     public static string RunId { get; } = $"{DateTimeOffset.Now:yyyyMMdd-HHmmss.fff}-{Environment.ProcessId}";
@@ -19,20 +23,41 @@ public partial class App : Application
     public App()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-        Log("Application object constructed.");
-        LogRunManifest();
     }
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
-        Log($"Startup args={JsonSerializer.Serialize(e.Args)}");
         try
         {
+            _instance=new SingleInstanceLifetime(()=>Dispatcher.BeginInvoke(ActivateExistingWindow));
+            if(!_instance.IsPrimary) {Shutdown(0);return;}
+            Log("Application object constructed.");
+            LogRunManifest();
+            _liveDiagnostics=new LiveDiagnostics(()=>new
+            {
+                activationCount=_activationCount,
+                ui=MainWindow is MainWindow window?window.CaptureLiveDiagnostics():null
+            });
+            Log($"Startup args={JsonSerializer.Serialize(e.Args)}");
+            if(e.Args.Contains("--gpu-proof")) { GpuProof.Run(this); return; }
             var window = new MainWindow();
             MainWindow = window;
+            window.Closing+=(_,_)=>_liveDiagnostics.Publish("closing");
+            var restore=Array.IndexOf(e.Args,"--restore-state");
+            // MainWindow's first Loaded handler initializes the package and defaults.
+            // Restore afterwards so initialization cannot overwrite the saved view.
+            if(restore>=0 && restore+1<e.Args.Length)
+                window.Loaded+=(_,_)=>window.RestoreLiveState(e.Args[restore+1]);
             window.Show();
+            if(e.Args.Contains("--inspection-proof")) window.RunInspectionProof();
+            if(e.Args.Contains("--steering-proof")) window.RunSteeringProof();
+            if(e.Args.Contains("--hard-stop-proof")) window.RunHardStopProof();
+            if(e.Args.Contains("--stage3-proof")) window.RunStage3Proof();
+            if(e.Args.Contains("--stage3-nonpointer")) window.RunStage3Proof(false);
+            if(e.Args.Contains("--inspection-soak")) window.RunInspectionSoak();
             window.Activate();
             Log("MainWindow shown.");
+            _liveDiagnostics.Publish("running");
         }
         catch (Exception ex)
         {
@@ -40,6 +65,36 @@ public partial class App : Application
             MessageBox.Show($"Suspension Simulation failed to start.\n\n{ex.Message}\n\nLog: {LogPath}", "Startup error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+
+    private void ActivateExistingWindow()
+    {
+        if(_exiting || MainWindow is null) return;
+        _activationCount++;
+        MainWindow.Show();
+        if(MainWindow.WindowState==WindowState.Minimized) MainWindow.WindowState=WindowState.Normal;
+        var activated=MainWindow.Activate();
+        if(!activated)
+        {
+            // Background launchers may lack foreground permission. Still reveal the existing
+            // window, then restore its original topmost setting without stealing keyboard input.
+            var topmost=MainWindow.Topmost;
+            MainWindow.Topmost=true;MainWindow.Topmost=topmost;
+        }
+        Log(JsonSerializer.Serialize(new {eventName="existing-instance-activated",activationCount=_activationCount,activated}));
+        _liveDiagnostics?.Publish("running");
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _exiting=true;
+        if(_instance?.IsPrimary==true)
+        {
+            _liveDiagnostics?.Stop(e.ApplicationExitCode==0?"closed":"failed");
+            Log($"Application exiting; code={e.ApplicationExitCode}.");
+        }
+        _instance?.Dispose();
+        base.OnExit(e);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

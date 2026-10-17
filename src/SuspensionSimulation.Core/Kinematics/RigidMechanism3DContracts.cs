@@ -19,7 +19,10 @@ public sealed record MacPhersonCorner3D(
     Vector3 LowerArmRearPivot,
     Vector3 StrutTopMount,
     Vector3 TieRodInner,
-    Vector3 SpringUpper);
+    Vector3 SpringUpper)
+{
+    public Vector3 RackDisplacementM {get;init;}
+}
 
 public sealed record DoubleWishboneCorner3D(
     string Id,

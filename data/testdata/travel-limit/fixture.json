@@ -2,10 +2,10 @@
   "validity": "verified-analytic",
   "minimum_jounce_m": -0.05,
   "maximum_jounce_m": 0.06,
-  "penalty_rate_n_per_m": 10000000.0,
+  "constraint": "minimum <= wheel jounce <= maximum; reaction solved by body equilibrium",
   "checks": [
-    { "jounce_m": 0.0, "force_n": 0.0 },
-    { "jounce_m": 0.061, "force_n": 10000.0 },
-    { "jounce_m": -0.051, "force_n": -10000.0 }
+    { "state": "free", "jounce_m": 0.0, "reaction_n": 0.0 },
+    { "state": "bottomed", "jounce_m": 0.06, "reaction_sign": "nonnegative", "loading_stiffness": "Infinity" },
+    { "state": "topped", "jounce_m": -0.05, "reaction_sign": "nonpositive", "loading_stiffness": "Infinity" }
   ]
 }

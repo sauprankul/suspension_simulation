@@ -12,6 +12,8 @@ artifacts/
 
 # Temporary logs and local app output
 *.log
+/logs/current-session.json
+/logs/current-state.json
 *.tmp
 src/**/app.log
 

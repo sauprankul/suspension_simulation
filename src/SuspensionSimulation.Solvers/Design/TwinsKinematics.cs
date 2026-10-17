@@ -21,18 +21,18 @@ public sealed class TwinsKinematics
     private readonly double[] _neutralHeights;
     private readonly double _rackNeutral;
     private readonly string[] _wheelBodyPaths,_wheelPointIds;
-    public TwinsKinematics(ResolvedAssemblyGraph graph):this(graph,graph.Components.Single(x=>x.Kind==ComponentKind.Rack).Rack?.TravelAtLockM??throw new InvalidOperationException("Rack travel specification is missing.")) { }
+    public TwinsKinematics(ResolvedAssemblyGraph graph):this(graph,graph.Bodies.Single(x=>x.Component.Kind==ComponentKind.Rack).Component.Rack?.TravelAtLockM??throw new InvalidOperationException("Rack travel specification is missing.")) { }
     public TwinsKinematics(ResolvedAssemblyGraph graph,double rackTravelAt450DegreesM)
     {
         if(!double.IsFinite(rackTravelAt450DegreesM)||rackTravelAt450DegreesM<=0) throw new ArgumentException("Rack translation must be positive.");
-        if(graph.Components.Single(x=>x.Kind==ComponentKind.Rack).Rack?.SteeringWheelLockDegrees!=450) throw new InvalidOperationException("This operating adapter requires the declared ±450 degree steering range.");
+        if(graph.Bodies.Single(x=>x.Component.Kind==ComponentKind.Rack).Component.Rack?.SteeringWheelLockDegrees!=450) throw new InvalidOperationException("This operating adapter requires the declared ±450 degree steering range.");
         System=new(graph);RackTravelAt450DegreesM=rackTravelAt450DegreesM;var zero=new double[System.CoordinateCount];
         var corners=new[]{"FL","FR","RL","RR"};_wheelBodyPaths=graph.Root.Vehicle is {} vehicle?corners.Select(c=>vehicle.Contacts.Single(p=>p.Corner==c).InstancePath).ToArray():WheelPaths;
         _wheelPointIds=graph.Root.Vehicle is {} v?corners.Select(c=>v.Contacts.Single(p=>p.Corner==c).CenterPointId).ToArray():["wheel","wheel","wheel","wheel"];
         _neutralHeights=_wheelBodyPaths.Select((p,i)=>System.Point(p,_wheelPointIds[i],zero).Z).ToArray();_rackNeutral=System.Point("front/rack","origin",zero).Y;
         var report=MechanismMobility.Inspect(graph,5);if((!report.IsClosed&&graph.AppliedAdjustments.IsEmpty)||report.DegreesOfFreedom!=5||report.RedundantRows>0) throw new InvalidOperationException("Unsupported explicit vehicle mechanism: "+string.Join(" ",report.Diagnostics));
     }
-    public TwinsMotionState Solve(FourCornerTravel travel,double steeringWheelDegrees,TwinsMotionState? seed=null)
+    public TwinsMotionState Solve(FourCornerTravel travel,double steeringWheelDegrees,TwinsMotionState? seed=null,double tolerance=1e-10)
     {
         if(!double.IsFinite(steeringWheelDegrees)||Math.Abs(steeringWheelDegrees)>450||travel.Values.Any(x=>!double.IsFinite(x))) throw new ArgumentException("Steering range is ±450 degrees; travel must be finite.");
         var start=seed?.Travel.Values??[0d,0d,0d,0d];var initialSteer=seed?.SteeringWheelDegrees??0;var end=travel.Values;
@@ -45,7 +45,7 @@ public sealed class TwinsKinematics
             var drivers=_wheelBodyPaths.Select((p,i)=>new MechanismDriver(p,_wheelPointIds[i],new(0,0,1),_neutralHeights[i]+start[i]+fraction*(end[i]-start[i]))).ToList();
             // Rearward steering arms require negative rack Y translation for positive left steering.
             drivers.Add(new("front/rack","origin",new(0,1,0),_rackNeutral-(initialSteer+fraction*(steeringWheelDegrees-initialSteer))/450*RackTravelAt450DegreesM));
-            pose=System.Solve(drivers,pose);if(!pose.Converged) throw new InvalidOperationException($"Explicit mechanism continuation failed at fraction {fraction:0.###}; scaled residual {pose.MaximumScaledResidual:0.###E+0}. Last accepted pose retained.");
+            pose=System.Solve(drivers,pose,tolerance);if(!pose.Converged) throw new InvalidOperationException($"Explicit mechanism continuation failed at fraction {fraction:0.###}; scaled residual {pose.MaximumScaledResidual:0.###E+0}. Last accepted pose retained.");
         }
         var wheels=_wheelBodyPaths.Select((path,i)=>
         {

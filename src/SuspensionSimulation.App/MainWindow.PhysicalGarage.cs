@@ -47,7 +47,7 @@ public partial class MainWindow
         _garageRoot.SelectionChanged+=(_,_)=>
         {
             if(_garagePhysicalUpdating||_garageSelected is null||_garageRoot.SelectedValue is not string id) return;
-            CachePhysicalGarageDraft();var previous=_garagePhysicalDrafts[_garageSelected.Id];
+            CachePhysicalGarageDraft();var previous=_garagePhysicalDrafts.GetValueOrDefault(_garageSelected.Id)??new GaragePhysicalDraft(new(id),[],[],nameof(MassAccountingPolicy.AggregateBase),"1360.778","51.5","0","460",[]);
             _garagePhysicalDrafts[_garageSelected.Id]=previous with {Root=new(id),Equipment=[],Adjustments=[]};
             FillPhysicalGarage(_garageSelected);
         };
@@ -101,7 +101,7 @@ public partial class MainWindow
         try
         {
             var draft=DraftFor(entry);_garagePhysicalDrafts[entry.Id]=draft;
-            var roots=_designLibrary!.Assemblies().Where(a=>a.Vehicle is not null).ToArray();_garageRoot.ItemsSource=roots;_garageRoot.SelectedValue=draft.Root.AssetId;
+            var roots=_designLibrary!.Assemblies().Where(a=>a.Vehicle is not null).Select(a=>a.Identity.AssetId==draft.Root.AssetId&&draft.Root.RevisionId is not null?_designLibrary.LoadAssembly(a.Identity.AssetId,draft.Root.RevisionId)??a:a).ToArray();_garageRoot.ItemsSource=roots;_garageRoot.SelectedValue=draft.Root.AssetId;
             void Label(string name)=>_garagePhysicalPanel.Children.Add(new TextBlock {Text=name,FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,8,0,3)});
             Label("Physical vehicle assembly");_garagePhysicalPanel.Children.Add(_garageRoot);
             _garagePhysicalPanel.Children.Add(new TextBlock {Text="Geometry and installation dimensions are synthetic/estimated. Static camber, toe and ride height are calculated from the installed hardware.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});
@@ -109,7 +109,7 @@ public partial class MainWindow
             foreach(var slot in graph.EquipmentSlots)
             {
                 Label(slot.InstancePath+" · "+slot.Definition.Name);
-                var choices=slot.Definition.CompatibleAssetIds.Select(id=>new GarageHardwareChoice(id,(slot.Kind==AssetKind.Component?_designLibrary.LoadComponent(id)?.Identity.Name:_designLibrary.LoadAssembly(id)?.Identity.Name)??id+" (missing)")).ToArray();
+                var choices=slot.Definition.CompatibleAssetIds.Select(id=>new GarageHardwareChoice(id,((slot.Kind==AssetKind.Component?_designLibrary.LoadComponent(id,id==slot.Selected.AssetId?slot.Selected.RevisionId:null)?.Identity.Name:_designLibrary.LoadAssembly(id,id==slot.Selected.AssetId?slot.Selected.RevisionId:null)?.Identity.Name)??id+" (missing)")+(id==slot.Selected.AssetId&&slot.Selected.RevisionId is {} pinned?" · pinned "+pinned[..Math.Min(12,pinned.Length)]:""))).ToArray();
                 var picker=new ComboBox {ItemsSource=choices,DisplayMemberPath="Name",SelectedValuePath="Id",SelectedValue=slot.Selected.AssetId,ToolTip=slot.Definition.Description,Margin=new Thickness(0,0,0,4)};
                 _garagePhysicalEquipment[GarageAdjustmentKey(slot.InstancePath,slot.Definition.Id)]=picker;_garagePhysicalPanel.Children.Add(picker);
                 picker.SelectionChanged+=(_,_)=>
@@ -151,7 +151,15 @@ public partial class MainWindow
             _garagePayloadGrid=new DataGrid {ItemsSource=_garagePayloads,AutoGenerateColumns=true,CanUserAddRows=true,CanUserDeleteRows=true,MinHeight=90,MaxHeight=190,ToolTip="Each row adds positive mass at the specified chassis position. Remove a row to remove that payload. Do not add the reference driver a second time."};_garagePhysicalPanel.Children.Add(_garagePayloadGrid);
             var solve=new Button {Content="Check saved setup / static readouts",Margin=new Thickness(0,12,0,0)};solve.Click+=async (_,_)=>await CheckPhysicalGarage();_garagePhysicalPanel.Children.Add(solve);_garagePhysicalReadout.Text="Save changes, then check static equilibrium for calculated alignment, loads and ride heights.";_garagePhysicalPanel.Children.Add(_garagePhysicalReadout);
         }
-        catch(Exception error) {_garageStatus.Text="Physical setup conflict: "+error.Message;App.LogException("Physical Garage fields",error);}
+        catch(Exception error)
+        {
+            _garageStatus.Text="Physical setup conflict: "+error.Message;App.LogException("Physical Garage fields",error);
+            if(_garageRoot.Parent is null)
+            {
+                _garagePhysicalPanel.Children.Add(new TextBlock {Text="Choose a physical assembly to replace the unresolved reference setup. Existing saved revisions are retained.",TextWrapping=TextWrapping.Wrap});
+                _garageRoot.ItemsSource=_designLibrary!.Assemblies().Where(a=>a.Vehicle is not null).ToArray();_garageRoot.SelectedIndex=-1;_garagePhysicalPanel.Children.Add(_garageRoot);
+            }
+        }
         finally {_garagePhysicalUpdating=false;}
     }
     private void GarageMassPolicyChanged(object sender,SelectionChangedEventArgs e)

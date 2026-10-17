@@ -33,6 +33,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
     private InspectionSideSnapshot? _side;
     private long _frameCount;
     private bool _initialFit;
+    private bool _sceneFitted;
     private readonly bool _engineeringDashboard;
     private readonly RenderTimerResolution _timerResolution=new();
     internal bool TimerResolutionActive=>_timerResolution.Active;
@@ -161,17 +162,20 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         camera.Width=Math.Max(.05,1.15*Math.Max(2*horizontal.Max(Math.Abs),2*vertical.Max(Math.Abs)*Viewport.ActualWidth/Viewport.ActualHeight));
         camera.Position=new Point3D(center.X-forward.X*6,center.Y-forward.Y*6,center.Z-forward.Z*6);
         camera.LookDirection=new Vector3D(forward.X*6,forward.Y*6,forward.Z*6);
+        _sceneFitted=true;
     }
 
     public void SetScene(InspectionScene scene)
     {
-        if(!_engineeringDashboard)
+        var physical=scene.Validity=="converged-installed-equilibrium";
+        var componentLabels=physical?scene.Segments.GroupBy(s=>s.Corner).Select(g=>g.First().Id).ToHashSet():scene.Segments.Select(s=>s.Id).ToHashSet();
+        if(!_engineeringDashboard||physical)
         {
             var lines=scene.Segments.Select(x=>x.Id).Concat(scene.Points.Select(x=>x.Id+".marker")).ToHashSet();
-            var labels=scene.Segments.Select(x=>x.Id).ToHashSet();
+            var labels=componentLabels;
             foreach(var p in scene.Points.Where(p=>p.Id.EndsWith(".springUpper")||p.Id.EndsWith(".springLower")||p.Id.EndsWith(".stroke-marker"))) lines.Add(p.Id);
             foreach(var wheel in scene.Wheels) {lines.Add(wheel.Corner+".tire");lines.Add(wheel.Corner+".wheel-axis");labels.Add(wheel.Corner+".tire");}
-            foreach(var id in _models.Keys.Where(x=>!x.StartsWith("ground.") && !lines.Contains(x) && !(x.StartsWith("label-leader.")&&labels.Contains(x[13..]))).ToArray())
+            foreach(var id in _models.Keys.Where(x=>!x.StartsWith("ground.")&&!x.StartsWith("ghost.") && !lines.Contains(x) && !(x.StartsWith("label-leader.")&&labels.Contains(x[13..]))).ToArray())
             {Viewport.Items.Remove(_models[id].Model);_models.Remove(id);}
             foreach(var id in _labels.Keys.Where(x=>!labels.Contains(x)).ToArray()) {Viewport.Items.Remove(_labels[id].Model);_labels.Remove(id);}
             var pointIds=scene.Points.Select(p=>p.Id).ToHashSet();
@@ -184,20 +188,21 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             SetLine(segment.Id,segment.Layer,segment.StartM,segment.EndM,
                 segment.ActiveLimit?Colors.Tomato:segment.Id.EndsWith(".spring")?Colors.LimeGreen:ColorFor(segment.Layer),segment.Source==SceneSource.UnconstrainedReference);
-            if(!segment.Id.EndsWith("-arm-rear") && (segment.Source is SceneSource.Solved or SceneSource.Authored || segment.Id is "rack.housing" or "front-bar.axis" or "rear-bar.axis" || segment.Layer=="reference"))
-                SetLabel(segment.Id,segment.Layer,LabelCaption(segment),(segment.StartM+segment.EndM)/2);
+            if(physical?componentLabels.Contains(segment.Id):!segment.Id.EndsWith("-arm-rear") && (segment.Source is SceneSource.Solved or SceneSource.Authored || segment.Id is "rack.housing" or "front-bar.axis" or "rear-bar.axis" || segment.Layer=="reference"))
+                SetLabel(segment.Id,segment.Layer,physical?segment.Label:LabelCaption(segment),(segment.StartM+segment.EndM)/2);
         }
         foreach(var point in scene.Points)
         {
+            var pointLayer=physical?scene.Segments.FirstOrDefault(s=>s.Corner==point.Corner)?.Layer??"chassis":point.Corner.StartsWith("F")?"front":"rear";
             if(point.Id.EndsWith(".springUpper")||point.Id.EndsWith(".springLower")||point.Id.EndsWith(".stroke-marker"))
             {
                 var marker=point.Id.EndsWith(".stroke-marker");
-                var active=scene.SpringStrokes.Any(x=>x.Corner==point.Corner && (x.BumpRemainingM==0||x.ReboundRemainingM==0));
-                SetDot(point.Id,!_engineeringDashboard?"wheels":point.Corner.StartsWith("F")?"front":"rear",point.PositionM,marker?(active?Colors.Tomato:Colors.Gold):Colors.White,marker?10:7);
+                var active=scene.SpringStrokes.Any(x=>x.Corner==point.Corner && (x.BumpRemainingM<1e-8||x.ReboundRemainingM<1e-8));
+                SetDot(point.Id,!_engineeringDashboard?"wheels":pointLayer,point.PositionM,marker?(active?Colors.Tomato:Colors.Gold):Colors.White,marker?10:7);
                 continue;
             }
             var d=new Vector3(.012f,0,0);
-            SetLine(point.Id+".marker",!_engineeringDashboard?"wheels":point.Id.EndsWith("ideal-contact")?"ground":point.Source==SceneSource.FixedChassis?"chassis":point.Corner.StartsWith("F")?"front":"rear",point.PositionM-d,point.PositionM+d,Colors.Gainsboro);
+            SetLine(point.Id+".marker",!_engineeringDashboard?"wheels":point.Id.EndsWith("ideal-contact")?"ground":point.Source==SceneSource.FixedChassis?"chassis":pointLayer,point.PositionM-d,point.PositionM+d,Colors.Gainsboro);
         }
         foreach(var wheel in scene.Wheels)
         {
@@ -222,7 +227,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
 
     public void SetState(InspectionSideSnapshot side,double solveMilliseconds)
     {
-        _side=side;SetScene(side.Scene);_travel.Children.Clear();
+        _installedSide=null;_side=side;SetScene(side.Scene);_travel.Children.Clear();
         UpdateReadouts(side);
         foreach(var limit in side.Diagnostics.Limits.OrderBy(x=>x.Corner))
         {
@@ -321,7 +326,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         if(corner is not null && _side?.Corners.TryGetValue(corner,out var cornerPose)==true)
             _detail.Text+=$" · jounce {cornerPose.WheelJounceM*1000:0.00} mm · normal load {_side.NormalLoadsN[corner]:0.0} N";
         var stroke=_scene?.SpringStrokes.FirstOrDefault(x=>x.Corner==corner);
-        if(stroke is not null && (segment?.Id.EndsWith(".spring")==true || point is not null))
+        if(stroke is not null && (segment?.Id.EndsWith(".spring")==true||segment?.Id.EndsWith(".damper")==true || point is not null))
             _detail.Text+=$"\nComponent length {stroke.CurrentLengthM*1000:0.00} mm; rigid range {stroke.MinimumLengthM*1000:0.00}–{stroke.MaximumLengthM*1000:0.00} mm. Remaining bump {stroke.BumpRemainingM*1000:0.00} mm / rebound {stroke.ReboundRemainingM*1000:0.00} mm.\nWhite dots: upper/lower mounts. Gold/red dot: remaining compression stroke measured from the upper mount; coincides with it at bottom-out.";
         if(segment?.Layer=="bars" && _side is not null)
         {
@@ -334,6 +339,15 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             _detail.Text+=$"\n{limit.Message} {limit.LimitId}: exact travel constraint, reaction {limit.ReactionForceN:0.0} N, ∞ loading stiffness.\n"+
                 "Further load changes the reaction and the remaining free body motion. Unloading releases the stop. RSD is undefined if both axles have active rigid stops.";
+        }
+        if(_installedSide is {} installed)
+        {
+            var element=installed.State.Mechanics.Elements.FirstOrDefault(e=>corner==e.Path);
+            if(element is not null) _detail.Text+=$"\nInstalled {element.Kind}: {element.ForceOrTorque:0.0} {(element.Kind=="torsion-bar"?"N·m":"N")} · energy {element.EnergyJ:0.000} J";
+            foreach(var reaction in installed.State.RigidReactions.Where(r=>r.ForceN>1e-5&&r.Id.StartsWith((corner??"__none__")+":",StringComparison.Ordinal)))
+                _detail.Text+=$"\n{reaction.Id}: rigid travel constraint · reaction {reaction.ForceN:0.0} N · gap {reaction.GapM:E2} m · infinite loading stiffness.";
+            if(wheel is not null&&installed.State.Wheels.Select((w,i)=>(w,i)).FirstOrDefault(x=>x.w.Corner==wheel.Corner) is var match&&match.w is not null)
+                _detail.Text+=$"\nNormal load {installed.State.NormalLoadsN[match.i]:0.0} N · camber {match.w.CamberRad*180/Math.PI:0.000}° · heading {match.w.HeadingRad*180/Math.PI:0.000}°";
         }
     }
     private static string Source(SceneSource source)=>source switch {SceneSource.Authored=>"authored geometry",SceneSource.FixedChassis=>"fixed chassis",SceneSource.VisualEstimate=>"visual estimate",SceneSource.UnconstrainedReference=>"not constrained by current solver",_=>"solved geometry"};

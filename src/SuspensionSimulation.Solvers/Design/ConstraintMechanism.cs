@@ -91,14 +91,15 @@ public sealed class ConstraintMechanism
         {var plus=(double[])q.Clone();var minus=(double[])q.Clone();plus[column]+=step;minus[column]-=step;var rp=residual(plus);var rm=residual(minus);for(var row=0;row<rowCount;row++) result[row,column]=(rp[row]-rm[row])/(2*step);}
         return result;
     }
-    public MechanismPose Solve(IReadOnlyList<MechanismDriver> drivers,MechanismPose? seed=null)
+    public MechanismPose Solve(IReadOnlyList<MechanismDriver> drivers,MechanismPose? seed=null,double tolerance=1e-10)
     {
+        if(!double.IsFinite(tolerance)||tolerance<=0||tolerance>1e-10) throw new ArgumentOutOfRangeException(nameof(tolerance));
         var q=seed is null?new double[CoordinateCount]:seed.Coordinates.ToArray();
         double[] R(double[] state)=>Residual(state,drivers);
         for(var iteration=0;iteration<60;iteration++)
         {
             var r=R(q);var max=r.Select(Math.Abs).DefaultIfEmpty(0).Max();
-            if(max<1e-10) return new([..q],max,iteration,MechanismMobility.MatrixRank(Jacobian(R,q),1e-8)==CoordinateCount);
+            if(max<tolerance) return new([..q],max,iteration,MechanismMobility.MatrixRank(Jacobian(R,q),1e-8)==CoordinateCount);
             var jacobian=Jacobian(R,q);double[] delta;
             try {delta=SolveLeastSquares(jacobian,r);}catch(InvalidOperationException) {return new([..q],max,iteration,false);}
             var accepted=false;var norm=r.Sum(x=>x*x);

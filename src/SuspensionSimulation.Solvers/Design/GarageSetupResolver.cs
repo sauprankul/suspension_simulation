@@ -6,9 +6,11 @@ namespace SuspensionSimulation.Solvers.Design;
 public sealed class GarageSetupResolver(IDesignAssetSource source)
 {
     public ResolvedAssemblyGraph Resolve(GarageSetup setup)
+        =>Freeze(new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment),setup);
+    public static ResolvedAssemblyGraph Freeze(ResolvedAssemblyGraph graph,GarageSetup setup)
     {
         DesignValidation.Validate(setup);
-        var graph=new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment);
+        if(graph.Root.Identity.AssetId!=setup.RootAssembly.AssetId||!graph.SelectedEquipment.SequenceEqual(setup.Equipment)) throw new ArgumentException("Resolved source does not match the saved Garage configuration.");
         foreach(var selected in setup.Adjustments)
             if(!graph.SetupAdjustments.Any(a=>a.InstancePath==selected.InstancePath&&a.Definition.Id==selected.AdjustmentId))
                 throw new ArgumentException("Adjustment is not exposed to Garage: "+selected.InstancePath+":"+selected.AdjustmentId);

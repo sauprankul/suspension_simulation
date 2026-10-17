@@ -87,7 +87,9 @@ public partial class MainWindow
             var fields=_workspaceDrafts[Workspace.Garage];GarageEntry saved;
             if(action is "Open 2D" or "Open 3D")
             {
-                var entry=_garageSelected??throw new InvalidOperationException("Select a saved Garage entry first.");_= _garageCatalog!.Resolve(entry);
+                var entry=_garageSelected??throw new InvalidOperationException("Select a saved Garage entry first.");
+                if(entry.Archived) throw new InvalidOperationException("Restore this archived entry before analysis.");
+                _=new SuspensionSimulation.Solvers.Design.GarageSetupResolver(_designLibrary!).Resolve(entry.Configuration??throw new InvalidOperationException("Save a physical assembly first."));
                 RefreshAnalysisChoices();_analysisA.SelectedValue=entry.Id;NavigateWorkspace(action=="Open 3D"?Workspace.Visualizer3D:Workspace.HeadToHead);return;
             }
             if(action=="New") saved=_garage!.Save(new(Guid.NewGuid().ToString("N"),0,"New car","",false,_physicalGarageCatalog!.Create("New car"),_garageCatalog!.Stock(false)));

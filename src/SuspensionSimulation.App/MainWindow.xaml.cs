@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         Loaded += (_, _) => Initialise();
         SizeChanged += (_, _) => ScheduleRender();
         StateChanged += (_,_)=>{_inspectionViewport?.SetActive(_inspectionEnabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);_componentViewport?.SetActive(_workspace==Workspace.ComponentDesigner&&WindowState!=WindowState.Minimized);_assemblyViewport?.SetActive(_workspace==Workspace.AssemblyEditor&&WindowState!=WindowState.Minimized);};
-        Closed += (_,_)=>{_renderTimer.Stop();_inspectionViewport?.Dispose();CloseComponentDesigner();CloseAssemblyEditor();};
+        Closed += (_,_)=>{_renderTimer.Stop();CloseInstalledAnalysis();_inspectionViewport?.Dispose();CloseComponentDesigner();CloseAssemblyEditor();};
     }
 
     private void Initialise()
@@ -114,6 +114,11 @@ public partial class MainWindow : Window
             LongitudinalReadout.Text = $"{_ax:+0.00;-0.00;0.00} G";
             LateralReadout.Text = $"{_ay:+0.00;-0.00;0.00} G";
             MagnitudeReadout.Text = $"GSUM {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {total:0.00} G" + (point.WasClamped ? "  •  capped" : "");
+            if(!_legacyProofMode)
+            {
+                var selectedA=SelectedAnalysisEntry(true);var selectedB=_inspectionEnabled&&_analysisB.SelectedValue is null?selectedA:SelectedAnalysisEntry(false);
+                DrawG(point,radius);QueueInstalledAnalysis(attempt,selectedA,selectedB,ReadSteering());return;
+            }
 
             var garageA=_legacyProofMode?null:SelectedAnalysisEntry(true);
             var garageB=_legacyProofMode?null:(_inspectionEnabled && _analysisB.SelectedValue is null?garageA:SelectedAnalysisEntry(false));
@@ -147,6 +152,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
+            if(!_legacyProofMode) {_installedCancellation?.Cancel();_installedRequestKey=null;RejectInstalled(attempt,exception.Message);App.LogException("Installed analysis input rejected",exception);return;}
             App.LogException($"Head-to-head render failed attempt={attempt}; inputSnapshot={inputSnapshot}", exception);
             StatusText.Text = $"Input/solve error; previous valid plots retained: {exception.Message}  •  Log: {App.LogPath}";
             ViewSummary.Text=$"STALE · accepted revision {_acceptedSnapshot?.Revision.ToString()??"none"} · rejected revision {attempt}: {exception.Message}";
@@ -224,9 +230,9 @@ public partial class MainWindow : Window
         attempt,
         axG = _ax,
         ayG = _ay,
-        packageDirectory = _packageDirectory,
-        packageFingerprint = _vehicle?.InputFingerprintSha256,
-        analysisSource = _legacyProofMode?"legacy-proof-controls":"saved-garage-revisions",
+        packageDirectory = _legacyProofMode?_packageDirectory:_designLibrary?.Root,
+        packageFingerprint = _legacyProofMode?_vehicle?.InputFingerprintSha256:_acceptedInstalled?.RequestSha256,
+        analysisSource = _legacyProofMode?"legacy-proof-controls":"saved-garage-installed-equilibrium",
         garageSelection = new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         controls = new
         {

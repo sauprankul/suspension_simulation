@@ -28,8 +28,11 @@ public partial class MainWindow
                 _inspectionViewport.Failed+=InspectionFailed;
                 _inspectionViewport.ExportRequested+=ExportInspection;
                 InspectionViewportHost.Content=_inspectionViewport;
-                _inspectionViewport.SetReference(_sceneBuilder.BuildReference(_vehicle.Chassis.CgHeightM));
-                if(_acceptedSnapshot is null) _inspectionViewport.SetScene(_sceneBuilder.BuildReference(_vehicle.Chassis.CgHeightM));
+                if(_legacyProofMode)
+                {
+                    _inspectionViewport.SetReference(_sceneBuilder.BuildReference(_vehicle.Chassis.CgHeightM));
+                    if(_acceptedSnapshot is null) _inspectionViewport.SetScene(_sceneBuilder.BuildReference(_vehicle.Chassis.CgHeightM));
+                }
             }
             _inspectionEnabled=enabled;
             if(RootGrid.Visibility==Visibility.Visible) _workspace=enabled?Workspace.Visualizer3D:Workspace.HeadToHead;
@@ -53,6 +56,16 @@ public partial class MainWindow
     {if(_inspectionEnabled) {MoveSelectedSetup();UpdateInspectionScene();}}
     private void UpdateInspectionScene()
     {
+        if(!_legacyProofMode)
+        {
+            if(_inspectionEnabled&&_acceptedInstalled is {} accepted&&_inspectionViewport is not null)
+            {
+                _inspectionViewport.SetReference(_installedNeutralScene!);
+                _inspectionViewport.SetInstalledState(accepted.A,_installedScene!,accepted.SolveMilliseconds);
+                if(_rejectedRevision is {} installedRejected) _inspectionViewport.MarkStale(installedRejected,_rejectedError??"Rejected setup");
+            }
+            return;
+        }
         if(!_inspectionEnabled || _acceptedSnapshot is not {} snapshot || _inspectionViewport is null) return;
         var side=InspectionSetup.SelectedIndex==0?snapshot.A:snapshot.B;
         _inspectionViewport.SetState(side,snapshot.SolveMilliseconds);
@@ -94,6 +107,7 @@ public partial class MainWindow
     internal void CaptureInspection(string path)=>_inspectionViewport?.SaveImage(path);
     private void ExportInspection()
     {
+        if(!_legacyProofMode) {ExportInstalledInspection();return;}
         if(_acceptedSnapshot is null || _inspectionViewport is null) return;
         try
         {

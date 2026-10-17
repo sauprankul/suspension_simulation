@@ -19,7 +19,7 @@ internal sealed partial class InspectionViewport
         Point Project(Vector3 p)=>new(width/2+Vector3.Dot(p-frame.Target,right)/scale,height/2-Vector3.Dot(p-frame.Target,up)/scale);
         // Equal screen cells keep white text rectangles separate, including at minimum size.
         // Greedy nearest-cell assignment preserves a short leader back to each physical part.
-        var columns=Math.Max(1,(int)(width/110));var rows=Math.Max(1,(int)(height/18));
+        var columns=_scene?.Validity=="converged-installed-equilibrium"?Math.Max(1,(int)Math.Ceiling(width/100)):Math.Max(1,(int)(width/110));var rows=Math.Max(1,(int)(height/18));
         var cells=(from x in Enumerable.Range(0,columns) from y in Enumerable.Range(0,rows)
             select new Point((x+.5)*width/columns,(y+.5)*height/rows)).ToList();
         foreach(var (id,entry) in _labels.Where(x=>_visible.Contains(x.Value.Layer)).OrderBy(x=>Project(x.Value.Anchor).Y).ThenBy(x=>x.Key))

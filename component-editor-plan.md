@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–7 implemented with the documented synthetic/estimated data scope. Physical Garage controls and saved static readouts pass the isolated UI proof; Stage 8 production visualizer integration is next. Stages 8–11 remain. Existing visualizers are Garage-driven through the explicitly provisional reference adapter until Stage 8 passes.
+Prepared: 2026-10-16. Status: Stages 0–8 implemented with the documented synthetic/estimated data scope. Both production visualizers now consume saved physical Garage setups and the installed-equilibrium solver. Stages 9–11 remain; CPU FEA contact verification is in progress.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -519,7 +519,8 @@ Priority change: the user requested Garage before component authoring. The first
 - [x] Stage 1 — multi-screen shell
 - [x] Stages 2–6 — authoring, explicit topology, installed mechanics and static solver
 - [x] Stage 7 — physical Garage hardware/adjustment/mass controls and migration
-- [ ] Stages 8–11 — production analysis integration, FEA, Studio and final integration
+- [x] Stage 8 — production analysis integration and immutable accepted snapshots
+- [ ] Stages 9–11 — FEA, Studio and final integration
 
 ### Stage 0 checkpoint — 2026-10-16
 
@@ -611,5 +612,14 @@ Priority change: the user requested Garage before component authoring. The first
 - Assemblies declare equipment slots with explicit compatible asset IDs and adjustment exposures. Nested/mirrored instance paths remain independent. Garage can select equipment and exposed settings only; a missing slot, changed interface, unknown adjustment, out-of-range setting or incomplete component-sum mass rejects before a physical job. Grouping/import preserve and remap setup interfaces.
 - Stock GR86/BRZ entries migrate by appending a physical configuration revision, preserving the previous saved reference equipment selections, notes and history. Repeated migration is idempotent. Duplication creates a separate setup identity. Estimated dimensions/CG and synthetic hard points remain clearly labeled.
 - Garage shows a vehicle-assembly picker, per-corner spring/damper/top-mount equipment, axle bars, hardware-generated bounded adjusters, aggregate/component-sum mass choice and added payload locations. Example adjustable dampers/camber plates are explicitly synthetic alternatives; stock fixed mounts do not acquire imaginary adjustments. Assembly Editor has equipment/exposure authoring tabs.
-- Saved static readouts use the new installed-equilibrium solver. Raw invalid input survives navigation and live-state restore, and cannot be saved as an accepted setting. Targeted physical Garage checks and `--physical-garage-proof` pass; proof records/captures are under `artifacts/physical-garage-ui`. The full regression run is in progress at this checkpoint.
+- Saved static readouts use the new installed-equilibrium solver. Raw invalid input survives navigation and live-state restore, and cannot be saved as an accepted setting. Targeted physical Garage checks and `--physical-garage-proof` pass; proof records/captures are under `artifacts/physical-garage-ui`. The full regression run subsequently passed **93/93**.
 - Stage 8 still needs to replace the provisional production analysis path, freeze selected equipment plus exact source definitions, and handle async/cancel/stale results atomically.
+
+### Stage 8 checkpoint — 2026-10-17
+
+- Both normal visualizers now resolve physical Garage configurations and use the installed equilibrium for all motion/alignment/load/height readouts. Hidden legacy spring/bar/alignment inputs do not drive production results. The legacy solver remains available only through explicit regression/proof paths.
+- A single queued CPU worker freezes source definitions, selected equipment, setup values and dependency hashes per job; A/B swap together only after both succeed and current sources still match. New requests cancel superseded work. Invalid or canceled input retains the complete last accepted result with a stale/conflict indication. Camera/navigation changes schedule no physics. Compatible source publication invalidates affected analysis; incompatible interfaces cannot partially replace the accepted graph.
+- Exact configured source bundles and setup values export with the result and replay independently of later library updates. An atomic on-disk checkpoint retains the frozen last-good result across a restart. Live state/logs include the physical snapshot, pending state, accepted/rejected revision and actual analysis source.
+- Installed roll tangents differentiate elastic energy while continuing the rigid geometry at fixed grounded-wheel heights; spring preload curvature is retained. A tighter inner pose tolerance is used for this derivative. Perturbation-step convergence is tested. Active rigid loading stiffness and undefined balance after contact release/both-axle rigid stops are reported separately rather than replaced with artificial elastic rates.
+- The existing 3D viewport/cube/pan/zoom is reused. Scene parts, wheel orientations, stroke markers, component labels and fixed-size engineering readouts use the accepted physical pose. Rigid-stop reactions, lifted tires and unseated springs stay visible. Minimum and normal window captures are inspected under `artifacts/installed-analysis-layout`; the complete native source/selection/steer/load/export/cancel/stale/recovery proof passes under `artifacts/installed-analysis-ui`.
+- **94/94** regressions pass. The configured-result replay/cancellation checks and the native production analysis proof pass. CPU solve latency is still seconds (one final warm A/B loaded sample was about 9 seconds on this machine), with cancel/progress indication and independent camera rendering; numerical performance optimization and long-run resource checks remain Stage 11 work.

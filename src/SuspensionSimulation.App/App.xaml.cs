@@ -65,6 +65,8 @@ public partial class App : Application
             if(e.Args.Contains("--mechanics-proof")) window.RunMechanicsProof();
             if(e.Args.Contains("--installed-proof")) window.RunInstalledProof();
             if(e.Args.Contains("--physical-garage-proof")) window.RunPhysicalGarageProof();
+            if(e.Args.Contains("--installed-analysis-proof")) window.RunInstalledAnalysisProof();
+            if(e.Args.Contains("--installed-layout-proof")) window.RunInstalledLayoutProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

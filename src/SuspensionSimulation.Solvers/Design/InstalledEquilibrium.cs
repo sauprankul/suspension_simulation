@@ -51,7 +51,7 @@ public sealed class InstalledEquilibrium
     public InstalledEquilibriumResult Solve(VehicleStaticInput input,InstalledEquilibriumResult? seed=null,CancellationToken cancellation=default)
     {
         ValidateMass(input.Mass);if(!double.IsFinite(input.LongitudinalG)||!double.IsFinite(input.LateralG)) throw new ArgumentException("Acceleration must be finite.");
-        _geometryCache.Clear();_poseSeed=null;_poseEvaluations=0;
+        _geometryCache.Clear();_poseSeed=seed?.Manifest is {} manifest&&manifest.Dependencies.SequenceEqual(_graph.Manifest.Dependencies)&&seed.Adjustments.SequenceEqual(_graph.AppliedAdjustments)?seed.Motion:null;_poseEvaluations=0;
         var initial=seed is null?new double[7]:seed.Motion.Travel.Values.Concat(new[]{seed.Chassis.HeaveM,seed.Chassis.RollRad,seed.Chassis.PitchRad}).Select(v=>v/CoordinateScale).ToArray();
         var x=initial;var first=Evaluate(x,input,cancellation);var totalMass=first.Masses.Sum(m=>m.Kg);var forceScale=totalMass*Gravity;var energyScale=forceScale*LengthScale;
         var active=new List<int>{0,1,2,3};var lambda=new Dictionary<int,double>();foreach(var index in active) lambda[index]=.25;

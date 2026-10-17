@@ -72,6 +72,7 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
     /// <summary>Import an independent clone. Original revisions and hashes remain archived; existing heads are untouched.</summary>
     public AssemblyDefinition ImportClone(PortableDesignBundle bundle)
     {
+        if(bundle.Equipment is {Length:>0}) throw new InvalidOperationException("Import the authored source assembly separately from a configured Garage result.");
         AssemblyGraphResolver.OpenBundle(bundle);
         var json=DesignJson.Serialize(bundle);var hash=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
         var archive=Path.Combine(Root,"assets","imports");Directory.CreateDirectory(archive);var file=Path.Combine(archive,hash+".json");

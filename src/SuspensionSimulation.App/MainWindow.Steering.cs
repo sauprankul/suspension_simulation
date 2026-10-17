@@ -30,7 +30,9 @@ public partial class MainWindow
     private double ReadSteering()
     {
         if(!double.TryParse(SteeringAngle.Text,NumberStyles.Float,CultureInfo.InvariantCulture,out var angle)||!double.IsFinite(angle)) throw new ArgumentException("Steering angle must be a finite number.");
-        _steeringGeometry.RackDisplacementM(angle);return angle;
+        if(_legacyProofMode) _steeringGeometry.RackDisplacementM(angle);
+        else if(Math.Abs(angle)>450) throw new ArgumentException("The selected physical vehicle supports ±450° steering-wheel travel.");
+        return angle;
     }
     private void SteeringGeometryClick(object sender,RoutedEventArgs e)
     {

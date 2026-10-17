@@ -10,8 +10,8 @@ public partial class MainWindow
 {
     private readonly bool _legacyProofMode=Environment.GetCommandLineArgs().Any(x=>new[]{"--inspection-proof","--steering-proof","--hard-stop-proof","--stage3-proof","--stage3-nonpointer","--inspection-soak"}.Contains(x));
     private ReferenceGarageCatalog? _garageCatalog;
-    private readonly ComboBox _analysisA=new(){DisplayMemberPath="Name",SelectedValuePath="Id",MinWidth=230,Margin=new Thickness(5,4,12,0)};
-    private readonly ComboBox _analysisB=new(){DisplayMemberPath="Name",SelectedValuePath="Id",MinWidth=230,Margin=new Thickness(5,4,12,0)};
+    private readonly ComboBox _analysisA=new(){DisplayMemberPath="Name",SelectedValuePath="Id",Width=200,Margin=new Thickness(5,4,12,0)};
+    private readonly ComboBox _analysisB=new(){DisplayMemberPath="Name",SelectedValuePath="Id",Width=200,Margin=new Thickness(5,4,12,0)};
     private readonly TextBlock _analysisALabel=new(){Text="Garage A",VerticalAlignment=VerticalAlignment.Center};
     private readonly TextBlock _analysisBLabel=new(){Text="Garage B",VerticalAlignment=VerticalAlignment.Center};
     private bool _refreshingAnalysis;
@@ -30,6 +30,7 @@ public partial class MainWindow
         foreach(var label in labels) label.Visibility=Visibility.Collapsed;
         RackGeometryButton.Visibility=Visibility.Collapsed;AReferenceLabel.Visibility=BReferenceLabel.Visibility=Visibility.Collapsed;
         _analysisInitialized=true;RefreshAnalysisChoices(initial:true);
+        InitializeInstalledAnalysis(row);
         _analysisA.SelectionChanged+=(_,_)=>{if(!_refreshingAnalysis) Render();};
         _analysisB.SelectionChanged+=(_,_)=>{if(!_refreshingAnalysis) Render();};
     }
@@ -38,7 +39,7 @@ public partial class MainWindow
         if(!_analysisInitialized) return;
         var a=initial?ReferenceGarageCatalog.Gr86Id:_analysisA.SelectedValue as string;
         var b=initial?ReferenceGarageCatalog.BrzId:_analysisB.SelectedValue as string;
-        var entries=_garage!.List().Where(x=>!x.Archived && x.ReferenceEquipment is not null).ToArray();
+        var entries=_garage!.List().Where(x=>!x.Archived && x.Configuration is not null).ToArray();
         _refreshingAnalysis=true;
         try {_analysisA.ItemsSource=entries;_analysisB.ItemsSource=entries;_analysisA.SelectedValue=a;_analysisB.SelectedValue=b;}
         finally {_refreshingAnalysis=false;}
@@ -52,6 +53,7 @@ public partial class MainWindow
     {
         if(!_analysisInitialized) return;
         RefreshAnalysisChoices();
+        if(!_legacyProofMode) {Render();return;}
         var a=_analysisA.SelectedItem as GarageEntry;var b=_analysisB.SelectedItem as GarageEntry;
         if(a is null || _acceptedSnapshot?.GarageA is not {} oldA || oldA.EntryId!=a.Id || oldA.Revision!=a.Revision ||
             (!_inspectionEnabled && (b is null || _acceptedSnapshot.GarageB is not {} oldB || oldB.EntryId!=b.Id || oldB.Revision!=b.Revision))) Render();
@@ -63,6 +65,21 @@ public partial class MainWindow
         _analysisALabel.Text=single?"Garage":"Garage A";_analysisB.Visibility=_analysisBLabel.Visibility=single?Visibility.Collapsed:Visibility.Visible;
         InspectionSetup.Visibility=Visibility.Collapsed;InspectionSetup.SelectedIndex=0;
         AReferenceLabel.Visibility=BReferenceLabel.Visibility=Visibility.Collapsed;
+        if(!_legacyProofMode&&_acceptedInstalled is {} installed)
+        {
+            ((TextBlock)((DockPanel)AReferenceLabel.Parent).Children[0]).Text=installed.A.Entry.Name;
+            ((TextBlock)((DockPanel)BReferenceLabel.Parent).Children[0]).Text=installed.B.Entry.Name;
+            ((TextBlock)((StackPanel)((FrameworkElement)ViewModeButton.Parent).Parent).Children[0]).Text=single?installed.A.Entry.Name:installed.A.Entry.Name+" vs "+installed.B.Entry.Name;
+            ComparisonGrid.Columns[1].Header=installed.A.Entry.Name;ComparisonGrid.Columns[2].Header=installed.B.Entry.Name;ComparisonGrid.Columns[3].Header="B − A";
+            _analysisA.ToolTip=installed.A.Entry.Name+" · accepted saved revision "+installed.A.Entry.Revision;_analysisB.ToolTip=installed.B.Entry.Name+" · accepted saved revision "+installed.B.Entry.Revision;
+            if(_rejectedRevision is null&&!_installedPending)
+            {
+                StatusText.Text=$"Installed equilibrium · saved revisions A {installed.A.Entry.Revision} / B {installed.B.Entry.Revision} · synthetic/estimated geometry · {installed.SolveMilliseconds:0} ms";
+                StatusText.ToolTip="Exact source revisions and setup values are frozen with each result. Alignment, ride height, contact loads and rigid reactions come from the accepted equilibrium.";
+                ViewSummary.Text=$"Accepted revision {installed.Revision} · "+(single?"saved Garage setup":"saved Garage comparison");
+            }
+            return;
+        }
         if(_comparison is {} comparison)
         {
             ((TextBlock)((DockPanel)AReferenceLabel.Parent).Children[0]).Text=comparison.A.Input.Name;

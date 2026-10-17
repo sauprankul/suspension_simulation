@@ -23,7 +23,11 @@ public sealed record ResolvedAssemblyGraph(AssemblyDefinition Root,ImmutableArra
 }
 public sealed record GraphResolution(ResolvedAssemblyGraph? Graph,bool IsStale,string? Conflict);
 public sealed record PortableDesignBundle(string SchemaVersion,AssetReference Root,ImmutableArray<ComponentDefinition> Components,
-    ImmutableArray<AssemblyDefinition> Assemblies,FrozenResultManifest Manifest);
+    ImmutableArray<AssemblyDefinition> Assemblies,FrozenResultManifest Manifest)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public ImmutableArray<EquipmentSelection>? Equipment {get;init;}
+}
 
 /// <summary>Captures each latest head once. A failed update retains the entire previous graph, never a mixture.</summary>
 public sealed class AssemblyGraphResolver(IDesignAssetSource library)
@@ -95,7 +99,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
                     var c=Fetch(reference,components,library.LoadComponent,x=>x.Identity);ComponentAuthoring.ValidateForPublish(c);
                     if(reference.AssetId!=instance.Definition.AssetId)
                     {
-                        var original=library.LoadComponent(instance.Definition.AssetId,instance.Definition.RevisionId)??throw new InvalidOperationException("Missing slot default at "+childPath);
+                        var original=Fetch(instance.Definition,components,library.LoadComponent,x=>x.Identity);
                         if(c.Kind!=original.Kind) throw new InvalidOperationException("Equipment kind changed at "+childPath);
                         foreach(var port in original.Ports)
                         {var next=c.Ports.SingleOrDefault(p=>p.Id==port.Id);if(next is null||next.Role!=port.Role||port.SupportedJoints.Except(next.SupportedJoints).Any()) throw new InvalidOperationException("Equipment interface changed at "+childPath+":"+port.Id);}
@@ -191,7 +195,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
             .OrderBy(x=>x.Kind).ThenBy(x=>x.AssetId,StringComparer.Ordinal).ToImmutableArray();
         return new(rootDefinition,[..bodies],[..joints],mappedExports.ToImmutableDictionary(StringComparer.Ordinal),[..grounded.Order(StringComparer.Ordinal)],new(root.AssetId,dependencies),[..components.Values],[..assemblies.Values]) {Interfaces=interfaces.ToImmutableDictionary(StringComparer.Ordinal),ElasticElements=[..elements],SpringSeats=[..seatBindings],EquipmentSlots=[..slots],SetupAdjustments=[..setupAdjustments],SelectedEquipment=[..equipment]};
     }
-    private static void CheckInterfaces(ResolvedAssemblyGraph old,ResolvedAssemblyGraph next)
+    public static void CheckInterfaces(ResolvedAssemblyGraph old,ResolvedAssemblyGraph next)
     {
         foreach(var body in old.Bodies)
         {var current=next.Bodies.SingleOrDefault(x=>x.Path==body.Path);if(current is not null&&current.Component.Kind!=body.Component.Kind) throw new InvalidOperationException("Component kind changed at "+body.Path);}
@@ -205,6 +209,11 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
             var after=next.Joints.SingleOrDefault(x=>x.Path==before.Path);if(after is null) continue;
             if(before.First.Role!=after.First.Role||before.Second.Role!=after.Second.Role) throw new InvalidOperationException("Joint port role changed at "+before.Path);
         }
+        foreach(var before in old.ElasticElements)
+        {
+            var after=next.ElasticElements.SingleOrDefault(e=>e.Path==before.Path);if(after is null) continue;
+            if(before.Component.Kind!=after.Component.Kind||before.First.Role!=after.First.Role||before.Second.Role!=after.Second.Role) throw new InvalidOperationException("Elastic interface changed at "+before.Path);
+        }
     }
     public static PortableDesignBundle Export(ResolvedAssemblyGraph graph)
     {
@@ -212,12 +221,18 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         if(graph.Root.Identity.RevisionId.Length!=64) throw new InvalidOperationException("Publish the root before exporting.");
         return new(DesignConventions.SchemaVersion,new(graph.Root.Identity.AssetId,graph.Root.Identity.RevisionId),graph.Components,graph.Assemblies,graph.Manifest);
     }
+    public static PortableDesignBundle ExportConfigured(ResolvedAssemblyGraph graph)
+    {
+        if(graph.AppliedAdjustments.Length>0) throw new InvalidOperationException("Export exact source geometry before applying Garage settings.");
+        if(graph.Root.Identity.RevisionId.Length!=64) throw new InvalidOperationException("Publish the root before exporting.");
+        return new(DesignConventions.SchemaVersion,new(graph.Root.Identity.AssetId,graph.Root.Identity.RevisionId),graph.Components,graph.Assemblies,graph.Manifest) {Equipment=graph.SelectedEquipment};
+    }
     public static ResolvedAssemblyGraph OpenBundle(PortableDesignBundle bundle)
     {
         if(bundle.SchemaVersion!=DesignConventions.SchemaVersion) throw new InvalidDataException("Unsupported bundle schema.");
         DesignValidation.Validate(bundle.Manifest);
         if(bundle.Root.AssetId!=bundle.Manifest.RootAssemblyId||bundle.Root.RevisionId is null) throw new InvalidDataException("Bundle root must be an exact frozen revision.");
-        var source=new FrozenSource(bundle);var graph=new AssemblyGraphResolver(source).Compile(bundle.Root);
+        var source=new FrozenSource(bundle);var graph=new AssemblyGraphResolver(source).Compile(bundle.Root,bundle.Equipment??[]);
         if(!graph.Manifest.Dependencies.SequenceEqual(bundle.Manifest.Dependencies.OrderBy(x=>x.Kind).ThenBy(x=>x.AssetId,StringComparer.Ordinal))) throw new InvalidDataException("Frozen dependency manifest differs from the resolved graph.");
         return graph;
     }

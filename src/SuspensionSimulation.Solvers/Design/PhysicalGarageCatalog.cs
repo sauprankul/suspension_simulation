@@ -7,6 +7,7 @@ namespace SuspensionSimulation.Solvers.Design;
 public sealed class PhysicalGarageCatalog(DesignAssetLibrary library,string repository)
 {
     public TwinsInstalledModels Models {get;}=TwinsInstalledCatalog.Seed(library,repository);
+    public Dictionary<string,string> MigrationConflicts {get;}=new(StringComparer.Ordinal);
     public GarageSetup Create(string name,bool brz=false)=>new(new(Guid.NewGuid().ToString("N"),"draft",name,
         new(DataProvenance.Estimated,"Reference equipment with synthetic geometry and estimated installation dimensions/CG; total base mass includes the reference driver once.",null)),
         new((brz?Models.Brz:Models.Gr86).Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[]));
@@ -30,8 +31,12 @@ public sealed class PhysicalGarageCatalog(DesignAssetLibrary library,string repo
     {
         foreach(var entry in garage.List().Where(e=>e.Configuration is null&&e.ReferenceEquipment is not null))
         {
-            var setup=Migrate(entry);_=new GarageSetupResolver(library).Resolve(setup);
-            garage.Save(entry with {Configuration=setup}); // Append; retain the original reference revision and provenance.
+            try
+            {
+                var setup=Migrate(entry);_=new GarageSetupResolver(library).Resolve(setup);
+                garage.Save(entry with {Configuration=setup}); // Append; retain the original reference revision and provenance.
+            }
+            catch(Exception error) when(error is ArgumentException or InvalidOperationException or IOException) {MigrationConflicts[entry.Id]=error.Message;}
         }
     }
 }

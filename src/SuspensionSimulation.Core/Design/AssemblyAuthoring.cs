@@ -22,10 +22,14 @@ public static class AssemblyAuthoring
         var internalJoints=parent.Joints.Where(x=>ids.Contains(x.First.InstanceId)&&ids.Contains(x.Second.InstanceId)).ToImmutableArray();
         var outsideJoints=parent.Joints.Except(internalJoints).Select(x=>x with {First=Map(x.First),Second=Map(x.Second)}).ToImmutableArray();
         var parentPorts=parent.Ports.Select(x=>x with {Source=Map(x.Source)}).ToImmutableArray();
-        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]);
+        bool Inside(string path)=>ids.Any(id=>path==id||path.StartsWith(id+"/",StringComparison.Ordinal));
+        string GroupedPath(string path)=>Inside(path)?instanceId+"/"+path:path;
+        var childSeats=(parent.SpringSeats??[]).Where(s=>Inside(s.SpringPath)&&Inside(s.DamperPath)).ToImmutableArray();
+        var parentSeats=(parent.SpringSeats??[]).Except(childSeats).Select(s=>new SpringSeatBinding(GroupedPath(s.SpringPath),GroupedPath(s.DamperPath))).ToImmutableArray();
+        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]) {SpringSeats=childSeats.IsEmpty?null:childSeats};
         var instances=parent.Instances.Where(x=>!ids.Contains(x.Id)).Append(new AssemblyInstance(instanceId,new(childIdentity.AssetId),IdentityPlacement)).ToImmutableArray();
         var grounded=parent.GroundedInstances.Select(path=>ids.Any(id=>path==id||path.StartsWith(id+"/",StringComparison.Ordinal))?instanceId+"/"+path:path).ToImmutableArray();
-        return new(parent with {Instances=instances,Joints=outsideJoints,Ports=parentPorts,GroundedInstances=grounded},child);
+        return new(parent with {Instances=instances,Joints=outsideJoints,Ports=parentPorts,GroundedInstances=grounded,SpringSeats=parentSeats.IsEmpty?null:parentSeats},child);
     }
     public static AssemblyDefinition MirrorInstance(AssemblyDefinition assembly,string sourceId,string newId,MirrorPlane plane)
     {

@@ -27,7 +27,7 @@ public sealed class TwinsKinematics
         if(graph.Components.Single(x=>x.Kind==ComponentKind.Rack).Rack?.SteeringWheelLockDegrees!=450) throw new InvalidOperationException("This operating adapter requires the declared ±450 degree steering range.");
         System=new(graph);RackTravelAt450DegreesM=rackTravelAt450DegreesM;var zero=new double[System.CoordinateCount];
         _neutralHeights=WheelPaths.Select(p=>System.Point(p,"wheel",zero).Z).ToArray();_rackNeutral=System.Point("front/rack","origin",zero).Y;
-        var report=MechanismMobility.Inspect(graph,5);if(!report.IsClosed||report.DegreesOfFreedom!=5||report.RedundantRows>0) throw new InvalidOperationException("Unsupported explicit vehicle mechanism: "+string.Join(" ",report.Diagnostics));
+        var report=MechanismMobility.Inspect(graph,5);if((!report.IsClosed&&graph.AppliedAdjustments.IsEmpty)||report.DegreesOfFreedom!=5||report.RedundantRows>0) throw new InvalidOperationException("Unsupported explicit vehicle mechanism: "+string.Join(" ",report.Diagnostics));
     }
     public TwinsMotionState Solve(FourCornerTravel travel,double steeringWheelDegrees,TwinsMotionState? seed=null)
     {

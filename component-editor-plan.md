@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–4 implemented with the documented synthetic topology scope. Stages 5–11 remain; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
+Prepared: 2026-10-16. Status: Stages 0–5 implemented with the documented synthetic/estimated data scope. Stages 6–11 remain; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -576,3 +576,14 @@ Priority change: the user requested Garage before component authoring. The first
 - 89/89 checks pass, including ±50 mm forward/reverse travel, full static steering, mixed jounce/steering, mirrored alignment and rejection of missing operating drivers. The graph has five operating freedoms (four corners and the rack), no redundant rows, and six declared rod-spin gauges.
 - Assembly Editor's Motion tab previews the solved graph and derived individual camber/heading, axle heading difference and thrust. `--topology-proof` passes rejected-input retention, session/motion recovery and component metadata round trips. Captures under `artifacts/explicit-topology` were inspected. It imposes jounce for inspection; it does not claim static equilibrium. Tire dimensions are visual estimates.
 - Next: Stage 5 installed-length elastic parts, rigid bind/stroke constraints and physical setup adjustment paths. Stages 5–6 must pass before the new model replaces the provisional Garage analysis adapter.
+
+### Stage 5 checkpoint — 2026-10-17
+
+- Component Designer creates/edits linear compression springs, shocks/struts, integrated seats, separate threaded perch/body-length ranges, torsional bar sections, rack ratios and optional mass data. Slots, threaded endpoints, arcs, eccentrics, named holes, measured paths and fixed mounts have authoring controls. All settings are declared in hardware and locked before operating motion; raw physical/path inputs survive recovery.
+- Springs derive force and energy from free length minus installed seat separation using exactly 9806.65 N/m per kgf/mm. Loose springs carry no tension. Coil bind and damper ends produce unilateral gap constraints; they do not use infinite numeric stiffness or penalty springs. Their reaction forces will be solved in Stage 6.
+- Force-element ends follow their two declared rigid supports independently; they are not silently compiled as one rigid body. Nested spring/damper seat bindings survive grouping, persistence and frozen export. Perch offset and lower-body length have separate effects; there is no independent additive preload.
+- Added estimated installed GR86/BRZ examples with the reference spring rates and bar tube dimensions. Rigid bar arms/endlinks and independent arm bearings couple through GJ/L torsion only, without the workbook arm-bending/0.5 calibration factor. Symmetric heave produces no bar energy; differential motion does. Spring/shock dimensions and bar locations are explicitly synthetic/estimated. No missing damping/gas/bump-stop curve is represented as measured data.
+- Runtime adjustment geometry keeps immutable source definitions/manifests intact and cannot be republished as source. A nondefault locked top-mount slot is projected onto the rigid mechanism; only the selected wheel's derived alignment changes.
+- 91/91 regression checks pass. `--mechanics-proof` passes spring/damper/bar save/reopen/edit, all seven adjustment-path controls, raw invalid-input recovery, installed force preview and preservation of seat bindings. Captures under `artifacts/mechanical-authoring` were inspected. Spring/damper preview elements have two mount/seat dots plus a distance-to-compression-limit marker.
+- Stage 9 preparation only: official Gmsh 4.15.2 and CalculiX 2.23 Windows archives are downloaded/extracted under ignored `artifacts/fea-toolchain`, with hashes recorded during execution. CalculiX reports 2.23. This is not a successful FEA benchmark or a validated STEP-to-curve pipeline.
+- Next: Stage 6 gravity/loaded equilibrium, unilateral ground contact and rigid-limit reactions. New physical Garage migration, equipment/adjuster controls and final analysis integration remain gated on that solver.

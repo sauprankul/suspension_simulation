@@ -169,10 +169,13 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             var lines=scene.Segments.Select(x=>x.Id).Concat(scene.Points.Select(x=>x.Id+".marker")).ToHashSet();
             var labels=scene.Segments.Select(x=>x.Id).ToHashSet();
+            foreach(var p in scene.Points.Where(p=>p.Id.EndsWith(".springUpper")||p.Id.EndsWith(".springLower")||p.Id.EndsWith(".stroke-marker"))) lines.Add(p.Id);
             foreach(var wheel in scene.Wheels) {lines.Add(wheel.Corner+".tire");lines.Add(wheel.Corner+".wheel-axis");labels.Add(wheel.Corner+".tire");}
             foreach(var id in _models.Keys.Where(x=>!x.StartsWith("ground.") && !lines.Contains(x) && !(x.StartsWith("label-leader.")&&labels.Contains(x[13..]))).ToArray())
             {Viewport.Items.Remove(_models[id].Model);_models.Remove(id);}
             foreach(var id in _labels.Keys.Where(x=>!labels.Contains(x)).ToArray()) {Viewport.Items.Remove(_labels[id].Model);_labels.Remove(id);}
+            var pointIds=scene.Points.Select(p=>p.Id).ToHashSet();
+            foreach(var id in _dots.Keys.Where(id=>!pointIds.Contains(id)).ToArray()) {Viewport.Items.Remove(_dots[id].Model);_dots.Remove(id);}
         }
         _scene=scene;
         _status.Foreground=Brushes.LightSteelBlue;
@@ -190,11 +193,11 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
             {
                 var marker=point.Id.EndsWith(".stroke-marker");
                 var active=scene.SpringStrokes.Any(x=>x.Corner==point.Corner && (x.BumpRemainingM==0||x.ReboundRemainingM==0));
-                SetDot(point.Id,point.Corner.StartsWith("F")?"front":"rear",point.PositionM,marker?(active?Colors.Tomato:Colors.Gold):Colors.White,marker?10:7);
+                SetDot(point.Id,!_engineeringDashboard?"wheels":point.Corner.StartsWith("F")?"front":"rear",point.PositionM,marker?(active?Colors.Tomato:Colors.Gold):Colors.White,marker?10:7);
                 continue;
             }
             var d=new Vector3(.012f,0,0);
-            SetLine(point.Id+".marker",point.Id.EndsWith("ideal-contact")?"ground":point.Source==SceneSource.FixedChassis?"chassis":point.Corner.StartsWith("F")?"front":"rear",point.PositionM-d,point.PositionM+d,Colors.Gainsboro);
+            SetLine(point.Id+".marker",!_engineeringDashboard?"wheels":point.Id.EndsWith("ideal-contact")?"ground":point.Source==SceneSource.FixedChassis?"chassis":point.Corner.StartsWith("F")?"front":"rear",point.PositionM-d,point.PositionM+d,Colors.Gainsboro);
         }
         foreach(var wheel in scene.Wheels)
         {

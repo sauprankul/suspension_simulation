@@ -7,11 +7,16 @@ namespace SuspensionSimulation.Design;
 public sealed record ResolvedBody(string Path,ComponentDefinition Component,DesignTransform Transform);
 public sealed record ResolvedPort(string BodyPath,string PortId,string Role,ImmutableArray<JointKind> SupportedJoints,DesignFrame Frame);
 public sealed record ResolvedJoint(string Path,JointKind Kind,ResolvedPort First,ResolvedPort Second,double? DistanceM);
+public sealed record ResolvedElasticElement(string Path,ComponentDefinition Component,ResolvedPort First,ResolvedPort Second,
+    DesignFrame FirstReference,DesignFrame SecondReference,DesignTransform Transform);
 public sealed record ResolvedAssemblyGraph(AssemblyDefinition Root,ImmutableArray<ResolvedBody> Bodies,ImmutableArray<ResolvedJoint> Joints,
     ImmutableDictionary<string,ResolvedPort> Exports,ImmutableArray<string> GroundedBodies,FrozenResultManifest Manifest,
     ImmutableArray<ComponentDefinition> Components,ImmutableArray<AssemblyDefinition> Assemblies)
 {
     public ImmutableDictionary<string,ResolvedPort> Interfaces {get;init;}=ImmutableDictionary<string,ResolvedPort>.Empty;
+    public ImmutableArray<ResolvedElasticElement> ElasticElements {get;init;}=[];
+    public ImmutableArray<ResolvedAdjustment> AppliedAdjustments {get;init;}=[];
+    public ImmutableArray<SpringSeatBinding> SpringSeats {get;init;}=[];
 }
 public sealed record GraphResolution(ResolvedAssemblyGraph? Graph,bool IsStale,string? Conflict);
 public sealed record PortableDesignBundle(string SchemaVersion,AssetReference Root,ImmutableArray<ComponentDefinition> Components,
@@ -40,6 +45,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var heads=new Dictionary<(Type,string),object>();
         var bodies=new List<ResolvedBody>();var joints=new List<ResolvedJoint>();var active=new HashSet<string>(StringComparer.Ordinal);
         var interfaces=new Dictionary<string,ResolvedPort>(StringComparer.Ordinal);
+        var seatBindings=new List<SpringSeatBinding>();
         static void Segment(string value) {if(string.IsNullOrWhiteSpace(value)||value.Contains('/')||value.Contains(':')||value.Contains('\0')) throw new ArgumentException("Instance and port IDs must be nonempty path segments without '/' or ':'.");}
         T Fetch<T>(AssetReference reference,Dictionary<string,T> cache,Func<string,string?,T?> load,Func<T,RevisionIdentity> identity) where T:class
         {
@@ -57,6 +63,8 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         Dictionary<string,ResolvedPort> Walk(AssemblyDefinition a,string path,DesignTransform parent)
         {
             DesignValidation.Validate(a);
+            string PathOf(string relative)=>path.Length==0?relative:path+"/"+relative;
+            foreach(var binding in a.SpringSeats??[]) seatBindings.Add(new(PathOf(binding.SpringPath),PathOf(binding.DamperPath)));
             if(!active.Add(a.Identity.AssetId)) throw new InvalidOperationException("Assembly cycle at "+path+" ("+a.Identity.AssetId+").");
             var ports=new Dictionary<string,Dictionary<string,ResolvedPort>>(StringComparer.Ordinal);
             foreach(var instance in a.Instances)
@@ -95,6 +103,38 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var rootDefinition=draft??Fetch(root,assemblies,library.LoadAssembly,x=>x.Identity);
         assemblies[rootDefinition.Identity.AssetId]=rootDefinition;
         var exported=Walk(rootDefinition,"",DesignTransform.Identity);
+        // Massless force-element ends follow their mates independently. They must never be welded into one rigid body.
+        var elasticBodies=bodies.Where(b=>b.Component.Behavior is not null).ToDictionary(b=>b.Path,StringComparer.Ordinal);
+        var consumed=new HashSet<string>(StringComparer.Ordinal);
+        ResolvedPort Anchor(ResolvedPort port,HashSet<string> visiting)
+        {
+            if(!elasticBodies.TryGetValue(port.BodyPath,out var body)) return port;
+            var key=port.BodyPath+":"+port.PortId;if(!visiting.Add(key)) throw new InvalidOperationException("Force-element attachment cycle without a rigid support: "+key);
+            var mates=joints.Where(j=>(j.First.BodyPath==port.BodyPath&&j.First.PortId==port.PortId)||(j.Second.BodyPath==port.BodyPath&&j.Second.PortId==port.PortId)).ToArray();
+            if(mates.Length!=1) throw new InvalidOperationException("Force-element port must have exactly one attachment: "+key);
+            var mate=mates[0];var expected=body.Component.Behavior is TorsionBarBehavior?JointKind.Fixed:JointKind.Spherical;
+            if(mate.Kind!=expected) throw new InvalidOperationException("Wrong force-element attachment kind: "+key);
+            consumed.Add(mate.Path);var other=mate.First.BodyPath==port.BodyPath&&mate.First.PortId==port.PortId?mate.Second:mate.First;
+            var resolved=Anchor(other,visiting);visiting.Remove(key);return resolved;
+        }
+        var elements=new List<ResolvedElasticElement>();
+        foreach(var body in elasticBodies.Values)
+        {
+            var behavior=body.Component.Behavior!;var a=interfaces[body.Path+":"+behavior.FirstPortId];var b=interfaces[body.Path+":"+behavior.SecondPortId];
+            elements.Add(new(body.Path,body.Component,Anchor(a,[]),Anchor(b,[]),a.Frame,b.Frame,body.Transform));
+        }
+        var seenBindings=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var binding in seatBindings)
+        {
+            if(!seenBindings.Add(binding.SpringPath)) throw new InvalidOperationException("A spring has more than one seat installation.");
+            var spring=elements.SingleOrDefault(e=>e.Path==binding.SpringPath);var damper=elements.SingleOrDefault(e=>e.Path==binding.DamperPath);
+            if(spring?.Component.Behavior is not CompressionSpringBehavior||damper?.Component.Behavior is not AxialDamperBehavior {SpringSeats:not null}) throw new InvalidOperationException("Spring seating requires a spring and an integrated-seat damper.");
+            if(spring.First.BodyPath!=damper.First.BodyPath||spring.First.PortId!=damper.First.PortId||spring.Second.BodyPath!=damper.Second.BodyPath||spring.Second.PortId!=damper.Second.PortId) throw new InvalidOperationException("Coaxial spring seats must use the same ordered eye references as their damper.");
+        }
+        ResolvedPort Map(ResolvedPort p)=>elasticBodies.ContainsKey(p.BodyPath)?Anchor(p,[]) with {Role=p.Role,SupportedJoints=p.SupportedJoints}:p;
+        var mappedExports=exported.ToDictionary(x=>x.Key,x=>Map(x.Value),StringComparer.Ordinal);
+        interfaces=interfaces.ToDictionary(x=>x.Key,x=>Map(x.Value),StringComparer.Ordinal);
+        joints.RemoveAll(j=>consumed.Contains(j.Path));bodies.RemoveAll(b=>elasticBodies.ContainsKey(b.Path));
         var grounded=new HashSet<string>(StringComparer.Ordinal);
         foreach(var path in rootDefinition.GroundedInstances)
         {
@@ -106,7 +146,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var dependencies=components.Values.Select(c=>new ResolvedDependency(AssetKind.Component,c.Identity.AssetId,c.Identity.RevisionId,Sha(DesignJson.Serialize(c))))
             .Concat(assemblies.Values.Select(a=>new ResolvedDependency(AssetKind.Assembly,a.Identity.AssetId,a.Identity.RevisionId,Sha(DesignJson.Serialize(a)))))
             .OrderBy(x=>x.Kind).ThenBy(x=>x.AssetId,StringComparer.Ordinal).ToImmutableArray();
-        return new(rootDefinition,[..bodies],[..joints],exported.ToImmutableDictionary(StringComparer.Ordinal),[..grounded.Order(StringComparer.Ordinal)],new(root.AssetId,dependencies),[..components.Values],[..assemblies.Values]) {Interfaces=interfaces.ToImmutableDictionary(StringComparer.Ordinal)};
+        return new(rootDefinition,[..bodies],[..joints],mappedExports.ToImmutableDictionary(StringComparer.Ordinal),[..grounded.Order(StringComparer.Ordinal)],new(root.AssetId,dependencies),[..components.Values],[..assemblies.Values]) {Interfaces=interfaces.ToImmutableDictionary(StringComparer.Ordinal),ElasticElements=[..elements],SpringSeats=[..seatBindings]};
     }
     private static void CheckInterfaces(ResolvedAssemblyGraph old,ResolvedAssemblyGraph next)
     {
@@ -125,6 +165,7 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
     }
     public static PortableDesignBundle Export(ResolvedAssemblyGraph graph)
     {
+        if(graph.AppliedAdjustments.Length>0) throw new InvalidOperationException("Export the source assembly bundle and setup settings separately; runtime adjusted geometry is not source data.");
         if(graph.Root.Identity.RevisionId.Length!=64) throw new InvalidOperationException("Publish the root before exporting.");
         return new(DesignConventions.SchemaVersion,new(graph.Root.Identity.AssetId,graph.Root.Identity.RevisionId),graph.Components,graph.Assemblies,graph.Manifest);
     }

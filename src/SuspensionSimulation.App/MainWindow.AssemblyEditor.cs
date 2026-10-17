@@ -15,7 +15,7 @@ using SuspensionSimulation.Solvers.Design;
 namespace SuspensionSimulation.App;
 
 internal sealed record AssemblyRecovery(string Id,string? BaseRevision,string Name,string Notes,string Grounds,string ExpectedDof,
-    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null);
+    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null,AssemblyDefinition? Metadata=null);
 internal sealed record AssemblyCatalogChoice(string Name,AssetReference Reference,bool IsAssembly);
 
 public partial class MainWindow
@@ -28,6 +28,7 @@ public partial class MainWindow
     private string? _assemblyRecoveryAtOpen,_assemblyAcceptedRaw;
     private string? _assemblyPublishedRaw,_assemblyConflict;
     private string? _assemblyProvenanceSource;
+    private AssemblyDefinition? _assemblyMetadataSeed;
     private readonly Stack<string> _assemblyUndo=new(),_assemblyRedo=new();
     private readonly ListBox _assemblyLibraryList=new(){DisplayMemberPath="Identity.Name",SelectedValuePath="Identity.AssetId",MinHeight=90,MaxHeight=160};
     private readonly ComboBox _assemblyInsertChoice=new(){DisplayMemberPath="Name",Margin=new Thickness(0,5,0,4)};
@@ -90,8 +91,9 @@ public partial class MainWindow
     {
         foreach(var grid in _assemblyGrids) {grid.CommitEdit();grid.CommitEdit();}
         var metadata=_workspaceDrafts[Workspace.AssemblyEditor];
-        return new(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
+        var result=new AssemblyDefinition(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
             {GroundedInstances=[.._assemblyGrounds.Text.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)]};
+        return _assemblyMetadataSeed is {} original?original with {Identity=result.Identity,Instances=result.Instances,Joints=result.Joints,Ports=result.Ports,GroundedInstances=result.GroundedInstances}:result;
     }
     private int? AssemblyExpectedDof()=>string.IsNullOrWhiteSpace(_assemblyExpectedDof.Text)?null:int.TryParse(_assemblyExpectedDof.Text,out var n)&&n>=0?n:throw new ArgumentException("Expected freedoms must be a nonnegative integer or blank.");
     private void ApplyAssemblyPreview(bool undo)
@@ -114,7 +116,7 @@ public partial class MainWindow
     }
     private void NewAssembly()
     {
-        _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;
+        _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;_assemblyMetadataSeed=null;
         _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();_assemblyGrounds.Text="";ApplyAssemblyPreview(false);
     }
     private void RefreshAssemblyCatalog()
@@ -139,6 +141,7 @@ public partial class MainWindow
     }
     private void FillAssembly(AssemblyDefinition a)
     {
+        _assemblyMetadataSeed=a;
         _assemblyUpdating=true;
         try
         {
@@ -212,7 +215,7 @@ public partial class MainWindow
         if(dialog.ShowDialog(this)==true) {File.WriteAllText(dialog.FileName,DesignJson.Serialize(bundle));_assemblyStatus.Text="Exported exact revisions and transitive dependency hashes.";}
     }
     private string CaptureAssemblyRaw()=>JsonSerializer.Serialize(new AssemblyRecovery(_assemblyId,_assemblyBaseRevision,_workspaceDrafts[Workspace.AssemblyEditor].Name.Text,_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text,
-        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource));
+        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource,_assemblyMetadataSeed));
     private void ImportAssembly()
     {
         var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Suspension assembly (*.json)|*.json",InitialDirectory=App.RepositoryRoot};
@@ -227,6 +230,7 @@ public partial class MainWindow
         {
             if(identity) {_assemblyId=raw.Id;_assemblyBaseRevision=raw.BaseRevision;}_workspaceDrafts[Workspace.AssemblyEditor].Name.Text=raw.Name;_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text=raw.Notes;
             _assemblyProvenanceSource=raw.Source;
+            _assemblyMetadataSeed=raw.Metadata;
             _assemblyGrounds.Text=raw.Grounds;_assemblyExpectedDof.Text=raw.ExpectedDof;_assemblyInstances.Clear();foreach(var x in raw.Instances) _assemblyInstances.Add(x);_assemblyJoints.Clear();foreach(var x in raw.Joints) _assemblyJoints.Add(x);_assemblyPorts.Clear();foreach(var x in raw.Ports) _assemblyPorts.Add(x);
         }
         finally {_assemblyUpdating=false;}
@@ -268,6 +272,30 @@ public partial class MainWindow
             }
         }
         foreach(var j in graph.Joints.Where(x=>x.Kind==JointKind.RigidDistance)) lines.Add(new("joint"+j.Path,j.Path,"Assembly","bars",V(mechanism is not null&&pose is not null?mechanism.Frame(j.First,pose.Coordinates).OriginM:j.First.Frame.OriginM),V(mechanism is not null&&pose is not null?mechanism.Frame(j.Second,pose.Coordinates).OriginM:j.Second.Frame.OriginM),SceneSource.Authored));
-        return new(graph.Root.Identity.Name,"assembly-authoring","authored-assembly-draft",[..points],[..lines],[..wheels],["Synthetic mechanism; local mobility is separate from finite travel and equilibrium."]);
+        var strokes=new List<InspectionSpringStroke>();
+        foreach(var element in graph.ElasticElements)
+        {
+            var a=mechanism is not null&&pose is not null?mechanism.Frame(element.First,pose.Coordinates).OriginM:element.First.Frame.OriginM;
+            var b=mechanism is not null&&pose is not null?mechanism.Frame(element.Second,pose.Coordinates).OriginM:element.Second.Frame.OriginM;var distance=(b-a).Length;if(distance<1e-9) continue;var direction=(b-a)/distance;
+            double? min=null;double? max=null;var kind=element.Component.Behavior is TorsionBarBehavior?"torsion":element.Component.Behavior is CompressionSpringBehavior?"spring":"damper";
+            if(element.Component.Behavior is CompressionSpringBehavior spring)
+            {
+                min=spring.BlockLengthM;var binding=graph.SpringSeats.SingleOrDefault(s=>s.SpringPath==element.Path);
+                if(binding is not null)
+                {
+                    var dElement=graph.ElasticElements.Single(e=>e.Path==binding.DamperPath);var d=(AxialDamperBehavior)dElement.Component.Behavior!;var perch=graph.AppliedAdjustments.IsEmpty?0:GraphAdjustments.ThreadedOffset(graph,dElement.Path,d.SpringSeats!.PerchAdjustmentId);var body=graph.AppliedAdjustments.IsEmpty?0:GraphAdjustments.ThreadedOffset(graph,dElement.Path,d.BodyLengthAdjustmentId);
+                    a+=direction*d.SpringSeats!.UpperInsetM;b-=direction*(d.SpringSeats.LowerInsetM+perch+body);max=d.MaximumEyeLengthM-d.SpringSeats.UpperInsetM-d.SpringSeats.LowerInsetM-perch;
+                }
+            }
+            if(element.Component.Behavior is AxialDamperBehavior damper)
+            {var body=graph.AppliedAdjustments.IsEmpty?0:GraphAdjustments.ThreadedOffset(graph,element.Path,damper.BodyLengthAdjustmentId);min=damper.MinimumEyeLengthM+body;max=damper.MaximumEyeLengthM+body;}
+            lines.Add(new(element.Path+"."+kind,element.Path,element.Path,kind=="torsion"?"bars":"front",V(a),V(b),SceneSource.Authored));
+            if(min is {} minimum)
+            {
+                var length=(b-a).Length;var marker=b-direction*minimum;points.Add(new(element.Path+".springUpper",element.Path+" upper mount / seat",element.Path,V(a),SceneSource.Authored));points.Add(new(element.Path+".springLower",element.Path+" lower mount / seat",element.Path,V(b),SceneSource.Authored));points.Add(new(element.Path+".stroke-marker",element.Path+" distance to compression limit",element.Path,V(marker),SceneSource.Authored));
+                if(max is {} maximum) strokes.Add(new(element.Path,V(a),V(b),V(marker),length,minimum,maximum,Math.Max(0,length-minimum),Math.Max(0,maximum-length)));
+            }
+        }
+        return new(graph.Root.Identity.Name,"assembly-authoring","authored-assembly-draft",[..points],[..lines],[..wheels],["Synthetic mechanism; local mobility is separate from finite travel and equilibrium."]) {SpringStrokes=[..strokes]};
     }
 }

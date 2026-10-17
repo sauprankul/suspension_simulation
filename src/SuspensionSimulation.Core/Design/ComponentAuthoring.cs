@@ -44,6 +44,7 @@ public static class ComponentAuthoring
     {Template=null,Dimensions=[..component.VisualEdges.Select(x=>(DesignDimension)new MeasuredDistance(x.Id,x.StartPointId,x.EndPointId))]};
     public static void ValidateForPublish(ComponentDefinition component)
     {
+        if(component.IsRuntimeDerived) throw new ArgumentException("Runtime adjusted geometry cannot be published as an immutable source definition.");
         DesignValidation.Validate(component);
         if(component.Points.Length<2) throw new ArgumentException("A rigid component needs at least two named points.");
         if(component.Template is {} spec)

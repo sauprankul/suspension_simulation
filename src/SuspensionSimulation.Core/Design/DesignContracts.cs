@@ -55,6 +55,9 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     public ImmutableArray<VisualEdge> VisualEdges {get;init;}=[];
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public AxialRodGauge? AxialGauge {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public RackSpecification? Rack {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalBehavior? Behavior {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
+    [JsonIgnore] public bool IsRuntimeDerived {get;init;}
 }
 public sealed record RackSpecification(double TravelAtLockM,double SteeringWheelLockDegrees);
 // A coordinate convention only, valid for a straight rod with spherical ends and no off-axis hardware.
@@ -84,7 +87,9 @@ public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArra
 {
     // Root-relative body or subtree paths. Nested definitions' local grounds are not world anchors.
     public ImmutableArray<string> GroundedInstances {get;init;}=[];
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SpringSeatBinding>? SpringSeats {get;init;}
 }
+public sealed record SpringSeatBinding(string SpringPath,string DamperPath);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ContinuousAdjustmentSelection), "continuous")]

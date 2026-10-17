@@ -19,6 +19,11 @@ public partial class MainWindow
         {
             var seed=TwinsTopologyCatalog.Seed(_designLibrary!,Path.Combine(App.RepositoryRoot,"data/synthetic/gr86/design-topology.json"));_assemblyExpectedDof.Text="5";LoadAssembly(seed.Vehicle);_assemblyViewport!.Preset("Isometric");
         });left.Children.Insert(Math.Min(7,left.Children.Count),example);
+        foreach(var variant in new[]{"GR86","BRZ"})
+        {
+            var installed=new Button {Content="Load installed "+variant+" example",Margin=new Thickness(0,3,0,3),Padding=new Thickness(5,3,5,3)};
+            installed.Click+=(_,_)=>AssemblyAction(()=>{var models=TwinsInstalledCatalog.Seed(_designLibrary!,App.RepositoryRoot);_assemblyExpectedDof.Text="5";LoadAssembly(variant=="GR86"?models.Gr86:models.Brz);_assemblyViewport!.Preset("Isometric");});left.Children.Insert(Math.Min(8,left.Children.Count),installed);
+        }
         var panel=new StackPanel {Margin=new Thickness(10)};panel.Children.Add(new TextBlock {Text="Explicit twins mechanism preview",FontWeight=FontWeights.Bold});
         panel.Children.Add(new TextBlock {Text="Load the explicit twins example first. Travel is imposed for kinematic inspection. Spring forces and loaded ride height are not solved here.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8)});
         foreach(var (name,index) in new[]{("Front left jounce (mm)",0),("Front right jounce (mm)",1),("Rear left jounce (mm)",2),("Rear right jounce (mm)",3)})
@@ -35,11 +40,13 @@ public partial class MainWindow
     }
     private void ShowTwinsMotion(FourCornerTravel travel,double steering)
     {
-        var graph=_assemblyGraph??throw new InvalidOperationException("Load an explicit mechanism first.");var kinematics=new TwinsKinematics(graph);var solved=kinematics.Solve(travel,steering);
+        var source=_assemblyGraph??throw new InvalidOperationException("Load an explicit mechanism first.");var graph=GraphAdjustments.Freeze(source,[]);var kinematics=new TwinsKinematics(graph);var solved=kinematics.Solve(travel,steering);
+        var mechanical=new InstalledMechanics(kinematics.System).Evaluate(solved.Pose.Coordinates);
         _assemblyViewport!.SetScene(AssemblyScene(graph,kinematics.System,solved.Pose));_twinsMotion=solved;
         static double D(double rad)=>rad*180/Math.PI;
         _twinsMotionReadout.Text=string.Join("\n",solved.Wheels.Select(w=>$"{w.Corner} · camber {D(w.CamberRad):+0.000;-0.000;0.000}° · heading {D(w.HeadingRad):+0.000;-0.000;0.000}°"))+
             $"\n\nFront heading difference {D(solved.Front.HeadingDifferenceRad):0.000}° · thrust {D(solved.Front.ThrustAngleRad):0.000}°\nRear heading difference {D(solved.Rear.HeadingDifferenceRad):0.000}° · thrust {D(solved.Rear.ThrustAngleRad):0.000}°\nScaled closure residual {solved.Pose.MaximumScaledResidual:0.###E+0}";
+        if(mechanical.Elements.Length>0) _twinsMotionReadout.Text+="\n\n"+string.Join("\n",mechanical.Elements.Select(e=>$"{e.Path}: {e.ForceOrTorque:0.0} {(e.Kind=="torsion-bar"?"N·m":"N")}"))+"\n\n"+string.Join("\n",mechanical.Limits.Select(l=>$"{l.Description}: {l.GapM*1000:0.0} mm"));
         _assemblyStatus.Text="Solved motion preview · synthetic geometry · tire dimensions estimated · no loaded equilibrium.";
     }
 }

@@ -30,6 +30,7 @@ public static class DesignValidation
             }
         if(component.Mass is {} mass) {Positive(mass.MassKg,"Component mass");Require(mass.CenterOfMassM.IsFinite,"Invalid mass datum.");}
         if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
+        MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
         if(component.AxialGauge is {} gauge)
         {
             Require(component.Kind==ComponentKind.RigidLink&&component.Ports.Length==2,"Axial spin gauges require a two-port rigid rod.");

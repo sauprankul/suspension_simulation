@@ -62,6 +62,7 @@ public partial class App : Application
             if(e.Args.Contains("--component-proof")) window.RunComponentProof();
             if(e.Args.Contains("--assembly-proof")) window.RunAssemblyProof();
             if(e.Args.Contains("--topology-proof")) window.RunTopologyProof();
+            if(e.Args.Contains("--mechanics-proof")) window.RunMechanicsProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

@@ -1,0 +1,22 @@
+{
+  "schema": "suspension-sim/twins-installed-estimates/v1",
+  "note": "Synthetic/estimated installation dimensions, not measured stock parts. Spring rates and bar tube dimensions are copied from the reference workbook; new forces use exact 9806.65 conversion and rigid arms with torsion-only bars. Damping/gas forces are zero because no measured curves have been supplied. No bumper curve is assumed. Stock visualizers remain on the accepted reference adapter until the new installed model is validated.",
+  "front": {
+    "springFreeM": 0.515,
+    "springBlockM": 0.15,
+    "damperMinimumM": 0.43,
+    "damperMaximumM": 0.60,
+    "upperSeatInsetM": 0.04,
+    "lowerSeatInsetM": 0.09,
+    "barHeightM": 0.18
+  },
+  "rear": {
+    "springFreeM": 0.44,
+    "springBlockM": 0.13,
+    "damperMinimumM": 0.415,
+    "damperMaximumM": 0.54,
+    "upperSeatInsetM": 0.04,
+    "lowerSeatInsetM": 0.10,
+    "barHeightM": 0.40
+  }
+}

@@ -53,7 +53,8 @@ public partial class MainWindow
             panel.Children.Add(new TextBlock {Text="Draft name"});panel.Children.Add(name);
             panel.Children.Add(new TextBlock {Text="Notes"});panel.Children.Add(notes);
             _workspaceDrafts[destination]=(name,notes);
-            AddWorkspace(destination,new ScrollViewer {Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
+            var details=new ScrollViewer {Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+            AddWorkspace(destination,destination==Workspace.Garage?BuildGarage(details):details);
         }
     }
 

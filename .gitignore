@@ -7,6 +7,7 @@
 # Local SDK/package caches and generated artifacts
 .dotnet/
 artifacts/
+/library/
 *.user
 *.suo
 

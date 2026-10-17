@@ -57,6 +57,7 @@ public partial class App : Application
             if(e.Args.Contains("--stage3-nonpointer")) window.RunStage3Proof(false);
             if(e.Args.Contains("--inspection-soak")) window.RunInspectionSoak();
             if(e.Args.Contains("--shell-proof")) window.RunShellProof();
+            if(e.Args.Contains("--garage-proof")) window.RunGarageProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

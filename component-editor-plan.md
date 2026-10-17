@@ -513,6 +513,8 @@ The highest-risk work is the correctly constrained rear mechanism, the installed
 
 ## 14. Execution progress
 
+Priority change: the user requested Garage before component authoring. The first Garage slice implements named saved-entry management independently of assembly/equilibrium work. Full Stage 7 runnable setups still require their physical dependencies.
+
 - [x] Stage 0 — preserve baseline and define contracts
 - [x] Stage 1 — multi-screen shell
 - [ ] Stages 2–11 — subsequent gated implementation
@@ -533,3 +535,9 @@ The highest-risk work is the correctly constrained rear mechanism, the installed
 - `--shell-proof` passes through every menu destination, verifies retained metadata drafts/camera/selection/shared viewport, confirms navigation does not invoke physics, round-trips shell recovery, and checks hidden rendering. Captures under `artifacts/component-editor-shell` were inspected. All **84/84** regression checks pass; solution build has zero warnings/errors.
 - Normal startup into the menu and cross-process shell/draft/camera recovery also pass. The original user session was restored in the updated shortcut target. Usage checkpoint: 94% of the five-hour allowance used (about 6% remains); weekly 27%; no resets or credits used. Stop at this tested stage boundary before geometry authoring.
 - Next package: Stage 2 — actual rigid-link/wishbone/upright/top-mount authoring, geometry/frames/ports, any-two-point measurement, revision save/reopen and undo/drafts. Geometry authoring has not started in this checkpoint.
+
+### Garage-first checkpoint — 2026-10-16
+
+- Added durable named entries with New, Duplicate, Save changes (including rename/notes), search, Archive and Restore. Entries are independent; revisions are append-only with atomic publication and optimistic conflict checks. User data is stored under ignored `library/garage`, separate from committed synthetic inputs.
+- Entries without a resolved physical assembly explicitly remain Needs assembly and cannot run. There are no arbitrary geometry, rate, camber or toe override fields. Equipment/adjustment controls and analysis selectors remain pending their assembly/equilibrium contracts; this is not completion of full Stage 7.
+- All 85/85 checks pass, including persistence/reopen, independent duplicates, revision preservation, archive recovery, stale-save rejection and safe identities. Solution build is clean. `--garage-proof` exercises the real screen with an isolated library; output is under `artifacts/garage-proof`.

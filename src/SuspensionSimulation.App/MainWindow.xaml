@@ -38,7 +38,7 @@
         <StackPanel>
           <DockPanel><TextBlock Text="STEERING WHEEL (°)" Style="{StaticResource Section}" Margin="0"/><TextBox x:Name="SteeringAngle" Text="0" Width="70" LostFocus="SteeringTextChanged"/><Button Content="Zero" Click="CenterSteeringClick" Padding="6,2"/></DockPanel>
           <Slider x:Name="SteeringControl" Minimum="-450" Maximum="450" Value="0" TickFrequency="15" ValueChanged="SteeringSliderChanged"/>
-          <Button Content="Rack geometry + static alignment…" Click="SteeringGeometryClick" Padding="4,3" Margin="0,4,0,6"/>
+          <Button x:Name="RackGeometryButton" Content="Rack geometry + static alignment…" Click="SteeringGeometryClick" Padding="4,3" Margin="0,4,0,6"/>
           <DockPanel><Button Content="Center" Click="CenterGClick" DockPanel.Dock="Right" Padding="8,5"/><TextBlock Text="SHARED G CONTROLLER" Style="{StaticResource Section}" Margin="0"/></DockPanel>
         </StackPanel>
         <Grid Grid.Row="1" Margin="0,8,0,5">

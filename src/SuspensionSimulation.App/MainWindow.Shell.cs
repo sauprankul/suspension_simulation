@@ -72,7 +72,7 @@ public partial class MainWindow
         if(!Enum.IsDefined(workspace)) throw new ArgumentOutOfRangeException(nameof(workspace));
         _workspace=workspace;RootGrid.Visibility=IsSimulationWorkspace?Visibility.Visible:Visibility.Collapsed;
         foreach(var (destination,view) in _workspaceViews) view.Visibility=destination==workspace?Visibility.Visible:Visibility.Collapsed;
-        if(IsSimulationWorkspace) SetInspectionMode(workspace==Workspace.Visualizer3D);
+        if(IsSimulationWorkspace) {SetInspectionMode(workspace==Workspace.Visualizer3D);EnsureGarageAnalysisCurrent();}
         else _inspectionViewport?.SetActive(false);
         Title=IsSimulationWorkspace?"Suspension Simulation — Stock GR86 vs BRZ":"Suspension Simulation — "+WorkspaceName(workspace);
     }
@@ -80,11 +80,18 @@ public partial class MainWindow
     private object CaptureShellState()=>new
     {
         workspace=_workspace.ToString(),
+        analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         drafts=_workspaceDrafts.ToDictionary(x=>x.Key.ToString(),x=>new {name=x.Value.Name.Text,notes=x.Value.Notes.Text})
     };
     private void RestoreShellState(JsonElement ui)
     {
         if(!ui.TryGetProperty("shell",out var shell)) {NavigateWorkspace(_inspectionEnabled?Workspace.Visualizer3D:Workspace.HeadToHead);return;}
+        if(_analysisInitialized && shell.TryGetProperty("analysis",out var analysis))
+        {
+            _refreshingAnalysis=true;
+            try {_analysisA.SelectedValue=analysis.GetProperty("a").GetString();_analysisB.SelectedValue=analysis.GetProperty("b").GetString();}
+            finally {_refreshingAnalysis=false;}
+        }
         if(shell.TryGetProperty("drafts",out var drafts))
             foreach(var (workspace,fields) in _workspaceDrafts)
                 if(drafts.TryGetProperty(workspace.ToString(),out var draft))

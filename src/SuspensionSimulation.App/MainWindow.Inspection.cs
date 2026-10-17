@@ -44,6 +44,7 @@ public partial class MainWindow
             _inspectionViewport?.SetActive(enabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);
             ViewModeButton.Content=enabled?"Dashboard":"Open 3D inspection";
             UpdateInspectionScene();
+            UpdateGarageAnalysisPresentation();
             if(!enabled && _rejectedRevision is null) ViewSummary.Text="Shared synthetic geometry";
         }
         catch(Exception ex) {InspectionFailed(ex);}

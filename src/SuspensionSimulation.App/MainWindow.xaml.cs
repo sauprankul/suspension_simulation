@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         Set(RearUnsprungMass,_vehicle.Chassis.RearUnsprungMassPerCornerKg);
         App.Log($"Loaded GR86 package directory={_packageDirectory} fingerprint={_vehicle.InputFingerprintSha256}.");
         Populate(a, true); Populate(b, false);
+        InitializeGarageAnalysis();
         Render();
     }
 
@@ -114,11 +115,14 @@ public partial class MainWindow : Window
             LateralReadout.Text = $"{_ay:+0.00;-0.00;0.00} G";
             MagnitudeReadout.Text = $"GSUM {Math.Sqrt(_ax * _ax + _ay * _ay):0.00} / {total:0.00} G" + (point.WasClamped ? "  •  capped" : "");
 
-            var inputA = ReadSetup("Stock GR86", true); var inputB = ReadSetup("Stock BRZ", false);
+            var garageA=_legacyProofMode?null:SelectedAnalysisEntry(true);
+            var garageB=_legacyProofMode?null:(_inspectionEnabled && _analysisB.SelectedValue is null?garageA:SelectedAnalysisEntry(false));
+            var inputA = garageA is null?ReadSetup("Stock GR86", true):_garageCatalog!.Resolve(garageA);
+            var inputB = garageB is null?ReadSetup("Stock BRZ", false):_garageCatalog!.Resolve(garageB);
             var vehicle=_vehicle with { Chassis=_vehicle.Chassis with
             {
-                FrontUnsprungMassPerCornerKg=ReadNonNegative(FrontUnsprungMass,"front unsprung mass"),
-                RearUnsprungMassPerCornerKg=ReadNonNegative(RearUnsprungMass,"rear unsprung mass")
+                FrontUnsprungMassPerCornerKg=_legacyProofMode?ReadNonNegative(FrontUnsprungMass,"front unsprung mass"):_vehicle.Chassis.FrontUnsprungMassPerCornerKg,
+                RearUnsprungMassPerCornerKg=_legacyProofMode?ReadNonNegative(RearUnsprungMass,"rear unsprung mass"):_vehicle.Chassis.RearUnsprungMassPerCornerKg
             }};
             var calculation=Stopwatch.StartNew();
             var nextComparison = (_headToHeadSolver ?? throw new InvalidOperationException("Geometry maps are not initialized."))
@@ -126,7 +130,8 @@ public partial class MainWindow : Window
             var nextSnapshot=(_sceneBuilder??throw new InvalidOperationException("Scene geometry is not initialized."))
                 .CreateSnapshot(attempt,nextComparison,vehicle,_headToHeadSolver.TravelMaps,0,ReadSteering());
             calculation.Stop();
-            nextSnapshot=nextSnapshot with {SolveMilliseconds=calculation.Elapsed.TotalMilliseconds};
+            nextSnapshot=nextSnapshot with {SolveMilliseconds=calculation.Elapsed.TotalMilliseconds,
+                GarageA=garageA is null?null:_garageCatalog!.Freeze(garageA),GarageB=garageB is null?null:_garageCatalog!.Freeze(garageB)};
             _comparison=nextComparison;
             _acceptedSnapshot=nextSnapshot;
             _rejectedRevision=null;_rejectedError=null;
@@ -137,6 +142,7 @@ public partial class MainWindow : Window
             DrawCar(ACarCanvas, _comparison.A.State, Brushes.DeepSkyBlue);
             DrawCar(BCarCanvas, _comparison.B.State, Brushes.Orange);
             RenderResults(_comparison);
+            UpdateGarageAnalysisPresentation();
             App.Log(CaptureResult(attempt, _comparison), "RESULT");
         }
         catch (Exception exception)
@@ -220,6 +226,8 @@ public partial class MainWindow : Window
         ayG = _ay,
         packageDirectory = _packageDirectory,
         packageFingerprint = _vehicle?.InputFingerprintSha256,
+        analysisSource = _legacyProofMode?"legacy-proof-controls":"saved-garage-revisions",
+        garageSelection = new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         controls = new
         {
             axisCapG = SweepCap.Text,

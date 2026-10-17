@@ -14,4 +14,8 @@ public sealed record InspectionSideSnapshot(HeadToHeadSetupInput Input,Inspectio
     public SteeringInspection? Steering {get;init;}
 }
 public sealed record AcceptedInspectionSnapshot(long Revision,string PackageFingerprint,LoadCase Load,
-    ChassisConfig Chassis,InspectionSideSnapshot A,InspectionSideSnapshot B,double SolveMilliseconds);
+    ChassisConfig Chassis,InspectionSideSnapshot A,InspectionSideSnapshot B,double SolveMilliseconds)
+{
+    public GarageAnalysisSource? GarageA {get;init;}
+    public GarageAnalysisSource? GarageB {get;init;}
+}

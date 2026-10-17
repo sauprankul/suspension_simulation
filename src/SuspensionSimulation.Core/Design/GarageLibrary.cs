@@ -1,7 +1,11 @@
 namespace SuspensionSimulation.Design;
 
 /// <summary>Saved Garage drafts; structural validity never implies a runnable physical assembly.</summary>
-public sealed record GarageEntry(string Id,int Revision,string Name,string Notes,bool Archived,GarageSetup? Configuration);
+public sealed record GarageEntry(string Id,int Revision,string Name,string Notes,bool Archived,GarageSetup? Configuration,
+    ReferenceGarageEquipment? ReferenceEquipment=null);
+
+/// <summary>Explicit migration adapter for the accepted reference model, not a new assembly solve.</summary>
+public sealed record ReferenceGarageEquipment(string ModelId,string FrontSpringId,string RearSpringId,string FrontBarId,string RearBarId);
 
 public sealed class GarageLibrary(string directory)
 {

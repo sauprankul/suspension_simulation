@@ -1,0 +1,56 @@
+{
+  "schema": "suspension-fea/synthetic-coupon/v1",
+  "provenance": "synthetic",
+  "name": "Educational compressible foam coupon (not a commercial grade)",
+  "note": "Generated one-term hyperfoam responses with deterministic numerical perturbations; no physical measurement or material correlation. Stress is nominal force/original area; compression is shortening/original height. Lateral data constrain compressibility.",
+  "law": "CalculiX hyperfoam N=1",
+  "truthForVerificationOnly": {
+    "muPa": 200000,
+    "alpha": -3,
+    "poisson": 0.15
+  },
+  "conditions": "Synthetic isothermal, quasi-static recoverable example; no temperature/rate/material-grade claim",
+  "maximumCompressionFraction": 0.5,
+  "samples": [
+    {
+      "compressionFraction": 0.02,
+      "nominalCompressionStressPa": 9732.311177540165,
+      "lateralStretch": 1.0030350024199213
+    },
+    {
+      "compressionFraction": 0.05,
+      "nominalCompressionStressPa": 26589.549344129966,
+      "lateralStretch": 1.0077435022845629
+    },
+    {
+      "compressionFraction": 0.1,
+      "nominalCompressionStressPa": 61809.943449548606,
+      "lateralStretch": 1.0159245114590456
+    },
+    {
+      "compressionFraction": 0.2,
+      "nominalCompressionStressPa": 174979.30407075174,
+      "lateralStretch": 1.0340194907405185
+    },
+    {
+      "compressionFraction": 0.3,
+      "nominalCompressionStressPa": 393268.0412104736,
+      "lateralStretch": 1.0549681838603329
+    },
+    {
+      "compressionFraction": 0.4,
+      "nominalCompressionStressPa": 850728.719957135,
+      "lateralStretch": 1.0796518577576129
+    },
+    {
+      "compressionFraction": 0.45,
+      "nominalCompressionStressPa": 1274253.94361888,
+      "lateralStretch": 1.0938053390735205
+    },
+    {
+      "compressionFraction": 0.5,
+      "nominalCompressionStressPa": 1936640.9052397262,
+      "lateralStretch": 1.1095571093256003
+    }
+  ]
+}

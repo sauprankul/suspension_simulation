@@ -7,6 +7,12 @@
     "executableSha256":"317c43391e5b1fab3a1dd80dc5245dad6e2d087910f4b8ebc234bd6d4b8f41a1",
     "license":"GPL-2.0-or-later with the distribution's external-library exception; see its LICENSE.txt"
   },
+  "verificationExamples": {
+    "version":"2.23",
+    "download":"https://www.dhondt.de/ccx_2.23.test.tar.bz2",
+    "archiveSha256":"be2259fd9a7b990d0453b30708e1b05f2cd4b6df4a90fa96f0e4abd1ae7beaa0",
+    "use":"Input convention/reference comparisons only; full upstream examples remain ignored artifacts"
+  },
   "calculix": {
     "version":"2.23",
     "download":"https://www.dhondt.de/calculix_2.23_4win.zip",

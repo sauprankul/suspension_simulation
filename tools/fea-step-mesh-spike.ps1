@@ -47,6 +47,7 @@ Physical Volume("bumper",1)={v()};
 Mesh.MeshSizeMin=$($size.ToString('R',$culture));
 Mesh.MeshSizeMax=$($size.ToString('R',$culture));
 Mesh.ElementOrder=2;
+Mesh.HighOrderOptimize=2;
 "@
     $file='mesh-'+$key+'.geo';$mesh='mesh-'+$key+'.msh';[System.IO.File]::WriteAllText((Join-Path $folder $file),$geo)
     $run=Invoke-Gmsh ('mesh-'+$key) @($file,'-3','-nt','4','-format','msh2','-o',$mesh,'-v','4')
@@ -60,6 +61,6 @@ Mesh.ElementOrder=2;
     if($quadraticTets -eq 0){throw 'No quadratic volume elements were generated.'}
     [pscustomobject]@{meshSizeM=$size;nodes=$count;quadraticTetrahedra=$quadraticTets;heightM=$zmax-$zmin;seconds=$run.seconds;peakWorkingSetBytes=$run.peakWorkingSetBytes;meshSha256=(Get-FileHash -LiteralPath (Join-Path $folder $mesh) -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
-@{status='STEP import/units/three-mesh preparation only; no contact solve or force convergence claim';mesher='Gmsh 4.15.2 / OpenCASCADE';healing='Explicit healing operations disabled';stepSha256=(Get-FileHash -LiteralPath (Join-Path $folder 'asymmetric-mm.step') -Algorithm SHA256).Hash.ToLowerInvariant();meshes=@($reports)} |
+@{status='STEP import/units/three-mesh preparation only; no contact solve or force convergence claim';mesher='Gmsh 4.15.2 / OpenCASCADE';healing='Explicit healing operations disabled';highOrderMeshOptimization=2;stepSha256=(Get-FileHash -LiteralPath (Join-Path $folder 'asymmetric-mm.step') -Algorithm SHA256).Hash.ToLowerInvariant();meshes=@($reports)} |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $folder 'verification.json')
 $reports | Format-Table meshSizeM,nodes,quadraticTetrahedra,heightM,seconds

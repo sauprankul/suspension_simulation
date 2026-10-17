@@ -103,7 +103,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         foreach(var layer in new[]{"chassis","front","rear","bars","wheels","labels","ground","reference"})
         {
             if(!engineeringDashboard&&layer=="reference") continue;
-            var caption=engineeringDashboard?layer:layer switch {"chassis"=>"Z axes","front"=>"structure","rear"=>"X axes","bars"=>"Y axes","wheels"=>"points",_=>layer};
+            var caption=engineeringDashboard?layer:layer switch {"chassis"=>"Z axes","front"=>"structure","rear"=>"X axes","bars"=>"Y axes","wheels"=>"points / wheels",_=>layer};
             var check=new CheckBox {Content=caption,IsChecked=_visible.Contains(layer),Margin=new Thickness(3),Foreground=Brushes.White};
             _layerChecks[layer]=check;
             check.Checked+=(_,_)=>{_visible.Add(layer);ApplyVisibility();};

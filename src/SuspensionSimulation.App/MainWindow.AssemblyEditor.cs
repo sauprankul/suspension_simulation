@@ -264,11 +264,12 @@ public partial class MainWindow
                 var f=Frame(body,port);var x=f.ReferenceDirection;var y=f.Axis.Cross(x);
                 foreach(var (name,axis,layer) in new[]{("X",x,"rear"),("Y",y,"bars"),("Z",f.Axis,"chassis")}) lines.Add(new(body.Path+".port."+port.Id+name,body.Path+" · "+port.Id+" "+name,body.Path,layer,V(f.OriginM),V(f.OriginM+axis*.025),SceneSource.Authored));
             }
-            if(mechanism is not null&&pose is not null&&body.Component.Kind==ComponentKind.Upright&&body.Component.Points.Any(p=>p.Id=="wheel"))
+            if(body.Component.Kind==ComponentKind.Wheel||mechanism is not null&&pose is not null&&body.Component.Kind==ComponentKind.Upright&&!graph.Bodies.Any(b=>b.Component.Kind==ComponentKind.Wheel)&&body.Component.Points.Any(p=>p.Id=="wheel"))
             {
-                var x=V(mechanism.Direction(body.Path,new(1,0,0),pose.Coordinates));var z=V(mechanism.Direction(body.Path,new(0,0,1),pose.Coordinates));var y=Vector3.Cross(z,x);
-                var rotation=Quaternion.CreateFromRotationMatrix(new Matrix4x4(x.X,x.Y,x.Z,0,y.X,y.Y,y.Z,0,z.X,z.Y,z.Z,0,0,0,0,1));var center=V(Point(body,"wheel"));
-                wheels.Add(new(body.Path,center,rotation,.31,.22,center.Z-.31,SceneSource.VisualEstimate));
+                DesignVector Axis(DesignVector v)=>mechanism is not null&&pose is not null?mechanism.Direction(body.Path,v,pose.Coordinates):body.Transform.Direction(v);
+                var x=V(Axis(new(1,0,0)));var z=V(Axis(new(0,0,1)));var y=Vector3.Cross(z,x);var radius=body.Component.Wheel?.RollingRadiusM??.31;var width=body.Component.Wheel?.WidthM??.22;
+                var rotation=Quaternion.CreateFromRotationMatrix(new Matrix4x4(x.X,x.Y,x.Z,0,y.X,y.Y,y.Z,0,z.X,z.Y,z.Z,0,0,0,0,1));var center=V(Point(body,body.Component.Kind==ComponentKind.Wheel?"center":"wheel"));
+                wheels.Add(new(body.Path,center,rotation,radius,width,center.Z-radius,SceneSource.VisualEstimate));
             }
         }
         foreach(var j in graph.Joints.Where(x=>x.Kind==JointKind.RigidDistance)) lines.Add(new("joint"+j.Path,j.Path,"Assembly","bars",V(mechanism is not null&&pose is not null?mechanism.Frame(j.First,pose.Coordinates).OriginM:j.First.Frame.OriginM),V(mechanism is not null&&pose is not null?mechanism.Frame(j.Second,pose.Coordinates).OriginM:j.Second.Frame.OriginM),SceneSource.Authored));

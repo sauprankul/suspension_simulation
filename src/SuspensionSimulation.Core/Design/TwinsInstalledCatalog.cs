@@ -22,30 +22,36 @@ public static class TwinsInstalledCatalog
         ComponentDefinition Save(ComponentDefinition c)=>library.LoadComponent(c.Identity.AssetId)??library.Publish(c,null);
         AssemblyDefinition SaveAssembly(AssemblyDefinition a)=>library.LoadAssembly(a.Identity.AssetId)??library.Publish(a,null);
         ComponentInstance Instance(string id,ComponentDefinition c,DesignVector? origin=null)=>new(id,new(c.Identity.AssetId),new(AssemblyAuthoring.IdentityPlacement.Frame with {OriginM=origin??zero}));
-        ComponentDefinition Anchor(string assetId,string portId,string pointId,JointKind joint,DesignVector? pointOffset=null)
+        ComponentDefinition Anchor(string assetId,string portId,string pointId,JointKind joint,DesignVector? pointOffset=null,DesignVector? axis=null)
         {
             var c=library.LoadComponent(assetId)??throw new InvalidOperationException("Missing physical base "+assetId);
             if(c.Ports.Any(p=>p.Id==portId)) return c;
             var point=c.Points.Single(p=>p.Id==pointId).PositionM+(pointOffset??zero);var frameId=portId+"-frame";
-            var next=c with {Frames=c.Frames.Add(new(frameId,portId,new(point,z,x))),Ports=c.Ports.Add(new(portId,frameId,portId,[joint]))};
+            var next=c with {Frames=c.Frames.Add(new(frameId,portId,new(point,axis??z,x))),Ports=c.Ports.Add(new(portId,frameId,portId,[joint]))};
             return library.Publish(next,c.Identity.RevisionId);
         }
         Anchor("twins-front-upright","damper-lower","strut",JointKind.Spherical);Anchor("twins-front-upright","arb","arb",JointKind.Spherical);
         Anchor("twins-rear-lower","arb","arb",JointKind.Spherical);Anchor("twins-front-chassis","topmount-base","strut-top",JointKind.Fixed,z*.025);
+        Anchor("twins-front-upright","wheel-fixed","wheel",JointKind.Fixed,axis:y);Anchor("twins-rear-upright","wheel-fixed","wheel",JointKind.Fixed,axis:y);
+        var wheelData=estimates.RootElement.GetProperty("wheel");var radius=wheelData.GetProperty("rollingRadiusM").GetDouble();var width=wheelData.GetProperty("widthM").GetDouble();
+        var wheel=Save(new(Identity("wheel","Estimated rigid wheel/tire contact envelope; spin omitted"),ComponentKind.Wheel,[new("center","Wheel center",zero),new("radius","Rolling-radius datum",z*radius)],
+            [new("hub","Hub interface",new(zero,y,x))],[new("hub","hub","hub",[JointKind.Fixed])],[],null) {Wheel=new(radius,width),VisualEdges=[new("radius","center","radius")]});
         var mount=Save(new(Identity("top-mount","Fixed upper mount (estimated stack)"),ComponentKind.TopMount,
             [new("base","Chassis mounting face",zero),new("bearing","Strut bearing",new(0,0,-.025)),new("bolt","Mounting bolt",new(.05,0,0))],
             [new("base","Chassis interface",new(zero,z,x)),new("bearing","Strut bearing",new(new(0,0,-.025),z,x))],
             [new("base","base","chassis",[JointKind.Fixed]),new("bearing","bearing","strut-bearing",[JointKind.Spherical])],[],null) {VisualEdges=[new("stack","base","bearing"),new("flange","base","bolt")]});
         var oldCorner=library.LoadAssembly("twins-front-corner")!;var mountPosition=library.LoadComponent("twins-front-shaft")!.Points.Single(p=>p.Id=="top").PositionM;
         var shaftInstance=oldCorner.Instances.Single(i=>i.Id=="shaft");mountPosition=DesignTransform.From(shaftInstance.Placement).Point(mountPosition)+z*.025;
-        var frontCorner=SaveAssembly(oldCorner with {Identity=Identity("front-corner","Installed strut corner"),Instances=oldCorner.Instances.Add(Instance("top-mount",mount,mountPosition)),
-            Joints=oldCorner.Joints.Select(j=>j.Id=="top-bearing"?j with {First=new("top-mount","bearing")}:j).Append(new("topmount-fix",JointKind.Fixed,new("chassis","topmount-base"),new("top-mount","base"))).ToImmutableArray(),
+        var frontWheelPosition=DesignTransform.From(oldCorner.Instances.Single(i=>i.Id=="upright").Placement).Origin;
+        var frontCorner=SaveAssembly(oldCorner with {Identity=Identity("front-corner-v2","Installed strut corner"),Instances=oldCorner.Instances.Add(Instance("top-mount",mount,mountPosition)).Add(Instance("wheel",wheel,frontWheelPosition)),
+            Joints=oldCorner.Joints.Select(j=>j.Id=="top-bearing"?j with {First=new("top-mount","bearing")}:j).Append(new("topmount-fix",JointKind.Fixed,new("chassis","topmount-base"),new("top-mount","base"))).Append(new("wheel-fixed",JointKind.Fixed,new("upright","wheel-fixed"),new("wheel","hub"))).ToImmutableArray(),
             Ports=[..oldCorner.Ports,new("shock-upper",new("shaft","top")),new("shock-lower",new("upright","damper-lower")),new("arb",new("upright","arb"))]});
         var oldAxle=library.LoadAssembly("twins-front-axle")!;
-        var front=SaveAssembly(oldAxle with {Identity=Identity("front-axle","Installed front rack and struts"),Instances=[..oldAxle.Instances.Select(i=>i is AssemblyInstance?i with {Definition=new(frontCorner.Identity.AssetId)}:i)],
+        var front=SaveAssembly(oldAxle with {Identity=Identity("front-axle-v2","Installed front rack and struts"),Instances=[..oldAxle.Instances.Select(i=>i is AssemblyInstance?i with {Definition=new(frontCorner.Identity.AssetId)}:i)],
             Ports=[..oldAxle.Ports,new("left-shock-upper",new("left","shock-upper")),new("left-shock-lower",new("left","shock-lower")),new("right-shock-upper",new("right","shock-upper")),new("right-shock-lower",new("right","shock-lower")),new("left-arb",new("left","arb")),new("right-arb",new("right","arb"))]});
         var oldRear=library.LoadAssembly("twins-rear-corner")!;
-        var rear=SaveAssembly(oldRear with {Identity=Identity("rear-corner","Installed rear upper/lower/toe/traction corner"),Ports=oldRear.Ports.Add(new("arb",new("lower","arb")))});
+        var rearWheelPosition=DesignTransform.From(oldRear.Instances.Single(i=>i.Id=="upright").Placement).Origin;
+        var rear=SaveAssembly(oldRear with {Identity=Identity("rear-corner-v2","Installed rear upper/lower/toe/traction corner"),Instances=oldRear.Instances.Add(Instance("wheel",wheel,rearWheelPosition)),Joints=oldRear.Joints.Add(new("wheel-fixed",JointKind.Fixed,new("upright","wheel-fixed"),new("wheel","hub"))),Ports=oldRear.Ports.Add(new("arb",new("lower","arb")))});
         ComponentInstance Rod(string id,DesignVector a,DesignVector b)
         {
             var delta=b-a;var c=Save(new(Identity(id,id),ComponentKind.RigidLink,[new("inner","Inner ball",zero),new("outer","Outer ball",delta)],
@@ -75,7 +81,7 @@ public static class TwinsInstalledCatalog
         }
         AssemblyDefinition Vehicle(JsonElement setup,string variant)
         {
-            var existing=library.LoadAssembly("installed-stock-"+variant+"-v1");if(existing is not null) return existing;
+            var existing=library.LoadAssembly("installed-stock-"+variant+"-v2");if(existing is not null) return existing;
             var frontBar=BarAssembly("front",variant,setup.GetProperty("frontArb"));var rearBar=BarAssembly("rear",variant,setup.GetProperty("rearArb"));
             var baseVehicle=topology.Vehicle;var instances=baseVehicle.Instances.Select(i=>i.Id=="front"?i with {Definition=new(front.Identity.AssetId)}:i with {Definition=new(rear.Identity.AssetId)}).ToList();
             instances.Add(new AssemblyInstance("front-bar",new(frontBar.Identity.AssetId),AssemblyAuthoring.IdentityPlacement));instances.Add(new AssemblyInstance("rear-bar",new(rearBar.Identity.AssetId),AssemblyAuthoring.IdentityPlacement));
@@ -98,8 +104,10 @@ public static class TwinsInstalledCatalog
                     seats.Add(new(springId,damperId));
                 }
             }
-            return SaveAssembly(new(Identity("stock-"+variant+"-v1",variant.ToUpperInvariant()+" reference equipment / synthetic installation"),[..instances],[..joints],[])
-                {GroundedInstances=[..baseVehicle.GroundedInstances,"front-bar/housing","rear-bar/housing"],SpringSeats=[..seats]});
+            return SaveAssembly(new(Identity("stock-"+variant+"-v2",variant.ToUpperInvariant()+" reference equipment / synthetic installation"),[..instances],[..joints],[])
+                {GroundedInstances=[..baseVehicle.GroundedInstances,"front-bar/housing","rear-bar/housing"],SpringSeats=[..seats],Vehicle=new(
+                    [new("FL","front/left/wheel","center"),new("FR","front/right/wheel","center"),new("RL","rear-left/wheel","center"),new("RR","rear-right/wheel","center")],
+                    [new("front-left","Estimated front-left chassis datum",new(.9,.3,.15)),new("front-right","Estimated front-right chassis datum",new(.9,-.3,.15)),new("rear-left","Estimated rear-left chassis datum",new(-.9,.3,.15)),new("rear-right","Estimated rear-right chassis datum",new(-.9,-.3,.15))])});
         }
         var setups=reference.RootElement.GetProperty("setups").EnumerateArray().ToArray();return new(Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-gr86-2022"),"gr86"),Vehicle(setups.Single(s=>s.GetProperty("id").GetString()=="stock-brz-2022"),"brz"));
     }

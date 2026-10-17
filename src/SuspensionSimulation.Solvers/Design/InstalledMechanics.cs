@@ -12,7 +12,7 @@ public sealed record InstalledMechanicalState(double EnergyJ,ImmutableArray<Inst
 
 public sealed class InstalledMechanics(ConstraintMechanism mechanism)
 {
-    public InstalledMechanicalState Evaluate(double[] pose,bool requireFeasible=true)
+    public InstalledMechanicalState Evaluate(IReadOnlyList<double> pose,bool requireFeasible=true)
     {
         var graph=mechanism.Graph;var states=new List<InstalledElementState>();var limits=new List<RigidElementGap>();
         foreach(var element in graph.ElasticElements)

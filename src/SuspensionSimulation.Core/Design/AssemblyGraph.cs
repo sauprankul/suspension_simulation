@@ -135,6 +135,12 @@ public sealed class AssemblyGraphResolver(IDesignAssetSource library)
         var mappedExports=exported.ToDictionary(x=>x.Key,x=>Map(x.Value),StringComparer.Ordinal);
         interfaces=interfaces.ToDictionary(x=>x.Key,x=>Map(x.Value),StringComparer.Ordinal);
         joints.RemoveAll(j=>consumed.Contains(j.Path));bodies.RemoveAll(b=>elasticBodies.ContainsKey(b.Path));
+        if(rootDefinition.Vehicle is {} vehicle)
+            foreach(var contact in vehicle.Contacts)
+            {
+                var wheel=bodies.SingleOrDefault(b=>b.Path==contact.InstancePath);
+                if(wheel?.Component.Kind!=ComponentKind.Wheel||wheel.Component.Wheel is null||!wheel.Component.Points.Any(p=>p.Id==contact.CenterPointId)) throw new InvalidOperationException("Unresolved wheel/contact datum: "+contact.Corner+" at "+contact.InstancePath);
+            }
         var grounded=new HashSet<string>(StringComparer.Ordinal);
         foreach(var path in rootDefinition.GroundedInstances)
         {

@@ -8,6 +8,12 @@ public sealed record PointMeasurement(double DistanceM,DesignVector DeltaM);
 
 public static class ComponentAuthoring
 {
+    public static ComponentDefinition CreateWheel(RevisionIdentity identity,double radiusM,double widthM)
+    {
+        var zero=new DesignVector(0,0,0);var c=new ComponentDefinition(identity,ComponentKind.Wheel,[new("center","Wheel center",zero),new("radius","Rolling-radius datum",new(0,0,radiusM))],
+            [new("hub","Hub interface",new(zero,new(0,1,0),new(1,0,0)))],[new("hub","hub","hub",[JointKind.Fixed])],[],null) {Wheel=new(radiusM,widthM),VisualEdges=[new("radius","center","radius")]};
+        ValidateForPublish(c);return c;
+    }
     public static readonly ComponentKind[] RigidTemplates=[ComponentKind.RigidLink,ComponentKind.Wishbone,ComponentKind.Upright,ComponentKind.TopMount];
     public static ComponentDefinition Create(RevisionIdentity identity,ComponentKind kind,RigidTemplateSpec spec)
     {

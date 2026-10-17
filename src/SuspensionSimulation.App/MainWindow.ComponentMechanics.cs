@@ -34,6 +34,7 @@ public partial class MainWindow
         Field("shear","Bar shear modulus (GPa)","79");Field("outside","Torsion section OD (mm)","18");Field("inside","Torsion section ID (mm)","0");Field("torsionLength","Straight torsion section length (mm)","1100");Field("restTwist","Rest twist (degrees)","0");
         Field("effectiveBar","Effective torsional rate (N·m/rad; blank uses GJ/L)","");
         Field("rackTravel","Rack travel at full steering-wheel lock (mm)","55");Field("rackLock","Steering-wheel lock angle (degrees)","450");
+        Field("wheelRadius","Effective rigid rolling radius (mm)","310");Field("wheelWidth","Wheel/tire visual width (mm)","220");
         panel.Children.Add(_useMass);Field("mass","Mass (kg)","1");Field("massX","Mass datum X (mm)","0");Field("massY","Mass datum Y (mm)","0");Field("massZ","Mass datum Z (mm)","0");
         foreach(var check in new[]{_integratedSeats,_perchAdjustment,_bodyAdjustment,_useMass}) {check.Checked+=(_,_)=>{ScheduleComponentDraft();UpdateMechanicalVisibility();};check.Unchecked+=(_,_)=>{ScheduleComponentDraft();UpdateMechanicalVisibility();};}
         _perchAdjustment.Checked+=(_,_)=>_integratedSeats.IsChecked=true;
@@ -103,6 +104,7 @@ public partial class MainWindow
                 "bodyMin" or "bodyMax"=>kind==ComponentKind.Damper&&_bodyAdjustment.IsChecked==true,
                 "shear" or "outside" or "inside" or "torsionLength" or "restTwist" or "effectiveBar"=>kind==ComponentKind.AntiRollBar,
                 "rackTravel" or "rackLock"=>kind==ComponentKind.Rack,
+                "wheelRadius" or "wheelWidth"=>kind==ComponentKind.Wheel,
                 _=>_useMass.IsChecked==true
             };
             field.Visibility=_physicalLabels[id].Visibility=visible?Visibility.Visible:Visibility.Collapsed;
@@ -141,6 +143,7 @@ public partial class MainWindow
             case TorsionBarBehavior b:Set("shear",b.ShearModulusPa/1e9);Set("outside",b.OutsideDiameterM*1000);Set("inside",b.InsideDiameterM*1000);Set("torsionLength",b.TorsionLengthM*1000);Set("restTwist",b.RestTwistRad*180/Math.PI);_physicalFields["effectiveBar"].Text=b.PrescribedRateNmPerRad is {} rate?DesignerNumbers.Text(rate):"";break;
         }
         if(component.Rack is {} rack) {Set("rackTravel",rack.TravelAtLockM*1000);Set("rackLock",rack.SteeringWheelLockDegrees);}
+        if(component.Wheel is {} wheel) {Set("wheelRadius",wheel.RollingRadiusM*1000);Set("wheelWidth",wheel.WidthM*1000);}
         if(component.Behavior is AxialDamperBehavior damper)
             foreach(var (id,minField,maxField) in new[]{(damper.SpringSeats?.PerchAdjustmentId,"perchMin","perchMax"),(damper.BodyLengthAdjustmentId,"bodyMin","bodyMax")})
                 if(id is not null&&(component.Adjustments??[]).Single(a=>a.Id==id) is {} definition&&definition.Path is ThreadedAdjustmentPath t)
@@ -149,6 +152,12 @@ public partial class MainWindow
     private ComponentDefinition ApplyComponentMechanicalEdits(ComponentDefinition component)
     {
         if(component.Kind==ComponentKind.Rack) component=component with {Rack=new(PhysicalMetres("rackTravel"),Physical("rackLock"))};
+        if(component.Kind==ComponentKind.Wheel)
+        {
+            var radius=PhysicalMetres("wheelRadius");component=component with {Wheel=new(radius,PhysicalMetres("wheelWidth"))};
+            var center=component.Points.SingleOrDefault(p=>p.Id=="center");var marker=component.Points.SingleOrDefault(p=>p.Id=="radius");
+            if(center is not null&&marker is not null) {var direction=marker.PositionM-center.PositionM;if(direction.Length>1e-9) component=component with {Points=component.Points.Replace(marker,marker with {PositionM=center.PositionM+direction/direction.Length*radius})};}
+        }
         if(component.Kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar)
         {
             var generated=CreateElasticComponent(component.Kind);var behavior=generated.Behavior!;

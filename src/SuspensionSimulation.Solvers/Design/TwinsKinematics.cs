@@ -20,13 +20,16 @@ public sealed class TwinsKinematics
     public static readonly string[] WheelPaths=["front/left/upright","front/right/upright","rear-left/upright","rear-right/upright"];
     private readonly double[] _neutralHeights;
     private readonly double _rackNeutral;
+    private readonly string[] _wheelBodyPaths,_wheelPointIds;
     public TwinsKinematics(ResolvedAssemblyGraph graph):this(graph,graph.Components.Single(x=>x.Kind==ComponentKind.Rack).Rack?.TravelAtLockM??throw new InvalidOperationException("Rack travel specification is missing.")) { }
     public TwinsKinematics(ResolvedAssemblyGraph graph,double rackTravelAt450DegreesM)
     {
         if(!double.IsFinite(rackTravelAt450DegreesM)||rackTravelAt450DegreesM<=0) throw new ArgumentException("Rack translation must be positive.");
         if(graph.Components.Single(x=>x.Kind==ComponentKind.Rack).Rack?.SteeringWheelLockDegrees!=450) throw new InvalidOperationException("This operating adapter requires the declared ±450 degree steering range.");
         System=new(graph);RackTravelAt450DegreesM=rackTravelAt450DegreesM;var zero=new double[System.CoordinateCount];
-        _neutralHeights=WheelPaths.Select(p=>System.Point(p,"wheel",zero).Z).ToArray();_rackNeutral=System.Point("front/rack","origin",zero).Y;
+        var corners=new[]{"FL","FR","RL","RR"};_wheelBodyPaths=graph.Root.Vehicle is {} vehicle?corners.Select(c=>vehicle.Contacts.Single(p=>p.Corner==c).InstancePath).ToArray():WheelPaths;
+        _wheelPointIds=graph.Root.Vehicle is {} v?corners.Select(c=>v.Contacts.Single(p=>p.Corner==c).CenterPointId).ToArray():["wheel","wheel","wheel","wheel"];
+        _neutralHeights=_wheelBodyPaths.Select((p,i)=>System.Point(p,_wheelPointIds[i],zero).Z).ToArray();_rackNeutral=System.Point("front/rack","origin",zero).Y;
         var report=MechanismMobility.Inspect(graph,5);if((!report.IsClosed&&graph.AppliedAdjustments.IsEmpty)||report.DegreesOfFreedom!=5||report.RedundantRows>0) throw new InvalidOperationException("Unsupported explicit vehicle mechanism: "+string.Join(" ",report.Diagnostics));
     }
     public TwinsMotionState Solve(FourCornerTravel travel,double steeringWheelDegrees,TwinsMotionState? seed=null)
@@ -39,16 +42,16 @@ public sealed class TwinsKinematics
         for(var step=1;step<=steps;step++)
         {
             var fraction=(double)step/steps;
-            var drivers=WheelPaths.Select((p,i)=>new MechanismDriver(p,"wheel",new(0,0,1),_neutralHeights[i]+start[i]+fraction*(end[i]-start[i]))).ToList();
+            var drivers=_wheelBodyPaths.Select((p,i)=>new MechanismDriver(p,_wheelPointIds[i],new(0,0,1),_neutralHeights[i]+start[i]+fraction*(end[i]-start[i]))).ToList();
             // Rearward steering arms require negative rack Y translation for positive left steering.
             drivers.Add(new("front/rack","origin",new(0,1,0),_rackNeutral-(initialSteer+fraction*(steeringWheelDegrees-initialSteer))/450*RackTravelAt450DegreesM));
             pose=System.Solve(drivers,pose);if(!pose.Converged) throw new InvalidOperationException($"Explicit mechanism continuation failed at fraction {fraction:0.###}; scaled residual {pose.MaximumScaledResidual:0.###E+0}. Last accepted pose retained.");
         }
-        var wheels=WheelPaths.Select((path,i)=>
+        var wheels=_wheelBodyPaths.Select((path,i)=>
         {
             var forward=System.Direction(path,new(1,0,0),pose!.Coordinates);var outward=System.Direction(path,new(0,1,0),pose.Coordinates);
             var camber=-Math.Atan2(outward.Z,Math.Sqrt(outward.X*outward.X+outward.Y*outward.Y));var heading=Math.Atan2(forward.Y,forward.X);
-            return new WheelAlignment(new[]{"FL","FR","RL","RR"}[i],System.Point(path,"wheel",pose.Coordinates),forward,outward,camber,heading);
+            return new WheelAlignment(new[]{"FL","FR","RL","RR"}[i],System.Point(path,_wheelPointIds[i],pose.Coordinates),forward,outward,camber,heading);
         }).ToImmutableArray();
         static AxleAlignment Axle(WheelAlignment a,WheelAlignment b)=>new(a.CamberRad,b.CamberRad,a.HeadingRad-b.HeadingRad,Math.Atan2(Math.Sin(a.HeadingRad)+Math.Sin(b.HeadingRad),Math.Cos(a.HeadingRad)+Math.Cos(b.HeadingRad)));
         return new(travel,steeringWheelDegrees,pose!,wheels,Axle(wheels[0],wheels[1]),Axle(wheels[2],wheels[3]));

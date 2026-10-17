@@ -56,10 +56,12 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public AxialRodGauge? AxialGauge {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public RackSpecification? Rack {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalBehavior? Behavior {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public WheelSpecification? Wheel {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
     [JsonIgnore] public bool IsRuntimeDerived {get;init;}
 }
 public sealed record RackSpecification(double TravelAtLockM,double SteeringWheelLockDegrees);
+public sealed record WheelSpecification(double RollingRadiusM,double WidthM);
 // A coordinate convention only, valid for a straight rod with spherical ends and no off-axis hardware.
 public sealed record AxialRodGauge(string StartPointId,string EndPointId);
 
@@ -88,8 +90,11 @@ public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArra
     // Root-relative body or subtree paths. Nested definitions' local grounds are not world anchors.
     public ImmutableArray<string> GroundedInstances {get;init;}=[];
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SpringSeatBinding>? SpringSeats {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public VehicleGeometry? Vehicle {get;init;}
 }
 public sealed record SpringSeatBinding(string SpringPath,string DamperPath);
+public sealed record WheelGroundContact(string Corner,string InstancePath,string CenterPointId);
+public sealed record VehicleGeometry(ImmutableArray<WheelGroundContact> Contacts,ImmutableArray<NamedDesignPoint> RideHeightDatums);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ContinuousAdjustmentSelection), "continuous")]

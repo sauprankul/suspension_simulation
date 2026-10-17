@@ -1,9 +1,10 @@
 using SuspensionSimulation.Design;
+using System.Collections.Immutable;
 
 namespace SuspensionSimulation.Solvers.Design;
 
 public sealed record MechanismDriver(string BodyPath,string PointId,DesignVector UnitDirection,double TargetCoordinateM);
-public sealed record MechanismPose(double[] Coordinates,double MaximumScaledResidual,int Iterations,bool Converged);
+public sealed record MechanismPose(ImmutableArray<double> Coordinates,double MaximumScaledResidual,int Iterations,bool Converged);
 
 /// <summary>Double-precision rigid-body graph constraints shared by mobility and finite-displacement solving.</summary>
 public sealed class ConstraintMechanism
@@ -32,19 +33,21 @@ public sealed class ConstraintMechanism
             var candidate=Math.Abs(axis.Z)<.9?new DesignVector(0,0,1):new DesignVector(1,0,0);var normal=candidate-axis*axis.Dot(candidate);normal/=normal.Length;return (b,axis,normal);
         }).ToArray();
     }
-    public DesignFrame Frame(ResolvedPort port,double[] q)=>WorldFrame(port.BodyPath,port.Frame,q);
-    private DesignFrame WorldFrame(string bodyPath,DesignFrame world,double[] q)
+    public DesignFrame Frame(ResolvedPort port,IReadOnlyList<double> q)=>WorldFrame(port.BodyPath,port.Frame,q);
+    private DesignFrame WorldFrame(string bodyPath,DesignFrame world,IReadOnlyList<double> q)
     {
-        if(q.Length!=CoordinateCount) throw new ArgumentException("Pose coordinate count differs from this graph.");
+        if(q.Count!=CoordinateCount) throw new ArgumentException("Pose coordinate count differs from this graph.");
         if(!_lookup.TryGetValue(bodyPath,out var i)) return world;
         return DesignTransform.Displace(world,new DesignVector(q[6*i],q[6*i+1],q[6*i+2])*LengthScaleM,new(q[6*i+3],q[6*i+4],q[6*i+5]),_bodies[bodyPath].Transform.Origin);
     }
-    public DesignVector Point(string bodyPath,string pointId,double[] q)
+    public DesignVector Point(string bodyPath,string pointId,IReadOnlyList<double> q)
     {
         var body=_bodies[bodyPath];var point=body.Component.Points.SingleOrDefault(x=>x.Id==pointId)??throw new ArgumentException("Missing point "+bodyPath+":"+pointId);
         var f=new DesignFrame(body.Transform.Point(point.PositionM),new(0,0,1),new(1,0,0));return WorldFrame(bodyPath,f,q).OriginM;
     }
-    public DesignVector Direction(string bodyPath,DesignVector local,double[] q)
+    public DesignVector Position(string bodyPath,DesignVector local,IReadOnlyList<double> q)
+    {var body=_bodies[bodyPath];return WorldFrame(bodyPath,new(body.Transform.Point(local),new(0,0,1),new(1,0,0)),q).OriginM;}
+    public DesignVector Direction(string bodyPath,DesignVector local,IReadOnlyList<double> q)
     {
         var body=_bodies[bodyPath];var v=body.Transform.Direction(local);return _lookup.TryGetValue(bodyPath,out var i)?DesignTransform.Rotate(v,new(q[6*i+3],q[6*i+4],q[6*i+5])):v;
     }
@@ -90,23 +93,23 @@ public sealed class ConstraintMechanism
     }
     public MechanismPose Solve(IReadOnlyList<MechanismDriver> drivers,MechanismPose? seed=null)
     {
-        var q=seed is null?new double[CoordinateCount]:(double[])seed.Coordinates.Clone();
+        var q=seed is null?new double[CoordinateCount]:seed.Coordinates.ToArray();
         double[] R(double[] state)=>Residual(state,drivers);
         for(var iteration=0;iteration<60;iteration++)
         {
             var r=R(q);var max=r.Select(Math.Abs).DefaultIfEmpty(0).Max();
-            if(max<1e-10) return new(q,max,iteration,MechanismMobility.MatrixRank(Jacobian(R,q),1e-8)==CoordinateCount);
+            if(max<1e-10) return new([..q],max,iteration,MechanismMobility.MatrixRank(Jacobian(R,q),1e-8)==CoordinateCount);
             var jacobian=Jacobian(R,q);double[] delta;
-            try {delta=SolveLeastSquares(jacobian,r);}catch(InvalidOperationException) {return new(q,max,iteration,false);}
+            try {delta=SolveLeastSquares(jacobian,r);}catch(InvalidOperationException) {return new([..q],max,iteration,false);}
             var accepted=false;var norm=r.Sum(x=>x*x);
             for(var alpha=1d;alpha>=1d/1024;alpha*=.5)
             {
                 var candidate=q.Select((x,i)=>x-alpha*delta[i]).ToArray();var rc=R(candidate);
                 if(rc.All(double.IsFinite)&&rc.Sum(x=>x*x)<norm) {q=candidate;accepted=true;break;}
             }
-            if(!accepted) return new(q,max,iteration,false);
+            if(!accepted) return new([..q],max,iteration,false);
         }
-        return new(q,R(q).Select(Math.Abs).DefaultIfEmpty(0).Max(),60,false);
+        return new([..q],R(q).Select(Math.Abs).DefaultIfEmpty(0).Max(),60,false);
     }
     private static double[] SolveLeastSquares(double[,] source,double[] residual)
     {

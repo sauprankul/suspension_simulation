@@ -19,6 +19,7 @@ if (args.Contains("--write-viz-baseline"))
     return;
 }
 if(args.Contains("--write-viz-limit-cases")) {SuspensionSimulation.Tests.VisualizerLimitCases.Write();return;}
+if(args.Contains("--check-installed-equilibrium")) {try {SuspensionSimulation.Tests.InstalledEquilibriumChecks.Verify();Console.WriteLine("Installed equilibrium checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
@@ -27,6 +28,7 @@ Run("nested assemblies preserve mirrored mobility, atomic latest resolution, gro
 Run("explicit twins topology closes through travel and rack steering with active rear traction links and separate shock mounts",SuspensionSimulation.Tests.TwinsTopologyChecks.Verify);
 Run("elastic laws preserve physical units rigid bind stroke limits and locked adjustment paths",SuspensionSimulation.Tests.ElasticAuthoringChecks.Verify);
 Run("installed twins springs seats and rigid-arm torsion bars preserve closure heave and roll behavior",SuspensionSimulation.Tests.InstalledMechanicsChecks.Verify);
+Run("installed static and loaded equilibrium derive pose alignment and balanced unilateral ground reactions",SuspensionSimulation.Tests.InstalledEquilibriumChecks.Verify);
 Run("stock Garage seeding equipment selection frozen revisions and reference solving are consistent",SuspensionSimulation.Tests.GarageAnalysisChecks.Verify);
 Run("Garage named entries round-trip independently with revisions archive recovery and conflict protection",SuspensionSimulation.Tests.GarageChecks.Persistence);
 Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);

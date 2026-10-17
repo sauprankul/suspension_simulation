@@ -90,6 +90,7 @@ public partial class MainWindow
     private object CaptureShellState()=>new
     {
         workspace=_workspace.ToString(),
+        installedPreview=_installedPreview is null?null:new {garage=_installedPreviewGarage,result=_installedPreview},
         analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         component=_componentReady?new {assetId=_componentId,baseRevision=_componentBaseRevision,rawDraft=CaptureComponentRaw(),camera=_componentViewport?.CaptureCamera()}:null,
         assembly=_assemblyReady?new {assetId=_assemblyId,baseRevision=_assemblyBaseRevision,rawDraft=CaptureAssemblyRaw(),camera=_assemblyViewport?.CaptureCamera(),manifest=_assemblyGraph?.Manifest,conflict=_assemblyConflict,motion=_twinsMotion,motionInputs=_twinsTravel.Select(x=>x.Text).Append(_twinsSteering.Text).ToArray()}:null,

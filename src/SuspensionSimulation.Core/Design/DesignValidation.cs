@@ -28,7 +28,9 @@ public static class DesignValidation
                         $"Measurement {measured.Id} has an unresolved point.");break;
                 default: throw new ArgumentException("Unsupported dimension kind.");
             }
-        if(component.Mass is {} mass) {Positive(mass.MassKg,"Component mass");Require(mass.CenterOfMassM.IsFinite,"Invalid mass datum.");}
+        if(component.Mass is {} mass) {Require(double.IsFinite(mass.MassKg)&&mass.MassKg>=0,"Component mass must be finite and nonnegative (zero explicitly identifies a massless proxy).");Require(mass.CenterOfMassM.IsFinite,"Invalid mass datum.");}
+        if(component.Wheel is {} wheel) {Require(component.Kind==ComponentKind.Wheel,"Wheel dimensions belong to a wheel component.");Positive(wheel.RollingRadiusM,"Rolling radius");Positive(wheel.WidthM,"Wheel width");}
+        else Require(component.Kind!=ComponentKind.Wheel,"Wheel contact dimensions are missing.");
         if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
         MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
         if(component.AxialGauge is {} gauge)
@@ -65,6 +67,8 @@ public static class DesignValidation
         }
         foreach(var port in assembly.Ports) Endpoint(port.Source);
         Unique(assembly.GroundedInstances,x=>x);
+        if(assembly.Vehicle is {} vehicle)
+        {Unique(vehicle.Contacts,c=>c.Corner);Unique(vehicle.RideHeightDatums,p=>p.Id);foreach(var contact in vehicle.Contacts) {Text(contact.InstancePath);Text(contact.CenterPointId);}foreach(var datum in vehicle.RideHeightDatums) Require(datum.PositionM.IsFinite,"Ride-height datum must be finite.");}
         // Transitive cycles, resolved port compatibility, axes/limits and Jacobian rank belong to graph compilation.
     }
 

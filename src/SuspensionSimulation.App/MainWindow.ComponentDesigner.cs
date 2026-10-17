@@ -104,9 +104,10 @@ public partial class MainWindow
             var revision=_componentHistory.SelectedItem as string??throw new ArgumentException("Select a published revision.");
             var saved=_designLibrary.LoadComponent(_componentId,revision)!;var current=ReadComponent();
             var differences=new List<string>();
-            void Change(string name,object a,object b) {if(DesignJson.Serialize(a)!=DesignJson.Serialize(b)) differences.Add(name+" changed");}
+            void Change(string name,object? a,object? b) {if(DesignJson.Serialize(a)!=DesignJson.Serialize(b)) differences.Add(name+" changed");}
             Change("Name",saved.Identity.Name,current.Identity.Name);Change("Provenance",saved.Identity.Provenance,current.Identity.Provenance);Change("Dimensions",saved.Dimensions,current.Dimensions);
             Change("Points",saved.Points,current.Points);Change("Frames",saved.Frames,current.Frames);Change("Ports",saved.Ports,current.Ports);Change("Edges",saved.VisualEdges,current.VisualEdges);
+            Change("Mechanical behavior",saved.Behavior,current.Behavior);Change("Adjustments",saved.Adjustments,current.Adjustments);Change("Mass",saved.Mass,current.Mass);Change("Wheel dimensions",saved.Wheel,current.Wheel);Change("Rack ratio",saved.Rack,current.Rack);
             _componentDiff.Text=differences.Count==0?"Preview matches this revision.":string.Join("\n",differences);
         });history.Children.Add(compare);history.Children.Add(_componentDiff);tabs.Items.Add(new TabItem {Header="History",Content=history});
         _workspaceViews[Workspace.ComponentDesigner]=grid;grid.Visibility=Visibility.Collapsed;_shell.Children.Add(grid);
@@ -139,6 +140,7 @@ public partial class MainWindow
         var kind=(ComponentKind)_componentKind.SelectedItem;
         _componentMass=ReadComponentMass();
         if(!_componentCustom && kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar) return CreateElasticComponent(kind) with {Mass=_componentMass};
+        if(!_componentCustom&&kind==ComponentKind.Wheel) return ComponentAuthoring.CreateWheel(ComponentIdentity(),PhysicalMetres("wheelRadius"),PhysicalMetres("wheelWidth")) with {Mass=_componentMass};
         if(!_componentCustom) return ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack,Adjustments=_componentMetadataSeed?.Adjustments};
         var geometry=new ComponentDefinition(ComponentIdentity(),kind,[.._componentPoints.Select(x=>x.Read())],[.._componentFrames.Select(x=>x.Read())],[.._componentPorts.Select(x=>x.Read())],
             [.._componentEdges.Select(x=>(DesignDimension)new MeasuredDistance(x.Id,x.StartPointId,x.EndPointId))],_componentMass)

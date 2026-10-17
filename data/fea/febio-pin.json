@@ -1,0 +1,20 @@
+{
+  "version": "4.13.0",
+  "compiled": "2026-08-04",
+  "download": "https://febio.org/downloads/",
+  "executableSha256": "7bee81e57fea75371f9e45449aad525c24ae26e6b9f24bc33f2c35dcf896b0e2",
+  "license": "User-installed FEBio binary; FEBio Software License v4.0; external dependency, not redistributed",
+  "licensePdfSha256": "bcbae912a6e476c40decde4dc262cc5b6e5d5802554a30b90c15218744a5c5a3",
+  "libraries": {
+    "febiofluid.dll": "9403e3d8dde896058b0b25306db05559c7c126c0bdf30a0423093fc2ae10f78d",
+    "febiolib.dll": "31db5fb1f6f8f7a80af7e99f8393776fab18242fd842c891fa8e7c6a99b3db29",
+    "febiomech.dll": "3da879b106f4e896c0a3eb43a13b15b951acc46106354d3500ca147acfa540c1",
+    "febiomix.dll": "cd01ff40f6bb48255aa4ea1a3483f1a803ead7879ab5e5a280efc4cf19c90957",
+    "febioopt.dll": "753a983df816d0aca1ed3278c2200672063a114f89b18b4fc47da3112f8ba180",
+    "febioplot.dll": "67552afc9a9d3d18d18d4c8dd898ecdd666ec95950bf200a44751bff3fbe27b1",
+    "febiorve.dll": "7cbeb183c80c91b1ebb550d35272d9f3c8de7b27bff565ac48a1f5d45f018ca3",
+    "febioxml.dll": "4cdfc41d88aca277f4003221285ee8c87105d3b85ea0be5afff483f8a38bced1",
+    "fecore.dll": "3045fc127fc2caf535b69ad19d691aad05d4ba2814a819a3e1fe9f0d07ccf462",
+    "libiomp5md.dll": "51043532cbb152b15ab3d4b20b85aaa28e18ebfe2b2565ff91950a1b622163e5"
+  }
+}

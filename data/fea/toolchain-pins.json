@@ -1,5 +1,12 @@
 {
   "status":"External experimental tools; not redistributed with the app",
+  "febio": {
+    "version":"4.13.0",
+    "pinFile":"data/fea/febio-pin.json",
+    "installation":"User-installed FEBioStudio; SUSPENSION_FEBIO_EXE overrides the local solver path",
+    "backend":"PARDISO, four-thread cap; no external configuration/plugins loaded",
+    "license":"FEBio Software License v4.0 for the installed binaries; not redistributed"
+  },
   "gmsh": {
     "version":"4.15.2",
     "download":"https://gmsh.info/bin/Windows/gmsh-4.15.2-Windows64.zip",

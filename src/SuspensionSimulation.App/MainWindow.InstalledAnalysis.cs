@@ -160,6 +160,17 @@ public partial class MainWindow
             Add(name+" spring force",a.State.Mechanics.Elements.SingleOrDefault(e=>e.Path==name+"-spring")?.ForceOrTorque??0,b.State.Mechanics.Elements.SingleOrDefault(e=>e.Path==name+"-spring")?.ForceOrTorque??0,"N");
             Add(name+" rigid reaction",a.State.RigidReactions.Where(r=>r.Id.StartsWith(name+"-",StringComparison.Ordinal)).Sum(r=>r.ForceN),b.State.RigidReactions.Where(r=>r.Id.StartsWith(name+"-",StringComparison.Ordinal)).Sum(r=>r.ForceN),"N");
         }
+        var bumperA=AssemblyGraphResolver.OpenBundle(a.Source).ElasticElements.Where(e=>e.Component.Behavior is BumpCurveBehavior).ToDictionary(e=>e.Path,e=>(BumpCurveBehavior)e.Component.Behavior!);
+        var bumperB=AssemblyGraphResolver.OpenBundle(b.Source).ElasticElements.Where(e=>e.Component.Behavior is BumpCurveBehavior).ToDictionary(e=>e.Path,e=>(BumpCurveBehavior)e.Component.Behavior!);
+        void Optional(string label,double? x,double? y,string unit)=>rows.Add(new(label,x?.ToString("0.###")??"—",y?.ToString("0.###")??"—",x is {} xv&&y is {} yv?(yv-xv).ToString("+0.###;-0.###;0"):"—",unit));
+        foreach(var path in bumperA.Keys.Union(bumperB.Keys).Order(StringComparer.Ordinal))
+        {
+            var x=a.State.Mechanics.Elements.SingleOrDefault(e=>e.Path==path&&e.Kind=="bump-stop");var y=b.State.Mechanics.Elements.SingleOrDefault(e=>e.Path==path&&e.Kind=="bump-stop");
+            double? Shortening(Dictionary<string,BumpCurveBehavior> curves,InstalledElementState? state)=>state is not null&&curves.TryGetValue(path,out var curve)?Math.Max(0,curve.ContactLengthM-state.LengthM):null;
+            var sx=Shortening(bumperA,x);var sy=Shortening(bumperB,y);
+            Optional(path+" force",x?.ForceOrTorque,y?.ForceOrTorque,"N");Optional(path+" shortening",sx*1000,sy*1000,"mm");Optional(path+" axial tangent",x?.Tangent/1000,y?.Tangent/1000,"N/mm");
+            Optional(path+" remaining curve range",sx is {} cx?(bumperA[path].Samples[^1].CompressionM-cx)*1000:null,sy is {} cy?(bumperB[path].Samples[^1].CompressionM-cy)*1000:null,"mm");
+        }
         foreach(var datum in a.State.RideHeights) if(b.State.RideHeights.SingleOrDefault(h=>h.Id==datum.Id) is {} other) Add(datum.Name,datum.HeightM*1000,other.HeightM*1000,"mm");
         ComparisonGrid.ItemsSource=rows;ValidityBadge.Text="INSTALLED EQUILIBRIUM · ESTIMATED GEOMETRY";
         UpdateGarageAnalysisPresentation();

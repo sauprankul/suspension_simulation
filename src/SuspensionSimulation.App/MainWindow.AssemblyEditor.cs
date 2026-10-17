@@ -52,7 +52,7 @@ public partial class MainWindow
         var left=new StackPanel {Margin=new Thickness(0,0,8,0)};
         void Button(string text,Action action) {var b=new Button {Content=text,Padding=new Thickness(5,3,5,3),Margin=new Thickness(0,3,0,3)};b.Click+=(_,_)=>AssemblyAction(action);left.Children.Add(b);}
         Button("Main menu",()=>NavigateWorkspace(Workspace.MainMenu));left.Children.Add(new TextBlock {Text="Assembly Editor",FontSize=22,FontWeight=FontWeights.Bold,Margin=new Thickness(0,8,0,8)});
-        left.Children.Add(_assemblyLibraryList);Button("Open selected assembly",OpenSelectedAssembly);Button("Refresh latest dependencies",RefreshAssemblyDependencies);
+        left.Children.Add(_assemblyLibraryList);Button("Open selected assembly",OpenSelectedAssembly);Button("Duplicate as custom assembly",DuplicateAssembly);Button("Refresh latest dependencies",RefreshAssemblyDependencies);
         Button("New empty assembly",NewAssembly);Button("Load synthetic corner example",()=>{var a=SyntheticAssemblyCatalog.SeedCorner(_designLibrary);RefreshAssemblyCatalog();LoadAssembly(a);});
         left.Children.Add(new TextBlock {Text="Name"});left.Children.Add(metadata.Name);left.Children.Add(new TextBlock {Text="Insert from library"});left.Children.Add(_assemblyInsertChoice);Button("Insert selected part / assembly",InsertAssemblyItem);Button("Refresh library",RefreshAssemblyCatalog);
         Button("Group selected instances",GroupAssemblySelection);Button("Mirror selected across Y = 0",MirrorAssemblySelection);
@@ -74,6 +74,7 @@ public partial class MainWindow
         tabs.Items.Add(new TabItem {Header="Mate",Content=mate});
         AddTwinsMotionTools(tabs,left);
         AddAssemblyGarageContracts(tabs);
+        AddBumperInstallation(tabs);
         _workspaceViews[Workspace.AssemblyEditor]=layout;layout.Visibility=Visibility.Collapsed;_shell.Children.Add(layout);
         _assemblyAutosave.Tick+=(_,_)=>{_assemblyAutosave.Stop();try {_designLibrary.SaveDraft("assembly-workspace",CaptureAssemblyRaw());}catch(Exception error) {_assemblyStatus.Text="Draft recovery could not save: "+error.Message;}};
         foreach(var box in new[]{metadata.Name,metadata.Notes,_assemblyGrounds,_assemblyExpectedDof}) box.TextChanged+=(_,_)=>ScheduleAssemblyDraft();
@@ -114,6 +115,7 @@ public partial class MainWindow
         var selectedA=_assemblyMateA.SelectedItem as string;var selectedB=_assemblyMateB.SelectedItem as string;
         var choices=graph.Interfaces.Keys.Order(StringComparer.Ordinal).ToArray();_assemblyMateA.ItemsSource=choices;_assemblyMateB.ItemsSource=choices;
         _assemblyMateA.SelectedItem=selectedA;_assemblyMateB.SelectedItem=selectedB;
+        RefreshBumperInstallation();
         _assemblyStatus.Text=$"{graph.Bodies.Length} bodies · {report.DegreesOfFreedom} operating freedoms · "+(report.IsClosed?"joint frames close":"joint frames need mating")+". No vehicle equilibrium is run.";
     }
     private void NewAssembly()
@@ -127,6 +129,7 @@ public partial class MainWindow
         _assemblyInsertChoice.ItemsSource=_designLibrary.Components().Select(x=>new AssemblyCatalogChoice("Part · "+x.Identity.Name,new(x.Identity.AssetId),false))
             .Concat(_designLibrary.Assemblies().Where(x=>x.Identity.AssetId!=_assemblyId).Select(x=>new AssemblyCatalogChoice("Assembly · "+x.Identity.Name,new(x.Identity.AssetId),true))).OrderBy(x=>x.Name).ToArray();
         if(selected is not null) _assemblyInsertChoice.SelectedItem=selected;else _assemblyInsertChoice.SelectedIndex=0;
+        RefreshBumperInstallation();
     }
     private void OpenSelectedAssembly()=>LoadAssembly(_assemblyLibraryList.SelectedItem as AssemblyDefinition??throw new ArgumentException("Select a published assembly."));
     private void LoadAssembly(AssemblyDefinition a)
@@ -282,7 +285,7 @@ public partial class MainWindow
         {
             var a=mechanism is not null&&pose is not null?mechanism.Frame(element.First,pose.Coordinates).OriginM:element.First.Frame.OriginM;
             var b=mechanism is not null&&pose is not null?mechanism.Frame(element.Second,pose.Coordinates).OriginM:element.Second.Frame.OriginM;var distance=(b-a).Length;if(distance<1e-9) continue;var direction=(b-a)/distance;
-            double? min=null;double? max=null;var kind=element.Component.Behavior is TorsionBarBehavior?"torsion":element.Component.Behavior is CompressionSpringBehavior?"spring":"damper";
+            double? min=null;double? max=null;var kind=element.Component.Behavior is TorsionBarBehavior?"torsion":element.Component.Behavior is CompressionSpringBehavior?"spring":element.Component.Behavior is BumpCurveBehavior?"bump-stop":"damper";
             if(element.Component.Behavior is CompressionSpringBehavior spring)
             {
                 min=spring.BlockLengthM;var binding=graph.SpringSeats.SingleOrDefault(s=>s.SpringPath==element.Path);

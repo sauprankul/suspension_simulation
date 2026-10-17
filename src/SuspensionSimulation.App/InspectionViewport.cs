@@ -344,6 +344,12 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             var element=installed.State.Mechanics.Elements.FirstOrDefault(e=>corner==e.Path);
             if(element is not null) _detail.Text+=$"\nInstalled {element.Kind}: {element.ForceOrTorque:0.0} {(element.Kind=="torsion-bar"?"N·m":"N")} · energy {element.EnergyJ:0.000} J";
+            if(element?.Kind=="bump-stop")
+            {
+                var definition=SuspensionSimulation.Design.AssemblyGraphResolver.OpenBundle(installed.Source).ElasticElements.Single(e=>e.Path==element.Path).Component;
+                var curve=(SuspensionSimulation.Design.BumpCurveBehavior)definition.Behavior!;var shortening=Math.Max(0,curve.ContactLengthM-element.LengthM);
+                _detail.Text+=$"\nAxial shortening {shortening*1000:0.###} mm · tangent {element.Tangent/1000:0.###} N/mm · remaining curve range {(curve.Samples[^1].CompressionM-shortening)*1000:0.###} mm. Curve range is a model-validity boundary, not a mechanical travel stop.\n{definition.Identity.Provenance.Kind} · {definition.BumpCurveEvidence?.Conditions??definition.Identity.Provenance.Note}";
+            }
             foreach(var reaction in installed.State.RigidReactions.Where(r=>r.ForceN>1e-5&&r.Id.StartsWith((corner??"__none__")+":",StringComparison.Ordinal)))
                 _detail.Text+=$"\n{reaction.Id}: rigid travel constraint · reaction {reaction.ForceN:0.0} N · gap {reaction.GapM:E2} m · infinite loading stiffness.";
             if(wheel is not null&&installed.State.Wheels.Select((w,i)=>(w,i)).FirstOrDefault(x=>x.w.Corner==wheel.Corner) is var match&&match.w is not null)

@@ -1,0 +1,49 @@
+{
+  "schema": "suspension-fea/synthetic-febio-ogden-coupon/v1",
+  "provenance": "synthetic",
+  "law": "FEBio Ogden unconstrained",
+  "conditions": "Synthetic isothermal quasi-static recoverable compression with lateral observations; not a material grade or measured dataset",
+  "maximumCompressionFraction": 0.5,
+  "truthForVerificationOnly": {
+    "cpPa": 180000.0,
+    "c1Pa": 580000.0,
+    "m1": -3.0
+  },
+  "samples": [
+    {
+      "compressionFraction": 0.02,
+      "nominalCompressionStressPa": 14578.81235923548,
+      "lateralStretch": 1.0038409115475035
+    },
+    {
+      "compressionFraction": 0.05,
+      "nominalCompressionStressPa": 39642.58761460018,
+      "lateralStretch": 1.0096654391847957
+    },
+    {
+      "compressionFraction": 0.1,
+      "nominalCompressionStressPa": 91975.39598031144,
+      "lateralStretch": 1.0194886888381274
+    },
+    {
+      "compressionFraction": 0.2,
+      "nominalCompressionStressPa": 256646.77502992994,
+      "lateralStretch": 1.0393273034477566
+    },
+    {
+      "compressionFraction": 0.3,
+      "nominalCompressionStressPa": 572483.985047157,
+      "lateralStretch": 1.0587213530203907
+    },
+    {
+      "compressionFraction": 0.4,
+      "nominalCompressionStressPa": 1233661.2738726016,
+      "lateralStretch": 1.076076320183319
+    },
+    {
+      "compressionFraction": 0.5,
+      "nominalCompressionStressPa": 2792468.7324645096,
+      "lateralStretch": 1.0885764974410974
+    }
+  ]
+}

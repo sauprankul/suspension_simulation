@@ -62,7 +62,7 @@ internal sealed partial class InspectionViewport
             if(MeasurementPicking && hit is not null)
             {PointPicked?.Invoke(new((float)hit.PointHit.X,(float)hit.PointHit.Y,(float)hit.PointHit.Z));e.Handled=true;return;}
             if(hit?.ModelHit is Element3D {Tag:string id})
-                Select(id.Replace(".marker","",StringComparison.Ordinal));
+            {if(id.StartsWith("cad.face.",StringComparison.Ordinal)&&int.TryParse(id[9..],out var tag)) SelectCadFace(tag);else Select(id.Replace(".marker","",StringComparison.Ordinal));}
         };
         Viewport.PreviewMouseWheel+=(_,e)=>{Viewport.AddZoomForce(-e.Delta*.001);e.Handled=true;};
         return grid;

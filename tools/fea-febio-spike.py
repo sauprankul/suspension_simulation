@@ -84,7 +84,7 @@ def outward_face(nodes, kind, vertices, face):
     return {3:"tri3",4:"quad4",6:"tri6"}[len(indices)], indices
 
 
-def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10):
+def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10, guarded_line_search=False, bulk_modulus=1e8):
     root = ET.Element("febio_spec", version="4.0")
     add(root, "Module", type="solid")
     control = add(root, "Control")
@@ -93,13 +93,18 @@ def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, co
     solver = add(control,"solver")
     for key,value in {"max_refs":35,"diverge_reform":1,"reform_each_time_step":1,"symmetric_stiffness":0,"dtol":1e-5,"etol":1e-5,"rtol":0,"lstol":.9}.items():
         add(solver,key,value)
+    if guarded_line_search:
+        # FEBio can backtrack an inverted trial configuration instead of cutting
+        # the entire load increment. Accepted-state tolerances stay unchanged.
+        for key,value in {"ls_check_jacobians":1,"lsmin":1e-5,"lsiter":20,"reform_augment":1}.items():
+            add(solver,key,value)
     qn=add(solver,"qn_method",type="Broyden");add(qn,"max_ups",max_updates)
     stepper = add(control,"time_stepper")
     for key,value in {"dtmin":1e-7,"dtmax":increment,"max_retries":15,"opt_iter":opt_iterations}.items():
         add(stepper,key,value)
     materials = add(root,"Material")
     foam = add(materials,"material",id="1",name="SyntheticNH",type="Mooney-Rivlin")
-    for key,value in {"c1":500000,"c2":0,"k":1e8,"pressure_model":2}.items():
+    for key,value in {"c1":500000,"c2":0,"k":bulk_modulus,"pressure_model":2}.items():
         add(foam,key,value)
     fixture = add(materials,"material",id="2",name="PrescribedFixture",type="isotropic elastic")
     add(fixture,"E",2e11); add(fixture,"v",.3)
@@ -293,11 +298,13 @@ def verify_results(folder, report, metadata, args, sets):
     if maximum_imbalance>max(1e-5,.01*scale):
         raise ValueError("Full-history resultant support balance gate failed")
     report.update(metadata,forceN=force,imbalanceN=maximum_imbalance,history=top,
-                  forceScaleN=scale,material="C1=500000 Pa; C2=0; K=1e8 Pa; pressure_model=2",synthetic=True)
-    if args.case!="step":
+                  forceScaleN=scale,material=metadata.get("material","C1=500000 Pa; C2=0; K=1e8 Pa; pressure_model=2"),synthetic=True)
+    if args.case not in ("step","rubber"):
         expected=ccx.neo_hooke_nominal(1-args.compression)*.02**2
         report.update(expectedForceN=expected,relativeAnalyticError=abs(force-expected)/expected)
         if report["relativeAnalyticError"]>.01: raise ValueError("Independent constitutive/reaction check failed")
+    if args.case!="coupon" and not (folder/"TOPCONTACT.txt").exists():
+        raise ValueError("Required platen-contact history is missing")
     for name in ("TOPCONTACT","FOLDCONTACT","SHAFTCONTACT"):
         path=folder/(name+".txt")
         if not path.exists(): continue
@@ -308,6 +315,12 @@ def verify_results(folder, report, metadata, args, sets):
         maxima=history(folder/(name+"-MAXGAP.txt"))
         if not maxima or abs(maxima[-1]["time"]-1)>1e-8:
             raise ValueError("Incomplete maximum reported contact gap history: "+name)
+        for contact_history in (records,maxima):
+            if len(contact_history)!=len(top) or any(abs(a["time"]-b["time"])>1e-9 for a,b in zip(contact_history,top)):
+                raise ValueError("Contact and reaction accepted times disagree: "+name)
+            expected_ids={row[0] for row in contact_history[0]["values"]}
+            if not expected_ids or any(len(frame["values"])!=len(expected_ids) or {row[0] for row in frame["values"]}!=expected_ids for frame in contact_history):
+                raise ValueError("Missing, changed or duplicated contact record identities: "+name)
         if any(len(row)!=3 or not all(math.isfinite(value) for value in row) for row in values) or any(len(row)!=2 or not all(math.isfinite(value) for value in row) for record in maxima for row in record["values"]):
             raise ValueError("Invalid or non-finite contact record: "+name)
         maximum_gap=max((abs(v[-1]) for record in maxima for v in record["values"]),default=0)
@@ -361,13 +374,14 @@ def recovery():
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
-    parser.add_argument("--case",choices=["coupon","contact","step","recovery"],default="coupon")
+    parser.add_argument("--case",choices=["coupon","contact","step","rubber","recovery"],default="coupon")
     parser.add_argument("--compression",type=float,default=.3)
     parser.add_argument("--mesh",choices=["0_0060","0_0045","0_0035"],default="0_0060")
     parser.add_argument("--increment",type=float,default=.025)
     parser.add_argument("--penalty",type=float,default=1e12)
     parser.add_argument("--max-updates",type=int,default=0)
     parser.add_argument("--opt-iterations",type=int,default=10)
+    parser.add_argument("--guarded-line-search",action="store_true",help="Backtrack inverted trial states and reform after contact augmentation; unchanged physical model and acceptance tolerances.")
     parser.add_argument("--timeout-hours",type=float,default=8,help="Wall-clock budget per solve; default eight hours. Numerical/contact acceptance is unchanged.")
     parser.add_argument("--fold-contact",action="store_true")
     parser.add_argument("--guide-shaft",action="store_true")
@@ -377,18 +391,21 @@ if __name__=="__main__":
     if args.case=="recovery":
         recovery()
         raise SystemExit(0)
+    if args.case=="rubber" and (args.fold_contact or args.guide_shaft or abs(args.compression-.3)>1e-12):
+        parser.error("The nearly incompressible reference case declares 30% compression without groove/shaft contact")
     metadata={}
-    if args.case=="step":
-        nodes,elements,mesh_sha=ccx.step_mesh(args.mesh)
+    if args.case in ("step","rubber"):
+        nodes,elements,mesh_sha=ccx.step_mesh(args.mesh,"annular" if args.case=="rubber" else "asymmetric")
         quality=ccx.quadratic_quality(nodes,elements)
         deck,metadata=ccx.step_deck(nodes,elements,fraction=args.compression,fold=args.fold_contact,guide=args.guide_shaft)
         nodes,groups,sets,surfaces=parse_ccx(deck)
         metadata.update(meshSha256=mesh_sha,initialMeshQuality=quality,ccxSourceDeckSha256=hashlib.sha256(deck.encode()).hexdigest(),
                         fixture="Identical mesh and prescribed fixture nodes to CCX; bonded base, frictionless platen; optional bore shaft and groove face contact",
-                        foldContactEnabled=args.fold_contact,guideShaftEnabled=args.guide_shaft)
+                        foldContactEnabled=args.fold_contact,guideShaftEnabled=args.guide_shaft,
+                        material="C1=500000 Pa; C2=0; K="+("1e9" if args.case=="rubber" else "1e8")+" Pa; pressure_model=2")
     else:
         nodes,groups,sets,surfaces=coupon(args.case=="contact")
-    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case=="step" else .02,coupon=args.case!="step",contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations)
+    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case in ("step","rubber") else .02,coupon=args.case not in ("step","rubber"),contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations,guarded_line_search=args.guarded_line_search,bulk_modulus=1e9 if args.case=="rubber" else 1e8)
     key=f"{args.case}-{args.mesh}-{args.compression:.2f}-"+hashlib.sha256(model.encode()).hexdigest()[:12]
     # Each attempt retains its own deck, source code, settings, history and outcome.
     # Raising the budget must never overwrite the previous rejected benchmark.

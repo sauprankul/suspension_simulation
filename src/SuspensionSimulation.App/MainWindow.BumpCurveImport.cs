@@ -45,6 +45,7 @@ public partial class MainWindow
         });panel.Children.Add(load);
         Field("CSV: compression,force (2–10000 samples)",_bumpCsv,"Use a decimal point, comma-separated columns, strictly increasing nonnegative compression and nondecreasing nonnegative force. Unit suffixes such as compression_mm,force_n must match the selections.");
         var create=new Button {Content="Create / update bumper from this curve",Margin=new Thickness(0,8,0,4)};create.Click+=(_,_)=>ComponentAction(CreateImportedBumpComponent);panel.Children.Add(create);
+        var prepare=new Button {Content="Prepare STEP bumper / fixtures…",Margin=new Thickness(0,4,0,8)};prepare.Click+=(_,_)=>ComponentAction(OpenBumpStudio);panel.Children.Add(prepare);
         panel.Children.Add(_bumpPlot);panel.Children.Add(_bumpCurveStatus);
         _bumpCurveTab=new TabItem {Header="Bump curve",Content=new ScrollViewer {Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}};tabs.Items.Add(_bumpCurveTab);
         foreach(var field in new[]{_bumpCsv,_bumpContact,_bumpConditions,_bumpSource}) field.TextChanged+=(_,_)=>ScheduleComponentDraft();

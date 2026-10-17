@@ -19,6 +19,7 @@ internal static class ElasticAuthoringChecks
         var bar=new TorsionBarBehavior("a","b",new(0,1,0),79e9,.02,.01,1.1);
         Near(ElasticLaws.Bar(bar,.2,.2).EnergyJ,0,0);Near(ElasticLaws.Bar(bar,0,.1).TorqueNm,bar.StiffnessNmPerRad*.1,1e-10);
         Near(ElasticLaws.Bar(bar with {RestTwistRad=.05},0,.1).TorqueNm,bar.StiffnessNmPerRad*.05,1e-10);
+        VerifyTorsionCalibrationAndHoles();
         var curve=new BumpCurveBehavior("a","b",.4,[new(0,0),new(.01,100),new(.03,500)],CurveZero.Contact,"Synthetic analytic curve",new string('a',64));
         var bump=ElasticLaws.Bump(curve,.38);Near(bump.ForceN,300,1e-8);Near(bump.EnergyJ,2.5,1e-8);Near(bump.TangentNPerM,20000,1e-8);Reject(()=>ElasticLaws.Bump(curve,.36));
         var datum=AssemblyAuthoring.IdentityPlacement.Frame;var line=new StraightAdjustmentPath(datum,datum with {OriginM=new(.02,0,0)},PathOrientation.HoldStart);
@@ -48,6 +49,29 @@ internal static class ElasticAuthoringChecks
             var roundTrip=DesignJson.Deserialize<ComponentDefinition>(DesignJson.Serialize(force));MechanicalValidation.Validate(roundTrip);
         }
         finally {Directory.Delete(folder,true);}
+    }
+    private static void VerifyTorsionCalibrationAndHoles()
+    {
+        foreach(var (od,id,length) in new[]{(.018,0d,.65),(.027,.021,1.3),(.043,.008,.92)})
+        {
+            var j=Math.PI*(Math.Pow(od,4)-Math.Pow(id,4))/32;const double knownRate=920;
+            var fittedG=knownRate*length/j;var section=new TorsionBarBehavior("a","b",new(0,1,0),fittedG,od,id,length);
+            Near(section.StiffnessNmPerRad,knownRate,1e-10);Near(ElasticLaws.Bar(section,0,.01).TorqueNm,9.2,1e-10);
+            var resized=section with {OutsideDiameterM=od*1.1,InsideDiameterM=id*.8};
+            Near(resized.StiffnessNmPerRad/knownRate,(Math.Pow(od*1.1,4)-Math.Pow(id*.8,4))/(Math.Pow(od,4)-Math.Pow(id,4)),1e-12);
+            if(resized.ShearModulusPa!=fittedG||resized.PrescribedRateNmPerRad is not null) throw new Exception("Changing the tube dimensions discarded the fitted effective shear modulus or pinned the old rate.");
+            var frame=AssemblyAuthoring.IdentityPlacement.Frame;
+            var holes=new DiscreteAdjustmentPath([new("short","100 mm rigid arm",frame with {OriginM=new(.1,0,0)}),new("long","200 mm rigid arm",frame with {OriginM=new(.2,0,0)})]);
+            double Tangent(string hole)
+            {
+                var radius=AdjustmentPaths.Evaluate(holes,new(ChoiceId:hole)).OriginM.Length;const double displacement=1e-7;
+                // Exact rigid-lever displacement q = a*sin(theta), with opposite arm rotations.
+                var angle=Math.Asin(displacement/radius);var energy=ElasticLaws.Bar(section,-angle,angle).EnergyJ;
+                return 2*energy/(displacement*displacement);
+            }
+            Near(Tangent("long")/Tangent("short"),.25,1e-10);
+            Near(Tangent("short"),4*knownRate/(.1*.1),1e-6);
+        }
     }
     private static void Near(double a,double b,double tolerance) {if(Math.Abs(a-b)>tolerance) throw new Exception($"Expected {b:R}, got {a:R}.");}
     private static void Reject(Action action) {try {action();}catch(ArgumentException) {return;}catch(InvalidOperationException) {return;}throw new Exception("Invalid mechanical request accepted.");}

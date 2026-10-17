@@ -69,6 +69,7 @@ public partial class App : Application
             if(e.Args.Contains("--installed-layout-proof")) window.RunInstalledLayoutProof();
             if(e.Args.Contains("--bump-curve-proof")) window.RunBumpCurveProof();
             if(e.Args.Contains("--bumper-integration-proof")) window.RunBumperIntegrationProof();
+            if(e.Args.Contains("--bump-studio-proof")) window.RunBumpStudioProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

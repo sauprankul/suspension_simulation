@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -17,6 +18,7 @@ import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+import uuid
 
 import psutil
 
@@ -164,6 +166,7 @@ def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, co
         if name in sets: add(log,"node_data",",".join(map(str,sets[name])),data="Rx;Ry;Rz",file=name+".txt")
     for name,primary,_ in pairs:
         add(log,"face_data",data="contact gap;contact pressure",surface=primary,file=name+".txt")
+        add(log,"surface_data",data="max contact gap",surface=primary,file=name+"-MAXGAP.txt")
     plot=add(output,"plotfile",type="febio",file="case.xplt")
     for name in ("displacement","stress","relative volume","contact pressure","contact gap"):
         add(plot,"var",type=name)
@@ -182,18 +185,36 @@ def invoke(folder, model, timeout=240, cancel_after=None):
     folder.mkdir(parents=True,exist_ok=True)
     verified=folder/"verification.json"
     if verified.exists(): verified.unlink()
-    (folder/"case.feb").write_text(model,encoding="utf-8")
+    (folder/"case.feb").write_bytes(model.encode("utf-8"))
     cancel=folder/"cancel.request"
     if cancel.exists(): cancel.unlink()
     env=dict(os.environ,OMP_NUM_THREADS="4",MKL_NUM_THREADS="4",OPENBLAS_NUM_THREADS="4")
-    state={"state":"running","solverSha256":EXE_SHA,"dependencyPinSha256":hashlib.sha256(pin_path.read_bytes()).hexdigest(),"modelSha256":hashlib.sha256(model.encode()).hexdigest(),"threads":4,"memoryLimitBytes":2*1024**3,"timeoutSeconds":timeout}
-    start=time.perf_counter();peak=0
+    state={"state":"running","solverSha256":EXE_SHA,"dependencyPinSha256":hashlib.sha256(pin_path.read_bytes()).hexdigest(),"modelSha256":hashlib.sha256(model.encode()).hexdigest(),"threads":4,"memoryLimitBytes":2*1024**3,"timeoutSeconds":timeout,
+           "folder":str(folder),"inputFileSha256":hashlib.sha256((folder/"case.feb").read_bytes()).hexdigest(),
+           "startedAtUtc":datetime.now(timezone.utc).isoformat(),"curveAccepted":False}
+    start=time.perf_counter();peak=0;next_heartbeat=0
+    def heartbeat():
+        state.update(seconds=time.perf_counter()-start,peakWorkingSetBytes=peak,updatedAtUtc=datetime.now(timezone.utc).isoformat())
+        for name in ("PLATEN.txt","TOP.txt"):
+            path=folder/name
+            if path.exists():
+                # Read only a bounded tail; long jobs can generate very large files.
+                with path.open("rb") as stream:
+                    stream.seek(max(0,path.stat().st_size-131072))
+                    tail=stream.read().decode(errors="replace")
+                records=re.findall(r"\*Time\s*=\s*([-+\d.Ee]+)",tail)
+                if records: state["lastConvergedNormalizedTime"]=float(records[-1])
+                break
+        ccx.journal(folder,state)
+        current=OUT/"current-job.tmp.json"
+        current.write_text(json.dumps(state,indent=2))
+        current.replace(OUT/"current-job.json")
     with (folder/"stdout.log").open("w") as stdout,(folder/"stderr.log").open("w") as stderr:
         previous=ctypes.windll.kernel32.SetErrorMode(0x0001|0x0002|0x8000)
         try:
             process=subprocess.Popen([str(EXE),"-i",str(folder/"case.feb"),"-noconfig","-nosplash"],cwd=folder,env=env,stdout=stdout,stderr=stderr,creationflags=subprocess.CREATE_NO_WINDOW)
         finally: ctypes.windll.kernel32.SetErrorMode(previous)
-        state["pid"]=process.pid;ccx.journal(folder,state);monitor=psutil.Process(process.pid)
+        state["pid"]=process.pid;heartbeat();monitor=psutil.Process(process.pid)
         try:
             while process.poll() is None:
                 try: peak=max(peak,monitor.memory_info().rss)
@@ -201,6 +222,8 @@ def invoke(folder, model, timeout=240, cancel_after=None):
                 if time.perf_counter()-start>timeout or peak>2*1024**3: raise TimeoutError("FEBio time/memory budget exceeded")
                 if cancel.exists() or (cancel_after is not None and time.perf_counter()-start>cancel_after):
                     raise ccx.JobCancelled("FEBio canceled; no curve accepted")
+                if time.perf_counter()>=next_heartbeat:
+                    heartbeat();next_heartbeat=time.perf_counter()+5
                 time.sleep(.05)
             log=(folder/"stdout.log").read_text(errors="replace")
             if process.returncode or "N O R M A L   T E R M I N A T I O N" not in log or "Default linear solver: pardiso" not in log:
@@ -216,8 +239,7 @@ def invoke(folder, model, timeout=240, cancel_after=None):
                     process.kill()
                 except psutil.NoSuchProcess: pass
                 process.wait()
-            state.update(seconds=time.perf_counter()-start,peakWorkingSetBytes=peak)
-            ccx.journal(folder,state)
+            heartbeat()
     return state
 
 
@@ -242,6 +264,71 @@ def coupon(contact=False):
         groups={"FOAM":groups["FOAM"]};nodes={n:p for n,p in nodes.items() if n<=8}
         sets={n:v for n,v in sets.items() if n!="PLATEN"};surfaces={}
     return nodes,groups,sets,surfaces
+
+
+def verify_results(folder, report, metadata, args, sets):
+    top_name="TOP" if args.case=="coupon" else "PLATEN"
+    top=history(folder/(top_name+".txt"))
+    support_names=[name for name in ("BOTTOM","SHAFTNODES") if name in sets]
+    supports={name:history(folder/(name+".txt")) for name in support_names}
+    histories={top_name:top,**supports}
+    for name,records in histories.items():
+        if not records or abs(records[-1]["time"]-1)>1e-8:
+            raise ValueError("Missing complete reaction history for "+name)
+        for record in records:
+            ids=[int(row[0]) for row in record["values"]]
+            if len(ids)!=len(set(ids)) or set(ids)!=set(sets[name]) or any(len(row)!=4 or not all(math.isfinite(v) for v in row) for row in record["values"]):
+                raise ValueError("Incomplete, duplicated or non-finite nodal reaction record: "+name)
+    force=sum(v[3] for v in top[-1]["values"])
+    scale=max(abs(sum(v[3] for v in record["values"])) for record in top)
+    if force<=0: raise ValueError("Final compression reaction is not positive")
+    maximum_imbalance=0
+    for i,record in enumerate(top):
+        total=[sum(row[axis+1] for row in record["values"]) for axis in range(3)]
+        for name,records in supports.items():
+            if len(records)!=len(top) or abs(records[i]["time"]-record["time"])>1e-9:
+                raise ValueError("Reaction histories disagree on accepted times: "+name)
+            for axis in range(3): total[axis]+=sum(row[axis+1] for row in records[i]["values"])
+        maximum_imbalance=max(maximum_imbalance,math.sqrt(sum(value*value for value in total)))
+    if maximum_imbalance>max(1e-5,.01*scale):
+        raise ValueError("Full-history resultant support balance gate failed")
+    report.update(metadata,forceN=force,imbalanceN=maximum_imbalance,history=top,
+                  forceScaleN=scale,material="C1=500000 Pa; C2=0; K=1e8 Pa; pressure_model=2",synthetic=True)
+    if args.case!="step":
+        expected=ccx.neo_hooke_nominal(1-args.compression)*.02**2
+        report.update(expectedForceN=expected,relativeAnalyticError=abs(force-expected)/expected)
+        if report["relativeAnalyticError"]>.01: raise ValueError("Independent constitutive/reaction check failed")
+    for name in ("TOPCONTACT","FOLDCONTACT","SHAFTCONTACT"):
+        path=folder/(name+".txt")
+        if not path.exists(): continue
+        records=history(path)
+        if not records or abs(records[-1]["time"]-1)>1e-8:
+            raise ValueError("Incomplete contact history: "+name)
+        values=[v for record in records for v in record["values"]]
+        maxima=history(folder/(name+"-MAXGAP.txt"))
+        if not maxima or abs(maxima[-1]["time"]-1)>1e-8:
+            raise ValueError("Incomplete maximum reported contact gap history: "+name)
+        if any(len(row)!=3 or not all(math.isfinite(value) for value in row) for row in values) or any(len(row)!=2 or not all(math.isfinite(value) for value in row) for record in maxima for row in record["values"]):
+            raise ValueError("Invalid or non-finite contact record: "+name)
+        maximum_gap=max((abs(v[-1]) for record in maxima for v in record["values"]),default=0)
+        report[name]={"maximumPressurePa":max((v[2] for v in values),default=0),
+                      "maximumActiveFacetAverageAbsoluteGapM":max((abs(v[1]) for v in values if v[2]>1000),default=0),
+                      "maximumReportedContactGapM":maximum_gap}
+        if maximum_gap>1e-5: raise ValueError("Maximum contact penetration gate failed: "+name)
+    for required,enabled in (("FOLDCONTACT",args.fold_contact),("SHAFTCONTACT",args.guide_shaft)):
+        if enabled and report.get(required,{}).get("maximumPressurePa",0)<=1000:
+            raise ValueError(required+" did not engage; this case cannot verify its contact behavior")
+    return report
+
+
+def validation_status(folder, state, **details):
+    status=json.loads((folder/"process.json").read_text())
+    status.update(state=state,updatedAtUtc=datetime.now(timezone.utc).isoformat(),**details)
+    ccx.journal(folder,status)
+    path=OUT/"current-job.json"
+    if path.exists() and json.loads(path.read_text()).get("folder")==str(folder):
+        temporary=OUT/"current-job.tmp.json"
+        temporary.write_text(json.dumps(status,indent=2));temporary.replace(path)
 
 
 def recovery():
@@ -281,11 +368,12 @@ if __name__=="__main__":
     parser.add_argument("--penalty",type=float,default=1e12)
     parser.add_argument("--max-updates",type=int,default=0)
     parser.add_argument("--opt-iterations",type=int,default=10)
+    parser.add_argument("--timeout-hours",type=float,default=8,help="Wall-clock budget per solve; default eight hours. Numerical/contact acceptance is unchanged.")
     parser.add_argument("--fold-contact",action="store_true")
     parser.add_argument("--guide-shaft",action="store_true")
     args=parser.parse_args()
-    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.opt_iterations<=0:
-        parser.error("Require 0<compression<1, 0<increment<=1, positive finite penalty, nonnegative updates and positive optimal iterations")
+    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.opt_iterations<=0 or not math.isfinite(args.timeout_hours) or not 0<args.timeout_hours<=8:
+        parser.error("Require 0<compression<1, 0<increment<=1, positive finite penalty, nonnegative updates, positive optimal iterations and 0<timeout-hours<=8")
     if args.case=="recovery":
         recovery()
         raise SystemExit(0)
@@ -302,30 +390,23 @@ if __name__=="__main__":
         nodes,groups,sets,surfaces=coupon(args.case=="contact")
     model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case=="step" else .02,coupon=args.case!="step",contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations)
     key=f"{args.case}-{args.mesh}-{args.compression:.2f}-"+hashlib.sha256(model.encode()).hexdigest()[:12]
-    folder=OUT/key
-    report=invoke(folder,model)
-    top=history(folder/("TOP.txt" if args.case=="coupon" else "PLATEN.txt"))
-    bottom=history(folder/"BOTTOM.txt")
-    if not top or not bottom or abs(top[-1]["time"]-1)>1e-8 or abs(bottom[-1]["time"]-1)>1e-8:
-        raise ValueError("Missing complete reaction history")
-    # FEBio's nodal reaction points opposite the CCX printed reaction convention.
-    force=sum(v[3] for v in top[-1]["values"])
-    imbalance=abs(force+sum(v[3] for v in bottom[-1]["values"]))
-    if force<=0 or imbalance/force>.01: raise ValueError("Reaction force or support balance gate failed")
-    report.update(metadata,forceN=force,imbalanceN=imbalance,history=top,material="C1=500000 Pa; C2=0; K=1e8 Pa; pressure_model=2",synthetic=True)
-    if args.case!="step":
-        expected=ccx.neo_hooke_nominal(1-args.compression)*.02**2
-        report.update(expectedForceN=expected,relativeAnalyticError=abs(force-expected)/expected)
-        if report["relativeAnalyticError"]>.01: raise ValueError("Independent constitutive/reaction check failed")
-    for name in ("TOPCONTACT","FOLDCONTACT","SHAFTCONTACT"):
-        path=folder/(name+".txt")
-        if path.exists():
-            records=history(path);values=[v for record in records for v in record["values"]]
-            report[name]={"maximumPressurePa":max((v[2] for v in values),default=0),"maximumActiveAbsoluteGapM":max((abs(v[1]) for v in values if v[2]>1000),default=0)}
-            if report[name]["maximumActiveAbsoluteGapM"]>1e-5: raise ValueError("Contact penetration gate failed")
-    for required,enabled in (("FOLDCONTACT",args.fold_contact),("SHAFTCONTACT",args.guide_shaft)):
-        if enabled and report.get(required,{}).get("maximumPressurePa",0)<=1000:
-            raise ValueError(required+" did not engage; this case cannot verify its contact behavior")
-    report["validationState"]="verified_for_declared_case_only"
-    (folder/"verification.json").write_text(json.dumps(report,indent=2))
+    # Each attempt retains its own deck, source code, settings, history and outcome.
+    # Raising the budget must never overwrite the previous rejected benchmark.
+    folder=OUT/key/("run-"+datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+uuid.uuid4().hex[:8])
+    folder.mkdir(parents=True)
+    (folder/"source-driver.py").write_bytes(Path(__file__).read_bytes())
+    (folder/"source-ccx-reference.py").write_bytes((ROOT/"tools/fea-contact-spike.py").read_bytes())
+    (folder/"source-pin.json").write_bytes((ROOT/"data/fea/febio-pin.json").read_bytes())
+    (folder/"request.json").write_text(json.dumps({"arguments":vars(args),"metadata":metadata,"driverSha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},indent=2))
+    print(json.dumps({"state":"starting","folder":str(folder),"timeoutHours":args.timeout_hours}),flush=True)
+    report=invoke(folder,model,timeout=args.timeout_hours*3600)
+    validation_status(folder,"validating")
+    try:
+        report=verify_results(folder,report,metadata,args,sets)
+        report.update(validationState="verified_for_declared_case_only",curveAccepted=True)
+        (folder/"verification.json").write_text(json.dumps(report,indent=2))
+        validation_status(folder,"verified",curveAccepted=True,verificationPath=str(folder/"verification.json"))
+    except Exception as error:
+        validation_status(folder,"validation_failed",curveAccepted=False,error=str(error))
+        raise
     print(json.dumps({k:report[k] for k in ("forceN","imbalanceN","seconds","peakWorkingSetBytes")}|{"folder":str(folder)}))

@@ -1,0 +1,20 @@
+{
+  "status":"External experimental tools; not redistributed with the app",
+  "gmsh": {
+    "version":"4.15.2",
+    "download":"https://gmsh.info/bin/Windows/gmsh-4.15.2-Windows64.zip",
+    "archiveSha256":"a8208b56aedee3434907a893e303422acacd9003140766e09f2abbc664ba7157",
+    "executableSha256":"317c43391e5b1fab3a1dd80dc5245dad6e2d087910f4b8ebc234bd6d4b8f41a1",
+    "license":"GPL-2.0-or-later with the distribution's external-library exception; see its LICENSE.txt"
+  },
+  "calculix": {
+    "version":"2.23",
+    "download":"https://www.dhondt.de/calculix_2.23_4win.zip",
+    "archiveSha256":"87fc4e1721df37370ec67d0a244bb14f9bf804b0a95df49e2ae7369d30ec72e8",
+    "executable":"ccx_static.exe",
+    "executableSha256":"e18360eb32a5cd48f91a212c57069212cd8e27d2f798a599a78106bd0b3ecc1f",
+    "backend":"SPOOLES selected explicitly in coupon decks",
+    "source":"https://www.dhondt.de/ccx_2.23.src.tar.bz2",
+    "license":"CalculiX GPL source distribution; binaries from the authors' Windows archive"
+  }
+}

@@ -15,7 +15,7 @@ using SuspensionSimulation.Solvers.Design;
 namespace SuspensionSimulation.App;
 
 internal sealed record AssemblyRecovery(string Id,string? BaseRevision,string Name,string Notes,string Grounds,string ExpectedDof,
-    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports);
+    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null);
 internal sealed record AssemblyCatalogChoice(string Name,AssetReference Reference,bool IsAssembly);
 
 public partial class MainWindow
@@ -27,6 +27,7 @@ public partial class MainWindow
     private bool _assemblyReady,_assemblyUpdating,_assemblyDirty;
     private string? _assemblyRecoveryAtOpen,_assemblyAcceptedRaw;
     private string? _assemblyPublishedRaw,_assemblyConflict;
+    private string? _assemblyProvenanceSource;
     private readonly Stack<string> _assemblyUndo=new(),_assemblyRedo=new();
     private readonly ListBox _assemblyLibraryList=new(){DisplayMemberPath="Identity.Name",SelectedValuePath="Identity.AssetId",MinHeight=90,MaxHeight=160};
     private readonly ComboBox _assemblyInsertChoice=new(){DisplayMemberPath="Name",Margin=new Thickness(0,5,0,4)};
@@ -70,6 +71,7 @@ public partial class MainWindow
         var align=new Button {Content="Align port frames",Margin=new Thickness(0,8,0,8)};align.Click+=(_,_)=>AssemblyAction(MateAssemblyPorts);mate.Children.Add(align);
         mate.Children.Add(new TextBlock {Text="Instance coordinates and mirror origins are mm. Axis and reference vectors are orthogonal unit vectors (+Z and +X). Empty revision follows latest; an exact hash pins a version. Nested joints appear in the checks/tree view.",TextWrapping=TextWrapping.Wrap});
         tabs.Items.Add(new TabItem {Header="Mate",Content=mate});
+        AddTwinsMotionTools(tabs,left);
         _workspaceViews[Workspace.AssemblyEditor]=layout;layout.Visibility=Visibility.Collapsed;_shell.Children.Add(layout);
         _assemblyAutosave.Tick+=(_,_)=>{_assemblyAutosave.Stop();try {_designLibrary.SaveDraft("assembly-workspace",CaptureAssemblyRaw());}catch(Exception error) {_assemblyStatus.Text="Draft recovery could not save: "+error.Message;}};
         foreach(var box in new[]{metadata.Name,metadata.Notes,_assemblyGrounds,_assemblyExpectedDof}) box.TextChanged+=(_,_)=>ScheduleAssemblyDraft();
@@ -88,7 +90,7 @@ public partial class MainWindow
     {
         foreach(var grid in _assemblyGrids) {grid.CommitEdit();grid.CommitEdit();}
         var metadata=_workspaceDrafts[Workspace.AssemblyEditor];
-        return new(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,null)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
+        return new(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
             {GroundedInstances=[.._assemblyGrounds.Text.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)]};
     }
     private int? AssemblyExpectedDof()=>string.IsNullOrWhiteSpace(_assemblyExpectedDof.Text)?null:int.TryParse(_assemblyExpectedDof.Text,out var n)&&n>=0?n:throw new ArgumentException("Expected freedoms must be a nonnegative integer or blank.");
@@ -101,6 +103,7 @@ public partial class MainWindow
     }
     private void ShowAssemblyGraph(ResolvedAssemblyGraph graph,MechanismMobilityReport report)
     {
+        _twinsMotion=null;_twinsMotionReadout.Text="";
         _assemblyViewport!.SetScene(AssemblyScene(graph));
         _assemblyDiagnostics.Text=$"Operating freedoms: {report.DegreesOfFreedom}\nJacobian rank: {report.Rank} / {report.FreeCoordinates}\nRedundant rows: {report.RedundantRows}\nJoint closure error: {report.MaximumScaledClosureError:0.###E+0} (length scale {report.CharacteristicLengthM*1000:0.###} mm)\n\n"+string.Join("\n",report.Diagnostics);
         _assemblyTree.Text="Resolved bodies\n"+string.Join("\n",graph.Bodies.Select(x=>$"{x.Path} · {x.Component.Identity.Name} · {x.Component.Identity.RevisionId[..12]}"))+"\n\nJoints\n"+string.Join("\n",graph.Joints.Select(x=>$"{x.Path} · {x.Kind}"));
@@ -111,7 +114,7 @@ public partial class MainWindow
     }
     private void NewAssembly()
     {
-        _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;
+        _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;
         _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();_assemblyGrounds.Text="";ApplyAssemblyPreview(false);
     }
     private void RefreshAssemblyCatalog()
@@ -140,6 +143,7 @@ public partial class MainWindow
         try
         {
             var metadata=_workspaceDrafts[Workspace.AssemblyEditor];metadata.Name.Text=a.Identity.Name;metadata.Notes.Text=a.Identity.Provenance.Note;
+            _assemblyProvenanceSource=a.Identity.Provenance.Source;
             _assemblyInstances.Clear();foreach(var x in a.Instances) _assemblyInstances.Add(AssemblyInstanceRow.From(x));_assemblyJoints.Clear();foreach(var x in a.Joints) _assemblyJoints.Add(AssemblyJointRow.From(x));
             _assemblyPorts.Clear();foreach(var x in a.Ports) _assemblyPorts.Add(AssemblyPortRow.From(x));_assemblyGrounds.Text=string.Join(",",a.GroundedInstances);
         }
@@ -183,7 +187,8 @@ public partial class MainWindow
         });
         _assemblyConflict=result.Conflict;
         if(result.IsStale) {_assemblyStatus.Text="Dependency conflict; previous graph retained. "+result.Conflict;return;}
-        _assemblyGraph=result.Graph!;ShowAssemblyGraph(_assemblyGraph,MechanismMobility.Inspect(_assemblyGraph,AssemblyExpectedDof()));SaveAssemblyGraph();
+        var unchanged=_assemblyGraph?.Manifest.Dependencies.SequenceEqual(result.Graph!.Manifest.Dependencies)==true;
+        _assemblyGraph=result.Graph!;if(!unchanged||_twinsMotion is null) ShowAssemblyGraph(_assemblyGraph,MechanismMobility.Inspect(_assemblyGraph,AssemblyExpectedDof()));SaveAssemblyGraph();
     }
     private void MateAssemblyPorts()
     {
@@ -207,7 +212,7 @@ public partial class MainWindow
         if(dialog.ShowDialog(this)==true) {File.WriteAllText(dialog.FileName,DesignJson.Serialize(bundle));_assemblyStatus.Text="Exported exact revisions and transitive dependency hashes.";}
     }
     private string CaptureAssemblyRaw()=>JsonSerializer.Serialize(new AssemblyRecovery(_assemblyId,_assemblyBaseRevision,_workspaceDrafts[Workspace.AssemblyEditor].Name.Text,_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text,
-        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray()));
+        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource));
     private void ImportAssembly()
     {
         var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Suspension assembly (*.json)|*.json",InitialDirectory=App.RepositoryRoot};
@@ -221,6 +226,7 @@ public partial class MainWindow
         try
         {
             if(identity) {_assemblyId=raw.Id;_assemblyBaseRevision=raw.BaseRevision;}_workspaceDrafts[Workspace.AssemblyEditor].Name.Text=raw.Name;_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text=raw.Notes;
+            _assemblyProvenanceSource=raw.Source;
             _assemblyGrounds.Text=raw.Grounds;_assemblyExpectedDof.Text=raw.ExpectedDof;_assemblyInstances.Clear();foreach(var x in raw.Instances) _assemblyInstances.Add(x);_assemblyJoints.Clear();foreach(var x in raw.Joints) _assemblyJoints.Add(x);_assemblyPorts.Clear();foreach(var x in raw.Ports) _assemblyPorts.Add(x);
         }
         finally {_assemblyUpdating=false;}
@@ -238,21 +244,30 @@ public partial class MainWindow
         _assemblyAutosave.Stop();if(_assemblyDirty&&_designLibrary is not null) {try {_designLibrary.SaveDraft("assembly-workspace",CaptureAssemblyRaw());}catch(Exception error) {App.LogException("Assembly draft on close",error);}}
         _assemblyViewport?.Dispose();
     }
-    private static InspectionScene AssemblyScene(ResolvedAssemblyGraph graph)
+    private static InspectionScene AssemblyScene(ResolvedAssemblyGraph graph,ConstraintMechanism? mechanism=null,MechanismPose? pose=null)
     {
         static Vector3 V(DesignVector p)=>new((float)p.X,(float)p.Y,(float)p.Z);
-        var points=new List<InspectionPoint>();var lines=new List<InspectionSegment>();
+        var points=new List<InspectionPoint>();var lines=new List<InspectionSegment>();var wheels=new List<InspectionWheel>();
+        DesignVector Point(ResolvedBody b,string id)=>mechanism is not null&&pose is not null?mechanism.Point(b.Path,id,pose.Coordinates):b.Transform.Point(b.Component.Points.Single(x=>x.Id==id).PositionM);
+        DesignFrame Frame(ResolvedBody b,AttachmentPort p)
+        {var world=b.Transform.Frame(b.Component.Frames.Single(x=>x.Id==p.FrameId).Frame);return mechanism is not null&&pose is not null?mechanism.Frame(new(b.Path,p.Id,p.Role,p.SupportedJoints,world),pose.Coordinates):world;}
         foreach(var body in graph.Bodies)
         {
-            foreach(var point in body.Component.Points) points.Add(new(body.Path+"."+point.Id,body.Path+" · "+point.Name,body.Path,V(body.Transform.Point(point.PositionM)),SceneSource.Authored));
-            foreach(var edge in body.Component.VisualEdges) lines.Add(new(body.Path+"."+edge.Id,body.Path+" · "+edge.Id,body.Path,"front",V(body.Transform.Point(body.Component.Points.Single(x=>x.Id==edge.StartPointId).PositionM)),V(body.Transform.Point(body.Component.Points.Single(x=>x.Id==edge.EndPointId).PositionM)),SceneSource.Authored));
+            foreach(var point in body.Component.Points) points.Add(new(body.Path+"."+point.Id,body.Path+" · "+point.Name,body.Path,V(Point(body,point.Id)),SceneSource.Authored));
+            foreach(var edge in body.Component.VisualEdges) lines.Add(new(body.Path+"."+edge.Id,body.Path+" · "+edge.Id,body.Path,"front",V(Point(body,edge.StartPointId)),V(Point(body,edge.EndPointId)),SceneSource.Authored));
             foreach(var port in body.Component.Ports)
             {
-                var f=body.Transform.Frame(body.Component.Frames.Single(x=>x.Id==port.FrameId).Frame);var x=f.ReferenceDirection;var y=f.Axis.Cross(x);
+                var f=Frame(body,port);var x=f.ReferenceDirection;var y=f.Axis.Cross(x);
                 foreach(var (name,axis,layer) in new[]{("X",x,"rear"),("Y",y,"bars"),("Z",f.Axis,"chassis")}) lines.Add(new(body.Path+".port."+port.Id+name,body.Path+" · "+port.Id+" "+name,body.Path,layer,V(f.OriginM),V(f.OriginM+axis*.025),SceneSource.Authored));
             }
+            if(mechanism is not null&&pose is not null&&body.Component.Kind==ComponentKind.Upright&&body.Component.Points.Any(p=>p.Id=="wheel"))
+            {
+                var x=V(mechanism.Direction(body.Path,new(1,0,0),pose.Coordinates));var z=V(mechanism.Direction(body.Path,new(0,0,1),pose.Coordinates));var y=Vector3.Cross(z,x);
+                var rotation=Quaternion.CreateFromRotationMatrix(new Matrix4x4(x.X,x.Y,x.Z,0,y.X,y.Y,y.Z,0,z.X,z.Y,z.Z,0,0,0,0,1));var center=V(Point(body,"wheel"));
+                wheels.Add(new(body.Path,center,rotation,.31,.22,center.Z-.31,SceneSource.VisualEstimate));
+            }
         }
-        foreach(var j in graph.Joints.Where(x=>x.Kind==JointKind.RigidDistance)) lines.Add(new("joint"+j.Path,j.Path,"Assembly","bars",V(j.First.Frame.OriginM),V(j.Second.Frame.OriginM),SceneSource.Authored));
-        return new(graph.Root.Identity.Name,"assembly-authoring","authored-assembly-draft",[..points],[..lines],[],["Synthetic mechanism; local mobility is separate from finite travel and equilibrium."]);
+        foreach(var j in graph.Joints.Where(x=>x.Kind==JointKind.RigidDistance)) lines.Add(new("joint"+j.Path,j.Path,"Assembly","bars",V(mechanism is not null&&pose is not null?mechanism.Frame(j.First,pose.Coordinates).OriginM:j.First.Frame.OriginM),V(mechanism is not null&&pose is not null?mechanism.Frame(j.Second,pose.Coordinates).OriginM:j.Second.Frame.OriginM),SceneSource.Authored));
+        return new(graph.Root.Identity.Name,"assembly-authoring","authored-assembly-draft",[..points],[..lines],[..wheels],["Synthetic mechanism; local mobility is separate from finite travel and equilibrium."]);
     }
 }

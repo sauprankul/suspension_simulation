@@ -53,7 +53,12 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
 {
     public RigidTemplateSpec? Template {get;init;}
     public ImmutableArray<VisualEdge> VisualEdges {get;init;}=[];
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public AxialRodGauge? AxialGauge {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public RackSpecification? Rack {get;init;}
 }
+public sealed record RackSpecification(double TravelAtLockM,double SteeringWheelLockDegrees);
+// A coordinate convention only, valid for a straight rod with spherical ends and no off-axis hardware.
+public sealed record AxialRodGauge(string StartPointId,string EndPointId);
 
 /// <summary>A null revision follows latest compatible published; frozen results always use exact revisions.</summary>
 public sealed record AssetReference(string AssetId, string? RevisionId = null);

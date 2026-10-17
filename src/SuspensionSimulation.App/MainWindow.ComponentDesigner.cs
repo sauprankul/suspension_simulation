@@ -15,7 +15,7 @@ using SuspensionSimulation.Kinematics;
 namespace SuspensionSimulation.App;
 
 internal sealed record DesignerRecovery(string AssetId,string? BaseRevision,ComponentKind Kind,bool Custom,string LengthMm,string WidthMm,string HeightMm,
-    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null);
+    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null,ComponentDefinition? Metadata=null);
 internal sealed record DesignerPick(string Name,DesignVector Point);
 internal sealed record DesignerFrameChoice(string Name,DesignFrame? Frame);
 
@@ -25,6 +25,7 @@ public partial class MainWindow
     private InspectionViewport? _componentViewport;
     private ComponentDefinition? _componentDefinition;
     private ComponentMass? _componentMass;
+    private ComponentDefinition? _componentMetadataSeed;
     private readonly ComboBox _componentHistory=new(){MinWidth=100};
     private readonly TextBlock _componentDiff=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8)};
     private string _componentId=Guid.NewGuid().ToString("N");
@@ -35,7 +36,7 @@ public partial class MainWindow
     private string? _componentAcceptedRaw;
     private readonly Stack<string> _componentUndo=new(),_componentRedo=new();
     private readonly ListBox _componentLibraryList=new(){DisplayMemberPath="Identity.Name",SelectedValuePath="Identity.AssetId",MinHeight=100,MaxHeight=180};
-    private readonly ComboBox _componentKind=new(){ItemsSource=ComponentAuthoring.RigidTemplates,SelectedIndex=0,Margin=new Thickness(0,5,0,10)};
+    private readonly ComboBox _componentKind=new(){ItemsSource=Enum.GetValues<ComponentKind>(),SelectedIndex=0,Margin=new Thickness(0,5,0,10)};
     private readonly TextBox _componentLength=new(){Text="300"},_componentWidth=new(){Text="200"},_componentHeight=new(){Text="100"};
     private readonly TextBlock _componentStatus=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)};
     private readonly ObservableCollection<DesignerPointRow> _componentPoints=new();
@@ -130,15 +131,16 @@ public partial class MainWindow
     {try {action();}catch(Exception error) {_componentStatus.Text=error.Message;App.LogException("Component Designer",error);}}
     private void ScheduleComponentDraft() {if(!_componentUpdating&&_componentReady) {_componentDirty=true;_componentAutosave.Stop();_componentAutosave.Start();}}
     private RevisionIdentity ComponentIdentity()=>new(_componentId,"draft",_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,
-        new(DataProvenance.Synthetic,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,null));
+        new(DataProvenance.Synthetic,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,_componentMetadataSeed?.Identity.Provenance.Source));
     private ComponentDefinition ReadComponent()
     {
         foreach(var grid in _componentGrids) {grid.CommitEdit();grid.CommitEdit();}
         var kind=(ComponentKind)_componentKind.SelectedItem;
-        if(!_componentCustom) return ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass};
-        return new(ComponentIdentity(),kind,[.._componentPoints.Select(x=>x.Read())],[.._componentFrames.Select(x=>x.Read())],[.._componentPorts.Select(x=>x.Read())],
+        if(!_componentCustom) return ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack};
+        var geometry=new ComponentDefinition(ComponentIdentity(),kind,[.._componentPoints.Select(x=>x.Read())],[.._componentFrames.Select(x=>x.Read())],[.._componentPorts.Select(x=>x.Read())],
             [.._componentEdges.Select(x=>(DesignDimension)new MeasuredDistance(x.Id,x.StartPointId,x.EndPointId))],_componentMass)
             {VisualEdges=[.._componentEdges.Select(x=>new VisualEdge(x.Id,x.StartPointId,x.EndPointId))]};
+        return _componentMetadataSeed is {} metadata?metadata with {Identity=geometry.Identity,Kind=geometry.Kind,Points=geometry.Points,Frames=geometry.Frames,Ports=geometry.Ports,Dimensions=geometry.Dimensions,Template=null,Mass=_componentMass,VisualEdges=geometry.VisualEdges}:geometry;
     }
     private void ApplyComponentPreview(bool undo)
     {
@@ -172,11 +174,12 @@ public partial class MainWindow
         if(clone && _componentDefinition is {} previous)
         {
             _componentMass=previous.Mass;
+            _componentMetadataSeed=previous;
             _componentKind.SelectedItem=previous.Kind;_componentCustom=previous.Template is null;_workspaceDrafts[Workspace.ComponentDesigner].Name.Text=previous.Identity.Name+" copy";
             if(previous.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
             FillComponentTables(previous);
         }
-        else {_componentMass=null;_componentCustom=false;_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="New "+_componentKind.SelectedItem;foreach(var grid in _componentGrids) grid.IsReadOnly=true;}
+        else {_componentMetadataSeed=null;_componentMass=null;_componentCustom=false;_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="New "+_componentKind.SelectedItem;foreach(var grid in _componentGrids) grid.IsReadOnly=true;}
         _componentHistory.ItemsSource=null;
         ApplyComponentPreview(false);
     }
@@ -186,7 +189,7 @@ public partial class MainWindow
     private void OpenSelectedComponent()
     {
         var component=_componentLibraryList.SelectedItem as ComponentDefinition??throw new ArgumentException("Select a published component.");
-        _componentMass=component.Mass;_componentHistory.ItemsSource=_designLibrary!.ComponentRevisions(component.Identity.AssetId);_componentHistory.SelectedIndex=0;
+        _componentMetadataSeed=component;_componentMass=component.Mass;_componentHistory.ItemsSource=_designLibrary!.ComponentRevisions(component.Identity.AssetId);_componentHistory.SelectedIndex=0;
         _componentId=component.Identity.AssetId;_componentBaseRevision=component.Identity.RevisionId;_componentCustom=component.Template is null;
         var metadata=_workspaceDrafts[Workspace.ComponentDesigner];metadata.Name.Text=component.Identity.Name;metadata.Notes.Text=component.Identity.Provenance.Note;_componentKind.SelectedItem=component.Kind;
         if(component.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
@@ -201,7 +204,7 @@ public partial class MainWindow
     }
     private string CaptureComponentRaw()=>JsonSerializer.Serialize(new DesignerRecovery(_componentId,_componentBaseRevision,(ComponentKind)_componentKind.SelectedItem,_componentCustom,
         _componentLength.Text,_componentWidth.Text,_componentHeight.Text,_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,
-        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass));
+        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass,_componentMetadataSeed));
     private void RestoreComponentRaw(string json,bool identity)
     {
         var raw=JsonSerializer.Deserialize<DesignerRecovery>(json)??throw new ArgumentException("Invalid recovery draft.");_componentUpdating=true;
@@ -209,6 +212,7 @@ public partial class MainWindow
         {
             if(identity) {_componentId=raw.AssetId;_componentBaseRevision=raw.BaseRevision;}
             _componentMass=raw.Mass;
+            _componentMetadataSeed=raw.Metadata;
             _componentKind.SelectedItem=raw.Kind;_componentCustom=raw.Custom;_componentLength.Text=raw.LengthMm;_componentWidth.Text=raw.WidthMm;_componentHeight.Text=raw.HeightMm;
             _workspaceDrafts[Workspace.ComponentDesigner].Name.Text=raw.Name;_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text=raw.Notes;
             _componentPoints.Clear();foreach(var row in raw.Points) _componentPoints.Add(row);_componentFrames.Clear();foreach(var row in raw.Frames) _componentFrames.Add(row);

@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–3 complete. Stages 4–11 remain to be implemented; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
+Prepared: 2026-10-16. Status: Stages 0–4 implemented with the documented synthetic topology scope. Stages 5–11 remain; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -565,3 +565,14 @@ Priority change: the user requested Garage before component authoring. The first
 - Portable bundles include every exact source revision and its content hash. Frozen reopening does not follow later heads; import creates independent identities, pins child revisions and archives the source bundle.
 - 88/88 regression checks pass. `--assembly-proof` passes grouping, mating, mirroring, undo, recovery, compatible refresh, conflict retention after reopening, frozen export and hidden rendering. The shell and Garage-analysis proofs also pass; captures under `artifacts/assembly-editor` were inspected. Empty assembly camera fitting was fixed. Build succeeds with the previously disclosed NU1900 network warning.
 - Next: Stage 4 explicit front/rear topology and continuation. The analytic double-wishbone example is not a replacement for the GR86 rear's trailing/toe-link mechanism.
+
+### Stage 4 checkpoint — 2026-10-17
+
+- Added a separate double-precision rigid graph continuation solver using the same constraint equations as mobility checks and pivoted Householder QR. A zero residual is not accepted when the driven Jacobian is singular. It does not alter the accepted legacy solver.
+- The new synthetic twins assembly contains front hinged arms, uprights, spherical top bearings, telescopic strut guides, one translating rack and two physical spherical-end tie rods. The rear contains upper arms, single-pivot lower links, toe rods and traction rods. Removing either rear rod exposes an additional operating freedom. Off-axis lower-arm shock/ARB mounts follow the actual constrained lower body.
+- Rear lower inboard joints explicitly use a universal bushing idealization with declared axes. This supplies angular accommodation without leaving the off-axis shock mount's orientation arbitrary. It is a **synthetic mechanism assumption, not a verified OEM bushing model**. The new shock-eye coordinates are distinct from the lower upright joint; no legacy `StrutLower` alias is used.
+- Straight spherical-end rods may declare an axial-spin coordinate gauge only when all points, port centers and mass are collinear. This removes an unobservable coordinate without inventing torsional restraint or assigning off-axis mount orientation.
+- Synthetic steering-arm reach is 120 mm rearward of the hub, with 55 mm rack travel per ±450 degrees. The old 50 mm arm cannot geometrically accommodate that stroke. Both values are explicit design inputs and do not claim stock measurements. Original reference Garage geometry/results remain unchanged.
+- 89/89 checks pass, including ±50 mm forward/reverse travel, full static steering, mixed jounce/steering, mirrored alignment and rejection of missing operating drivers. The graph has five operating freedoms (four corners and the rack), no redundant rows, and six declared rod-spin gauges.
+- Assembly Editor's Motion tab previews the solved graph and derived individual camber/heading, axle heading difference and thrust. `--topology-proof` passes rejected-input retention, session/motion recovery and component metadata round trips. Captures under `artifacts/explicit-topology` were inspected. It imposes jounce for inspection; it does not claim static equilibrium. Tire dimensions are visual estimates.
+- Next: Stage 5 installed-length elastic parts, rigid bind/stroke constraints and physical setup adjustment paths. Stages 5–6 must pass before the new model replaces the provisional Garage analysis adapter.

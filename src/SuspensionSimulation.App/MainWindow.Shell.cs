@@ -92,7 +92,7 @@ public partial class MainWindow
         workspace=_workspace.ToString(),
         analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         component=_componentReady?new {assetId=_componentId,baseRevision=_componentBaseRevision,rawDraft=CaptureComponentRaw(),camera=_componentViewport?.CaptureCamera()}:null,
-        assembly=_assemblyReady?new {assetId=_assemblyId,baseRevision=_assemblyBaseRevision,rawDraft=CaptureAssemblyRaw(),camera=_assemblyViewport?.CaptureCamera(),manifest=_assemblyGraph?.Manifest,conflict=_assemblyConflict}:null,
+        assembly=_assemblyReady?new {assetId=_assemblyId,baseRevision=_assemblyBaseRevision,rawDraft=CaptureAssemblyRaw(),camera=_assemblyViewport?.CaptureCamera(),manifest=_assemblyGraph?.Manifest,conflict=_assemblyConflict,motion=_twinsMotion,motionInputs=_twinsTravel.Select(x=>x.Text).Append(_twinsSteering.Text).ToArray()}:null,
         drafts=_workspaceDrafts.ToDictionary(x=>x.Key.ToString(),x=>new {name=x.Value.Name.Text,notes=x.Value.Notes.Text})
     };
     private void RestoreShellState(JsonElement ui)
@@ -121,6 +121,10 @@ public partial class MainWindow
         {
             if(_assemblyViewport is null) BuildAssemblyEditor();
             AssemblyAction(()=>RestoreAssemblyRaw(assemblyRaw.GetString()!,true));
+            if(assembly.TryGetProperty("motionInputs",out var motionInputs)&&motionInputs.ValueKind==JsonValueKind.Array)
+            {var values=motionInputs.EnumerateArray().Select(x=>x.GetString()??"0").ToArray();if(values.Length==5) {for(var i=0;i<4;i++) _twinsTravel[i].Text=values[i];_twinsSteering.Text=values[4];}}
+            if(assembly.TryGetProperty("motion",out var motion)&&motion.ValueKind==JsonValueKind.Object)
+                AssemblyAction(()=>{var saved=JsonSerializer.Deserialize<SuspensionSimulation.Solvers.Design.TwinsMotionState>(motion.GetRawText(),new JsonSerializerOptions {PropertyNameCaseInsensitive=true})!;ShowTwinsMotion(saved.Travel,saved.SteeringWheelDegrees);});
             if(assembly.TryGetProperty("camera",out var camera) && camera.ValueKind==JsonValueKind.Object) _assemblyViewport?.RestoreCamera(camera);
             _assemblyViewport?.SetActive(_workspace==Workspace.AssemblyEditor&&WindowState!=WindowState.Minimized);
         }

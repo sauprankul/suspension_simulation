@@ -24,6 +24,7 @@ var failures = new List<string>();
 var totalChecks = 0;
 Run("component templates drive rigid geometry and immutable revisions preserve history conflicts measurements and drafts",SuspensionSimulation.Tests.ComponentAuthoringChecks.Verify);
 Run("nested assemblies preserve mirrored mobility, atomic latest resolution, grouping and graph conflicts",SuspensionSimulation.Tests.AssemblyGraphChecks.Verify);
+Run("explicit twins topology closes through travel and rack steering with active rear traction links and separate shock mounts",SuspensionSimulation.Tests.TwinsTopologyChecks.Verify);
 Run("stock Garage seeding equipment selection frozen revisions and reference solving are consistent",SuspensionSimulation.Tests.GarageAnalysisChecks.Verify);
 Run("Garage named entries round-trip independently with revisions archive recovery and conflict protection",SuspensionSimulation.Tests.GarageChecks.Persistence);
 Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);

@@ -169,6 +169,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             var lines=scene.Segments.Select(x=>x.Id).Concat(scene.Points.Select(x=>x.Id+".marker")).ToHashSet();
             var labels=scene.Segments.Select(x=>x.Id).ToHashSet();
+            foreach(var wheel in scene.Wheels) {lines.Add(wheel.Corner+".tire");lines.Add(wheel.Corner+".wheel-axis");labels.Add(wheel.Corner+".tire");}
             foreach(var id in _models.Keys.Where(x=>!x.StartsWith("ground.") && !lines.Contains(x) && !(x.StartsWith("label-leader.")&&labels.Contains(x[13..]))).ToArray())
             {Viewport.Items.Remove(_models[id].Model);_models.Remove(id);}
             foreach(var id in _labels.Keys.Where(x=>!labels.Contains(x)).ToArray()) {Viewport.Items.Remove(_labels[id].Model);_labels.Remove(id);}

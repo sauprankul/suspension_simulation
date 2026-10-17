@@ -29,6 +29,18 @@ public static class DesignValidation
                 default: throw new ArgumentException("Unsupported dimension kind.");
             }
         if(component.Mass is {} mass) {Positive(mass.MassKg,"Component mass");Require(mass.CenterOfMassM.IsFinite,"Invalid mass datum.");}
+        if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
+        if(component.AxialGauge is {} gauge)
+        {
+            Require(component.Kind==ComponentKind.RigidLink&&component.Ports.Length==2,"Axial spin gauges require a two-port rigid rod.");
+            var a=component.Points.Single(x=>x.Id==gauge.StartPointId).PositionM;var b=component.Points.Single(x=>x.Id==gauge.EndPointId).PositionM;var direction=b-a;
+            Require(direction.Length>1e-9,"Axial gauge endpoints must differ.");
+            foreach(var point in component.Points.Select(x=>x.PositionM).Concat(component.Frames.Select(x=>x.Frame.OriginM)).Concat(component.Mass is {} m?new[]{m.CenterOfMassM}:[]))
+                Require((point-a).Cross(direction).Length/direction.Length<1e-9,"An axial rod gauge cannot hide off-axis geometry or mass.");
+            foreach(var port in component.Ports) Require(port.SupportedJoints.All(x=>x==JointKind.Spherical),"Axial gauge ports support spherical joints only.");
+            var centers=component.Ports.Select(p=>component.Frames.Single(x=>x.Id==p.FrameId).Frame.OriginM).ToArray();
+            Require(centers.Any(x=>(x-a).Length<1e-9)&&centers.Any(x=>(x-b).Length<1e-9),"Axial gauge ports must occupy the rod endpoints.");
+        }
     }
 
     public static void Validate(AssemblyDefinition assembly)

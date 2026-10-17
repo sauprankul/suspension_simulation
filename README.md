@@ -1,6 +1,6 @@
 # Suspension Simulation
 
-The first vertical slice is a native .NET 10/WPF quasi-static Load Lab for one independently configured, four-strut setup. Every calculation uses SI units internally.
+Native .NET 10/WPF suspension authoring and quasi-static analysis. Every calculation uses SI units internally. Current GR86/BRZ examples use reference equipment rates with synthetic hard points and estimated installation dimensions; they are not measured OEM geometry.
 
 Run the command-line solver from the repository root:
 
@@ -12,30 +12,32 @@ dotnet run --project src/SuspensionSimulation.Cli -- --data data/synthetic/cayma
 Run the native dashboard:
 
 ```powershell
-dotnet run --project src/SuspensionSimulation.App
+dotnet run --project src/SuspensionSimulation.App -c Release
 ```
 
-Choose **Open 3D inspection** for the GPU suspension view. The A/B selector reuses the dashboard's setup fields and shared G controller. Drag the model to pan, the lower-right cube to orbit, and its ring to roll around the viewing axis; the wheel zooms. Orthographic presets and Fit/reset are available. Component labels have white backgrounds and leader lines. Select a component or a corner's travel indicator, then **Details** for its diagnostics. **Export snapshot** saves accepted inputs, geometry, camera and image under `artifacts/inspection-snapshots`.
+The main menu opens **Component Designer**, **Assembly Editor**, **Garage**, **Head-to-Head Motion Visualizer** and **3D Visualizer**. Author parts and their dimensions, ports, mechanics and adjustment paths in Component Designer; connect/nest/mirror them in Assembly Editor. Assemblies declare compatible equipment slots and the hardware adjustments available to Garage. Drafts, immutable revisions, measurements, undo/recovery and dependency conflicts are supported.
 
-The steering-wheel control above the G controller moves both rack inner joints together and solves the front upright poses with fixed-length tie rods. **Rack geometry + static alignment** edits rack position/spacing, outer pickup offsets from each wheel center, travel per lock, steering-wheel lock angle, and front/rear static camber and total toe. Shared settings persist in `data/synthetic/gr86/steering.json`. The fixed dashboard shows corner camber, heading and bump toe, axle total toe/thrust, rack displacement and effective steering ratio. See [steering conventions and model limits](docs/steering-inspection.md).
+Garage includes independent saved Stock GR86/Stock BRZ entries. Duplicate one to build a custom setup; select its compatible springs, dampers, bars, mounts and adjustable links, then set its hardware-owned adjusters and mass/payload. Stock fixed parts have no imaginary adjusters. Synthetic camber-plate, perch, tie-rod, rear-toe and lower-arm examples demonstrate adjustment geometry; calculated camber, toe and ride height are readouts. Save before opening either visualizer.
 
-The viewer uses synthetic geometry and provisional equilibrium. See [inspection validation and remaining acceptance](docs/visualizer-validation.md) and [scene/frame contract](docs/visualizer-scene-contract.md).
+Both visualizers consume the same saved physical Garage revisions and installed-equilibrium results. The steering control moves a shared rack and solves actual tie rods; the G controller applies the same acceleration to A/B. The solver derives chassis pose, normal loads, alignment and road clearances with unilateral tire contact, installed spring forces and torsion-only bars. Inputs are frozen per CPU job; superseded work cancels, and a conflict retains the previous complete result. Busy/stale status identifies the displayed state. Dense numerical solves currently take seconds; camera motion is independent.
+
+In 3D, drag the model to pan, the lower-right cube to orbit, and its ring to roll; the wheel zooms. Orthographic presets and Fit/reset are available. Component labels have white backgrounds and leaders. Fixed-size readouts show camber, heading, bump toe, axle toe/thrust, rack travel and steering ratio. Select a part or travel indicator, then **Details**. **Export snapshot** saves the exact source definitions, equipment, settings, result, camera and image under `artifacts/inspection-snapshots`. Frozen results replay without subsequent library revisions.
 
 Travel limits are rigid constraints: stopped corners arrest further travel and carry a separately solved reaction force. Spring-axis elements have two white mount dots and a gold/red remaining-stroke dot, which meets the upper mount at bottom-out. See [rigid-stop behavior and stroke-marker conventions](docs/rigid-travel-stops.md).
 
-The **Suspension Simulation** desktop shortcut starts this project's Debug executable directly, without a console. Launching it again brings the existing window forward and restores it if minimized; it preserves the current inputs and view. The app enforces a single UI instance per Windows desktop session across Debug/Release and terminal/shortcut launches. Standard project builds update the executable used by the shortcut. Reinstall the shortcut after moving the repository with `powershell -File scripts/Install-DesktopShortcut.ps1`.
+The **Suspension Simulation** desktop shortcut starts the optimized Release executable without a console. Launching it again brings the existing window forward and restores it if minimized, preserving inputs and view. One UI instance is enforced across Debug/Release and terminal/shortcut launches. Build with `-c Release` to update its executable; install/reinstall with `powershell -File scripts/Install-DesktopShortcut.ps1`. Development builds are substantially slower for dense numerical work.
 
-Normal startup opens a five-destination main menu. Choose **Head-to-Head Motion Visualizer** or **3D Visualizer** for the existing analysis tools, and use **Menu** to return. Component Designer, Assembly Editor and Garage currently retain draft names/notes; their authoring and setup tools are not yet available. Navigation preserves the viewer inputs, camera and selection. See [shell behavior and validation](docs/component-editor-shell.md).
+Navigation preserves drafts, inputs, camera and selection. See the [component editor plan and execution checkpoints](component-editor-plan.md) for verified scope. Bump Stop Studio and the STEP-to-curve pipeline are still in their FEA validation stage; verified coupons do not establish a calibrated bumper material or part.
 
 Live state and log locations remain available under `logs/current-session.json` and `logs/current-state.json`. Run `powershell -File scripts/Get-LiveState.ps1 -Summary` for a compact verified session summary. See [diagnostics](logs/README.md). `scripts/Test-DesktopLaunch.ps1` verifies concurrent launch requests, state preservation, heartbeat, and normal close/reopen; it refuses to interrupt a pre-existing app session.
 
-The canonical setup consists of separately owned `chassis.json`, `springs.json`, `anti-roll-bars.json`, `dampers.json`, `bump-stops.json`, and `suspension-assembly.json` files in [data/synthetic/cayman](data/synthetic/cayman). The assembly resolves component IDs; the solver cannot quietly substitute a missing part.
+User definitions and saved Garage revisions live under ignored `library/design` and `library/garage`. The earlier file-based Cayman's [synthetic package](data/synthetic/cayman) and workbook reference adapters remain separate CLI/regression fixtures.
 
-The dashboard reports four normal loads, axle spring/bar load-transfer decomposition, RSD, LLTD, and **RCB**. In this project RCB has exactly one meaning:
+The physical dashboard reports normal loads, installed elastic roll tangents, RSD and **RCB**. RCB means:
 
 `RCB (percentage points) = 100 × (front RSD − static front weight fraction)`
 
-This is not a tire balance, traction, or lap-time result. Current scope is flat-road, small-angle, rigid-body quasi-static equilibrium. Tire behavior, kinematics/jacking, compliance, damper/transient behavior, calibrated static bump-stop position, and full bump-stop progression are explicitly outside the result.
+Roll tangents continue the rigid geometry at fixed grounded-wheel heights and retain installed preload curvature. Active rigid loading constraints are reported separately; balance is undefined with both axles rigid or contact released. Tire compliance/grip, flexible links/bushings, transient damping and measured bumper correlation remain outside the current result. Examples retain their synthetic/estimated provenance.
 
 Validate with:
 

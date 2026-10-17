@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
-$executable = Join-Path $repository 'src\SuspensionSimulation.App\bin\Debug\net10.0-windows\SuspensionSimulation.App.exe'
+$executable = Join-Path $repository 'src\SuspensionSimulation.App\bin\Release\net10.0-windows\SuspensionSimulation.App.exe'
 $proofDirectory = Join-Path $repository 'artifacts\shortcut-proof'
 $shortcutPath = Join-Path $proofDirectory 'Suspension Simulation.lnk'
 $sessionPath = Join-Path $repository 'logs\current-session.json'
@@ -12,7 +12,7 @@ New-Item -ItemType Directory -Path $proofDirectory -Force | Out-Null
 $startedAt = [datetime]::UtcNow
 $owned = [Collections.Generic.List[int]]::new()
 function Wait-LiveSession([string]$PreviousRun = '') {
-    $deadline = [datetime]::UtcNow.AddSeconds(20)
+    $deadline = [datetime]::UtcNow.AddSeconds(90)
     while ([datetime]::UtcNow -lt $deadline) {
         if (Test-Path -LiteralPath $sessionPath) {
             $session = Get-Content -LiteralPath $sessionPath -Raw | ConvertFrom-Json
@@ -23,7 +23,7 @@ function Wait-LiveSession([string]$PreviousRun = '') {
         }
         Start-Sleep -Milliseconds 100
     }
-    throw 'App did not publish a usable live state within 20 seconds.'
+    throw 'App did not publish a usable live state within 90 seconds.'
 }
 try {
     Start-Process -FilePath $shortcutPath -WorkingDirectory $repository -WindowStyle Hidden
@@ -32,7 +32,7 @@ try {
     $owner = Get-Process -Id $first.Session.processId
     if ($owner.Path -ne $executable) { throw 'Unexpected executable owns the diagnostic session.' }
     $originalInputs = $first.State.state.ui.inputs.controls | ConvertTo-Json -Depth 10 -Compress
-    $originalSnapshot = $first.State.state.ui.acceptedSnapshot
+    $originalSnapshot = $first.State.state.ui.installedSnapshot
     $duplicates = @()
     for ($i=0; $i -lt 4; $i++) {
         $duplicates += Start-Process -FilePath $executable -WorkingDirectory $repository -WindowStyle Hidden -PassThru
@@ -52,7 +52,7 @@ try {
     $windows = @(Get-Process -Name 'SuspensionSimulation.App' | Where-Object MainWindowHandle -ne 0)
     if ($windows.Count -ne 1) { throw "Expected one application window; found $($windows.Count)." }
     if (($again.State.state.ui.inputs.controls | ConvertTo-Json -Depth 10 -Compress) -ne $originalInputs) { throw 'Re-launch changed the input fields.' }
-    if ($again.State.state.ui.acceptedSnapshot.B.FrontRsd -ne $originalSnapshot.B.FrontRsd) { throw 'Re-launch changed the accepted result.' }
+    if ($again.State.state.ui.installedSnapshot.RequestSha256 -ne $originalSnapshot.RequestSha256) { throw 'Re-launch changed the accepted result.' }
     if (-not (Test-Path -LiteralPath $again.Session.logPath)) { throw 'Run log unavailable.' }
     if (-not (Select-String -LiteralPath $again.Session.logPath -Pattern 'existing-instance-activated' -Quiet)) { throw 'Activation was not logged.' }
     $heartbeat = $again.Session.updatedAt
@@ -63,7 +63,7 @@ try {
     $closed = Get-Content -LiteralPath $sessionPath -Raw | ConvertFrom-Json
     if ($closed.status -ne 'closed') { throw 'Closed lifecycle status was not published.' }
     $closedState = Get-Content -LiteralPath $closed.statePath -Raw | ConvertFrom-Json
-    if ($closedState.state.ui.acceptedSnapshot.B.FrontRsd -ne $originalSnapshot.B.FrontRsd) { throw 'Closing discarded the last accepted state.' }
+    if ($closedState.state.ui.installedSnapshot.RequestSha256 -ne $originalSnapshot.RequestSha256) { throw 'Closing discarded the last accepted state.' }
     Start-Process -FilePath $shortcutPath -WorkingDirectory $repository -WindowStyle Hidden
     $reopened = Wait-LiveSession -PreviousRun $first.Session.runId
     $owned.Add([int]$reopened.Session.processId)

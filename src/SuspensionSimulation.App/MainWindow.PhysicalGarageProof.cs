@@ -15,7 +15,7 @@ public partial class MainWindow
         try
         {
             await Task.Delay(500);NavigateWorkspace(Workspace.Garage);RefreshGarage(ReferenceGarageCatalog.Gr86Id);
-            if(_garage!.List().Count!=2||_garage.List().Any(e=>e.Configuration is null)||_garagePhysicalEquipment.Count!=12) throw new InvalidOperationException("Stock physical Garage fields are incomplete.");
+            if(_garage!.List().Count!=2||_garage.List().Any(e=>e.Configuration is null)||_garagePhysicalEquipment.Count!=18) throw new InvalidOperationException("Stock physical Garage fields are incomplete.");
             var stock=_garageSelected!;GarageAction("Duplicate");var custom=_garageSelected!;
             _workspaceDrafts[Workspace.Garage].Name.Text="Independent adjustable GR86";
             _garagePhysicalEquipment["FL-damper:FL-damper"].SelectedValue="example-adjustable-front-damper";

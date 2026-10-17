@@ -15,6 +15,11 @@ public static class ElasticComponentFactory
     }
     public static ComponentDefinition Spring(RevisionIdentity identity,double rateKgfPerMm,double freeLengthM,double blockLengthM)=>
         Axial(identity,ComponentKind.Spring,freeLengthM,new CompressionSpringBehavior("first","second",rateKgfPerMm,freeLengthM,blockLengthM));
+    public static ComponentDefinition ImportedBumper(RevisionIdentity identity,ImportedBumpCurveEvidence evidence)
+    {
+        var c=Axial(identity,ComponentKind.BumpStop,evidence.ContactSeparationM,ImportedBumpCurve.Behavior(evidence)) with {BumpCurveEvidence=evidence};
+        ComponentAuthoring.ValidateForPublish(c);return c;
+    }
     public static ComponentDefinition Damper(RevisionIdentity identity,AxialDamperBehavior behavior,System.Collections.Immutable.ImmutableArray<GeometryAdjustment>? adjustments=null)=>Axial(identity,ComponentKind.Damper,behavior.MaximumEyeLengthM,behavior with {FirstPortId="first",SecondPortId="second"},adjustments);
     public static ComponentDefinition Bar(RevisionIdentity identity,TorsionBarBehavior behavior)
     {

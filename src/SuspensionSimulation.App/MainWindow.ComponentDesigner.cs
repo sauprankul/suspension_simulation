@@ -15,7 +15,7 @@ using SuspensionSimulation.Kinematics;
 namespace SuspensionSimulation.App;
 
 internal sealed record DesignerRecovery(string AssetId,string? BaseRevision,ComponentKind Kind,bool Custom,string LengthMm,string WidthMm,string HeightMm,
-    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null,ComponentDefinition? Metadata=null,ComponentPhysicsRecovery? Physics=null);
+    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null,ComponentDefinition? Metadata=null,ComponentPhysicsRecovery? Physics=null,BumpImportRecovery? BumpImport=null);
 internal sealed record DesignerPick(string Name,DesignVector Point);
 internal sealed record DesignerFrameChoice(string Name,DesignFrame? Frame);
 
@@ -73,7 +73,7 @@ public partial class MainWindow
         {left.Children.Add(new TextBlock {Text=label});left.Children.Add(field);}
         Button("Apply dimensions / preview",()=>ApplyComponentPreview(true));Button("Edit custom coordinates",MakeComponentCustom);
         Button("Undo",()=>UndoComponent(false));Button("Redo",()=>UndoComponent(true));Button("Publish revision",PublishComponent);Button("Recover last draft",RecoverComponent);
-        left.Children.Add(new TextBlock {Text="Provenance notes (synthetic)",Margin=new Thickness(0,10,0,0)});left.Children.Add(metadata.Notes);left.Children.Add(_componentStatus);
+        left.Children.Add(new TextBlock {Text="Provenance notes",Margin=new Thickness(0,10,0,0)});left.Children.Add(metadata.Notes);left.Children.Add(_componentStatus);
         var scroll=new ScrollViewer {Content=left,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};grid.Children.Add(scroll);
         _componentViewport=new InspectionViewport(false);Grid.SetColumn(_componentViewport,1);grid.Children.Add(_componentViewport);
         _componentViewport.Failed+=error=>{_componentStatus.Text="Preview unavailable: "+error.Message;_componentViewport.SetActive(false);};
@@ -84,6 +84,7 @@ public partial class MainWindow
         var tabs=new TabControl {Margin=new Thickness(8,0,0,0)};Grid.SetColumn(tabs,2);grid.Children.Add(tabs);
         AddGrid("Points (mm)",_componentPoints);AddGrid("Frames",_componentFrames);AddGrid("Ports",_componentPorts);AddGrid("Edges",_componentEdges);
         AddComponentMechanics(tabs);
+        AddBumpCurveImport(tabs);
         var measurements=new StackPanel {Margin=new Thickness(8)};
         measurements.Children.Add(new TextBlock {Text="Named points and port origins",FontWeight=FontWeights.Bold});measurements.Children.Add(_measureA);measurements.Children.Add(_measureB);
         measurements.Children.Add(new TextBlock {Text="Measurement frame",Margin=new Thickness(0,8,0,3)});measurements.Children.Add(_measureFrame);
@@ -108,6 +109,7 @@ public partial class MainWindow
             Change("Name",saved.Identity.Name,current.Identity.Name);Change("Provenance",saved.Identity.Provenance,current.Identity.Provenance);Change("Dimensions",saved.Dimensions,current.Dimensions);
             Change("Points",saved.Points,current.Points);Change("Frames",saved.Frames,current.Frames);Change("Ports",saved.Ports,current.Ports);Change("Edges",saved.VisualEdges,current.VisualEdges);
             Change("Mechanical behavior",saved.Behavior,current.Behavior);Change("Adjustments",saved.Adjustments,current.Adjustments);Change("Mass",saved.Mass,current.Mass);Change("Wheel dimensions",saved.Wheel,current.Wheel);Change("Rack ratio",saved.Rack,current.Rack);
+            Change("Raw curve source / conditions",saved.BumpCurveEvidence,current.BumpCurveEvidence);
             _componentDiff.Text=differences.Count==0?"Preview matches this revision.":string.Join("\n",differences);
         });history.Children.Add(compare);history.Children.Add(_componentDiff);tabs.Items.Add(new TabItem {Header="History",Content=history});
         _workspaceViews[Workspace.ComponentDesigner]=grid;grid.Visibility=Visibility.Collapsed;_shell.Children.Add(grid);
@@ -133,7 +135,7 @@ public partial class MainWindow
     {try {action();}catch(Exception error) {_componentStatus.Text=error.Message;App.LogException("Component Designer",error);}}
     private void ScheduleComponentDraft() {if(!_componentUpdating&&_componentReady) {_componentDirty=true;_componentAutosave.Stop();_componentAutosave.Start();}}
     private RevisionIdentity ComponentIdentity()=>new(_componentId,"draft",_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,
-        new(DataProvenance.Synthetic,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,_componentMetadataSeed?.Identity.Provenance.Source));
+        new(_componentMetadataSeed?.Identity.Provenance.Kind??DataProvenance.Synthetic,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,_componentMetadataSeed?.Identity.Provenance.Source));
     private ComponentDefinition ReadComponent()
     {
         foreach(var grid in _componentGrids) {grid.CommitEdit();grid.CommitEdit();}
@@ -155,6 +157,7 @@ public partial class MainWindow
         _componentDefinition=component;_componentAcceptedRaw=raw;
         if(!_componentCustom) FillComponentTables(component);
         _componentViewport!.SetScene(ComponentScene(component));
+        if(component.Behavior is BumpCurveBehavior bump) DrawBumpCurve(bump);
         var picks=component.Points.Select(x=>new DesignerPick(x.Name,x.PositionM)).Concat(component.Frames.Select(x=>new DesignerPick("Port/frame · "+x.Name,x.Frame.OriginM))).ToArray();
         _measureA.ItemsSource=picks;_measureB.ItemsSource=picks;_measureA.SelectedIndex=0;_measureB.SelectedIndex=Math.Min(1,picks.Length-1);
         _measureFrame.ItemsSource=new[]{new DesignerFrameChoice("Component/world",null)}.Concat(component.Frames.Select(x=>new DesignerFrameChoice(x.Name,x.Frame))).ToArray();_measureFrame.SelectedIndex=0;
@@ -178,6 +181,7 @@ public partial class MainWindow
     }
     private void NewComponent(bool clone)
     {
+        if(!clone&&_componentKind.SelectedItem is ComponentKind.BumpStop) throw new ArgumentException("Use the Bump curve tab to create a bumper from its source CSV. STEP/FEA authoring is still under validation.");
         _componentId=Guid.NewGuid().ToString("N");_componentBaseRevision=null;_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;
         if(clone && _componentDefinition is {} previous)
         {
@@ -189,7 +193,7 @@ public partial class MainWindow
         }
         else {_componentMetadataSeed=null;_componentMass=null;_useMass.IsChecked=false;_componentCustom=false;_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="New "+_componentKind.SelectedItem;foreach(var grid in _componentGrids) grid.IsReadOnly=true;}
         _componentHistory.ItemsSource=null;
-        ApplyComponentPreview(false);
+        FillImportedBumpEvidence(_componentMetadataSeed?.BumpCurveEvidence);ApplyComponentPreview(false);
     }
     private void MakeComponentCustom()
     {ApplyComponentPreview(true);_componentCustom=true;_componentDefinition=ComponentAuthoring.MakeCustom(_componentDefinition!);FillComponentTables(_componentDefinition);ApplyComponentPreview(true);}
@@ -201,7 +205,7 @@ public partial class MainWindow
         _componentId=component.Identity.AssetId;_componentBaseRevision=component.Identity.RevisionId;_componentCustom=component.Template is null;
         var metadata=_workspaceDrafts[Workspace.ComponentDesigner];metadata.Name.Text=component.Identity.Name;metadata.Notes.Text=component.Identity.Provenance.Note;_componentKind.SelectedItem=component.Kind;
         if(component.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
-        FillComponentTables(component);_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;ApplyComponentPreview(false);
+        FillImportedBumpEvidence(component.BumpCurveEvidence);FillComponentTables(component);_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;ApplyComponentPreview(false);
         _componentStatus.Text="Opened revision "+component.Identity.RevisionId[..12];
     }
     private void PublishComponent()
@@ -212,7 +216,7 @@ public partial class MainWindow
     }
     private string CaptureComponentRaw()=>JsonSerializer.Serialize(new DesignerRecovery(_componentId,_componentBaseRevision,(ComponentKind)_componentKind.SelectedItem,_componentCustom,
         _componentLength.Text,_componentWidth.Text,_componentHeight.Text,_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,
-        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass,_componentMetadataSeed,CaptureComponentPhysics()));
+        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass,_componentMetadataSeed,CaptureComponentPhysics(),CaptureBumpImport()));
     private void RestoreComponentRaw(string json,bool identity)
     {
         var raw=JsonSerializer.Deserialize<DesignerRecovery>(json)??throw new ArgumentException("Invalid recovery draft.");_componentUpdating=true;
@@ -222,6 +226,7 @@ public partial class MainWindow
             _componentMass=raw.Mass;
             _componentMetadataSeed=raw.Metadata;
             RestoreComponentPhysics(raw.Physics);
+            RestoreBumpImport(raw.BumpImport);
             _componentKind.SelectedItem=raw.Kind;_componentCustom=raw.Custom;_componentLength.Text=raw.LengthMm;_componentWidth.Text=raw.WidthMm;_componentHeight.Text=raw.HeightMm;
             _workspaceDrafts[Workspace.ComponentDesigner].Name.Text=raw.Name;_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text=raw.Notes;
             _componentPoints.Clear();foreach(var row in raw.Points) _componentPoints.Add(row);_componentFrames.Clear();foreach(var row in raw.Frames) _componentFrames.Add(row);

@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import ctypes
+import threading
 
 import psutil
 
@@ -25,18 +27,37 @@ GMSH = ROOT / "artifacts/fea-toolchain/gmsh-4.15.2/gmsh-4.15.2-Windows64/gmsh.ex
 GMSH_SHA = "317c43391e5b1fab3a1dd80dc5245dad6e2d087910f4b8ebc234bd6d4b8f41a1"
 
 
-def invoke(folder: Path, deck: str, timeout: float = 120) -> dict:
+class JobCancelled(RuntimeError):
+    pass
+
+
+def journal(folder: Path, data: dict) -> None:
+    temporary=folder/"process.tmp.json"
+    temporary.write_text(json.dumps(data,indent=2))
+    temporary.replace(folder/"process.json")
+
+
+def invoke(folder: Path, deck: str, timeout: float = 120, cancel_after: float|None = None) -> dict:
     if hashlib.sha256(CCX.read_bytes()).hexdigest() != CCX_SHA:
         raise ValueError("CalculiX binary differs from the reviewed pin")
     folder.mkdir(parents=True, exist_ok=True)
+    cancel=folder/"cancel.request"
+    if cancel.exists():
+        cancel.unlink()
     (folder / "case.inp").write_text(deck, encoding="ascii")
     env = dict(os.environ, OMP_NUM_THREADS="4", CCX_NPROC_RESULTS="4", CCX_NPROC_EQUATION_SOLVER="4")
     start = time.perf_counter()
     peak = 0
     with (folder / "stdout.log").open("w") as stdout, (folder / "stderr.log").open("w") as stderr:
-        process = subprocess.Popen([str(CCX), "-i", "case"], cwd=folder, env=env, stdout=stdout, stderr=stderr,
-                                   creationflags=subprocess.CREATE_NO_WINDOW)
+        previous_mode=ctypes.windll.kernel32.SetErrorMode(0x0001|0x0002|0x8000)
+        try:
+            process = subprocess.Popen([str(CCX), "-i", "case"], cwd=folder, env=env, stdout=stdout, stderr=stderr,
+                                       creationflags=subprocess.CREATE_NO_WINDOW)
+        finally:
+            ctypes.windll.kernel32.SetErrorMode(previous_mode)
         monitor = psutil.Process(process.pid)
+        status={"state":"running","pid":process.pid,"threads":4,"memoryLimitBytes":2*1024**3,"timeoutSeconds":timeout,"solverSha256":CCX_SHA}
+        journal(folder,status)
         try:
             while process.poll() is None:
                 try:
@@ -45,18 +66,54 @@ def invoke(folder: Path, deck: str, timeout: float = 120) -> dict:
                     pass
                 if time.perf_counter() - start > timeout or peak > 2 * 1024**3:
                     raise TimeoutError("Contact job exceeded its time/2-GB memory budget")
+                if cancel.exists() or (cancel_after is not None and time.perf_counter()-start>cancel_after):
+                    raise JobCancelled("CPU solve canceled; no accepted curve was published")
                 time.sleep(.05)
+        except Exception as error:
+            status.update(state="canceled" if isinstance(error,JobCancelled) else "failed",error=str(error),seconds=time.perf_counter()-start,peakWorkingSetBytes=peak)
+            journal(folder,status)
+            raise
         finally:
             if process.poll() is None:
-                for child in monitor.children(recursive=True):
-                    child.kill()
-                process.kill()
+                try:
+                    for child in monitor.children(recursive=True):
+                        child.kill()
+                    process.kill()
+                except psutil.NoSuchProcess:
+                    pass
                 process.wait()
     log = (folder / "stdout.log").read_text(errors="replace")
     if process.returncode or "*ERROR" in log or "Job finished" not in log:
-        raise RuntimeError(f"Contact solver failed; inspect {folder / 'stdout.log'}")
+        status.update(state="failed",exitCode=process.returncode,error="Solver did not complete cleanly",seconds=time.perf_counter()-start,peakWorkingSetBytes=peak)
+        journal(folder,status)
+        raise RuntimeError(f"Contact solver failed (exit {process.returncode}); inspect {folder / 'stdout.log'}")
+    status.update(state="solver_succeeded",exitCode=process.returncode,seconds=time.perf_counter()-start,peakWorkingSetBytes=peak)
+    journal(folder,status)
     return {"seconds": time.perf_counter() - start, "peakWorkingSetBytes": peak,
             "deckSha256": hashlib.sha256(deck.encode("ascii")).hexdigest(), "solverSha256": CCX_SHA}
+
+
+def recovery() -> dict:
+    folder=OUT/"recovery"
+    results=[]
+    for name,deck,options,expected in [("bad-input","*HEADING\nMalformed deliberate verification deck\n*NODE\nnot,a,node\n",{},RuntimeError),
+            ("timeout",cube_contact(1e12,.025),{"timeout":.02},TimeoutError),
+            ("cancel",cube_contact(1e12,.025),{"cancel_after":.02},JobCancelled),
+            ("backend-crash",cube_contact(1e12,.025,.1,"*HYPERFOAM,N=1\n200000.,2.,.15"),{},RuntimeError)]:
+        case=folder/name
+        try:
+            invoke(case,deck,**options)
+            raise ValueError("Deliberately failing job was accepted")
+        except expected:
+            state=json.loads((case/"process.json").read_text())
+            if psutil.pid_exists(state["pid"]):
+                raise ValueError("Rejected worker process survived cleanup")
+            results.append({"case":name,"state":state["state"],"exitCode":state.get("exitCode"),"childCleanedUp":True})
+    report=invoke(folder/"valid-after-failure",cube_contact(1e12,.025))
+    history=totals(folder/"valid-after-failure/case.dat","PLATEN")
+    if not history or abs(-history[-1][1][2]-neo_hooke_nominal(.7)*.02**2)>1:
+        raise ValueError("Valid solve did not recover after previous failures")
+    return {"status":"Malformed input, timeout, cancel, native crash cleanup and subsequent valid solve verified", "results":results,"validRun":report}
 
 
 def totals(path: Path, name: str) -> list[tuple[float, list[float]]]:
@@ -68,11 +125,18 @@ def ids(values: list[int]) -> str:
     return "\n".join(",".join(map(str,values[start:start+16])) for start in range(0,len(values),16))
 
 
-def step_mesh(size: str) -> tuple[dict[int, tuple[float,float,float]], dict[int,list[int]], str]:
+def step_mesh(size: str, family: str="asymmetric") -> tuple[dict[int, tuple[float,float,float]], dict[int,list[int]], str]:
     if hashlib.sha256(GMSH.read_bytes()).hexdigest()!=GMSH_SHA:
         raise ValueError("Mesher differs from its reviewed pin")
-    folder=ROOT/"artifacts/fea-step-mesh-spike"
+    folder=ROOT/("artifacts/fea-step-mesh-spike" if family=="asymmetric" else "artifacts/fea-annular-mesh-spike")
     mesh=folder/f"mesh-{size}.msh"
+    manifest=json.loads((folder/"verification.json").read_text(encoding="utf-8-sig"))
+    expected=next(m for m in manifest["meshes"] if abs(m["meshSizeM"]-float(size.replace("_",".")))<1e-10)
+    if expected["meshSha256"]!=hashlib.sha256(mesh.read_bytes()).hexdigest():
+        raise ValueError("Mesh differs from its preparation manifest")
+    step=folder/("asymmetric-mm.step" if family=="asymmetric" else "annular-mm.step")
+    if manifest["stepSha256"]!=hashlib.sha256(step.read_bytes()).hexdigest():
+        raise ValueError("STEP changed after mesh preparation; regenerate before solving")
     target=folder/f"contact-{size}.inp"
     conversion=subprocess.run([str(GMSH),str(mesh),"-0","-format","inp","-o",str(target),"-nt","4"],cwd=folder,
                               capture_output=True,text=True,timeout=30,creationflags=subprocess.CREATE_NO_WINDOW)
@@ -121,7 +185,7 @@ def quadratic_quality(nodes: dict, elements: dict) -> dict:
     return {"minimumSampledScaledJacobian":minimum,"locationsPerTet":len(points),"basis":"CCX quadrature plus centroid, corners and edge midpoints; not a proof of global bijectivity"}
 
 
-def step_deck(nodes: dict, elements: dict, fraction: float=.3, penalty: float=1e12, fold: bool=False, increment: float=.025) -> tuple[str,dict]:
+def step_deck(nodes: dict, elements: dict, fraction: float=.3, penalty: float=1e12, fold: bool=False, increment: float=.025,d1: float=2e-8,guide: bool=False) -> tuple[str,dict]:
     boundary={}
     for element, vertex in elements.items():
         for face, pattern in enumerate(TET_FACES,1):
@@ -134,21 +198,43 @@ def step_deck(nodes: dict, elements: dict, fraction: float=.3, penalty: float=1e
     top,bottom=at_height(.04),at_height(0)
     if not top or not bottom:
         raise ValueError("STEP contact faces could not be identified")
-    lower,upper=at_height(.016),at_height(.024)
-    if fold and (not lower or not upper):
+    groove_lower,groove_upper=at_height(.016),at_height(.024)
+    if fold and (not groove_lower or not groove_upper):
         raise ValueError("The declared groove faces do not exist")
     all_nodes=dict(nodes)
-    plate=[]
-    for point in [(-.04,-.04,.04),(.04,-.04,.04),(.04,.04,.04),(-.04,.04,.04),
-                  (-.04,-.04,.045),(.04,-.04,.045),(.04,.04,.045),(-.04,.04,.045)]:
-        key=max(all_nodes)+1
-        all_nodes[key]=point
-        plate.append(key)
-    plate_id=max(elements)+1
+    fixture_lookup={}
+    def node(point):
+        if point not in fixture_lookup:
+            key=max(all_nodes)+1;all_nodes[key]=point;fixture_lookup[point]=key
+        return fixture_lookup[point]
+    plate_elements={}
+    shaft_elements={}
+    def add_plate(points):
+        plate_elements[max(elements)+len(plate_elements)+1]=[node(p) for p in points]
+    if guide:
+        def polar(radius,q,n,z):
+            angle=2*math.pi*(q%n)/n
+            return radius*math.cos(angle),radius*math.sin(angle),z
+        for q in range(32):
+            lower=[polar(.0045,q,32,.04),polar(.04,q,32,.04),polar(.04,q+1,32,.04),polar(.0045,q+1,32,.04)]
+            add_plate(lower+[(x,y,.045) for x,y,_ in lower])
+        for q in range(64):
+            lower=[(0.,0.,-.002),polar(.00395,q,64,-.002),polar(.00395,q+1,64,-.002)]
+            points=lower+[(x,y,.05) for x,y,_ in lower]
+            shaft_elements[max(plate_elements)+len(shaft_elements)+1]=[node(p) for p in points]
+    else:
+        add_plate([(-.04,-.04,.04),(.04,-.04,.04),(.04,.04,.04),(-.04,.04,.04),
+                   (-.04,-.04,.045),(.04,-.04,.045),(.04,.04,.045),(-.04,.04,.045)])
+    plate=sorted({n for ns in plate_elements.values() for n in ns})
+    shaft=sorted({n for ns in shaft_elements.values() for n in ns})
+    bore=[(e,f,ns) for e,f,ns in faces if all(abs(math.hypot(nodes[n][0],nodes[n][1])-.004)<1e-7 for n in ns)]
+    if guide and not bore:
+        raise ValueError("No declared shaft bore faces were found")
     surface=lambda values:"\n".join(f"{e},S{f}" for e,f,_ in values)
     # CalculiX accepts at most 20 characters per numeric field; 12 digits retain sub-nm SI geometry here.
     node_text="\n".join(str(i)+","+",".join(f"{v:.12g}" for v in p) for i,p in all_nodes.items())
     element_text="\n".join(str(i)+","+",".join(map(str,ns)) for i,ns in elements.items())
+    plate_text="\n".join(str(i)+","+",".join(map(str,ns)) for i,ns in plate_elements.items())
     bottom_nodes=sorted({n for _,_,ns in bottom for n in ns})
     top_nodes=sorted({n for _,_,ns in top for n in ns})
     deck=f"""*HEADING
@@ -158,7 +244,7 @@ Asymmetric STEP numerical benchmark; synthetic NH material; bonded lower mountin
 *ELEMENT,TYPE=C3D10,ELSET=FOAM
 {element_text}
 *ELEMENT,TYPE=C3D8,ELSET=PLATE
-{plate_id},{','.join(map(str,plate))}
+{plate_text}
 *NSET,NSET=BOTTOM
 {ids(bottom_nodes)}
 *NSET,NSET=TOP
@@ -167,7 +253,7 @@ Asymmetric STEP numerical benchmark; synthetic NH material; bonded lower mountin
 {ids(plate)}
 *MATERIAL,NAME=EDUCATIONAL
 *HYPERELASTIC,NEO HOOKE
-500000.,2.E-8
+500000.,{d1:.12g}
 *SOLID SECTION,ELSET=FOAM,MATERIAL=EDUCATIONAL
 *MATERIAL,NAME=FIXTURE
 *ELASTIC
@@ -176,24 +262,39 @@ Asymmetric STEP numerical benchmark; synthetic NH material; bonded lower mountin
 *SURFACE,NAME=FOAMTOP
 {surface(top)}
 *SURFACE,NAME=PLATEBOTTOM
-{plate_id},S1
+{chr(10).join(f'{element},S1' for element in plate_elements)}
 *SURFACE INTERACTION,NAME=CONTACT
 *SURFACE BEHAVIOR,PRESSURE-OVERCLOSURE=LINEAR
 {penalty:.16g}
 *CONTACT PAIR,INTERACTION=CONTACT,TYPE=SURFACE TO SURFACE
 FOAMTOP,PLATEBOTTOM
 """
+    if guide:
+        shaft_text="\n".join(str(i)+","+",".join(map(str,ns)) for i,ns in shaft_elements.items())
+        deck+=f"""*ELEMENT,TYPE=C3D6,ELSET=SHAFT
+{shaft_text}
+*SOLID SECTION,ELSET=SHAFT,MATERIAL=FIXTURE
+*NSET,NSET=SHAFTNODES
+{ids(shaft)}
+*SURFACE,NAME=BORE
+{surface(bore)}
+*SURFACE,NAME=GUIDE
+{chr(10).join(f'{element},S4' for element in shaft_elements)}
+*CONTACT PAIR,INTERACTION=CONTACT,TYPE=SURFACE TO SURFACE
+BORE,GUIDE
+"""
     if fold:
         deck+=f"""*SURFACE,NAME=GROOVEUPPER
-{surface(upper)}
+{surface(groove_upper)}
 *SURFACE,NAME=GROOVELOWER
-{surface(lower)}
+{surface(groove_lower)}
 *CONTACT PAIR,INTERACTION=CONTACT,TYPE=SURFACE TO SURFACE
 GROOVEUPPER,GROOVELOWER
 """
     deck+=f"""*BOUNDARY
 BOTTOM,1,3,0.
 PLATEN,1,2,0.
+{"SHAFTNODES,1,3,0." if guide else ""}
 *STEP,NLGEOM,INC=500
 *STATIC,SOLVER=SPOOLES
 {increment:.12g},1.,1.E-8,{increment:.12g}
@@ -209,7 +310,7 @@ U
 CDIS,CSTR
 *END STEP
 """
-    return deck,{"nodes":len(nodes),"quadraticTets":len(elements),"topFaces":len(top),"bottomFaces":len(bottom),"grooveUpperFaces":[[e,f] for e,f,_ in upper]}
+    return deck,{"nodes":len(nodes),"quadraticTets":len(elements),"topFaces":len(top),"bottomFaces":len(bottom),"grooveUpperFaces":[[e,f] for e,f,_ in groove_upper],"boreFaces":[[e,f] for e,f,_ in bore],"guideShaftRadiusM":.00395 if guide else None,"annularPlatenBoreRadiusM":.0045 if guide else None}
 
 
 def contact_values(path: Path, title: str) -> list[tuple[float,int,int,float]]:
@@ -230,14 +331,14 @@ def contact_values(path: Path, title: str) -> list[tuple[float,int,int,float]]:
     return result
 
 
-def step_compression(mesh_size: str, fraction: float, fold: bool, penalty: float=1e12, increment: float=.025) -> dict:
+def step_compression(mesh_size: str, fraction: float, fold: bool, penalty: float=1e12, increment: float=.025,family: str="asymmetric",d1: float=2e-8,guide: bool=False) -> dict:
     if not math.isfinite(fraction) or not 0<fraction<1:
         raise ValueError("Compression must be a finite fraction strictly between zero and one")
-    nodes,elements,mesh_hash=step_mesh(mesh_size)
+    nodes,elements,mesh_hash=step_mesh(mesh_size,family)
     quality=quadratic_quality(nodes,elements)
-    deck,metadata=step_deck(nodes,elements,fraction=fraction,fold=fold,penalty=penalty,increment=increment)
+    deck,metadata=step_deck(nodes,elements,fraction=fraction,fold=fold,penalty=penalty,increment=increment,d1=d1,guide=guide)
     fingerprint=hashlib.sha256(deck.encode("ascii")).hexdigest()
-    folder=OUT/"step"/f"{mesh_size}-{fraction:.2f}{'-fold' if fold else ''}-{fingerprint[:12]}"
+    folder=OUT/("step" if family=="asymmetric" else "rubber")/f"{mesh_size}-{fraction:.2f}{'-fold' if fold else ''}-{fingerprint[:12]}"
     cached=folder/"verification.json"
     if cached.exists():
         report=json.loads(cached.read_text())
@@ -256,12 +357,13 @@ def step_compression(mesh_size: str, fraction: float, fold: bool, penalty: float
     if force<=0 or imbalance>max(.1,.01*scale) or penetration>1e-5:
         raise ValueError(f"STEP force/reaction/10-um contact-gap gate failed: F={force}, imbalance={imbalance}, gap={penetration}")
     groove=set(map(tuple,metadata["grooveUpperFaces"]))
+    bore=set(map(tuple,metadata["boreFaces"]))
     closing=[(t,pressure) for t,e,f,pressure in contact_values(folder/"case.dat","contact stress") if (e,f) in groove and pressure>1000]
     report.update(metadata,meshSha256=mesh_hash,compressionFraction=fraction,forceN=force,imbalanceN=imbalance,
                   samples=[{"compressionM":.04*fraction*t,"forceN":-f[2]} for t,f in top],
-                  fixture="Bonded lower face; frictionless rigid upper contact; no shaft in this case",foldContactEnabled=fold,initialMeshQuality=quality,
+                  fixture="Bonded lower face; frictionless rigid annular upper platen and 3.95-mm-radius shaft" if guide else "Bonded lower face; frictionless rigid upper contact; no shaft in this case",foldContactEnabled=fold,initialMeshQuality=quality,
                   maximumAbsoluteContactNormalDisplacementM=penetration,declaredFixtureToleranceM=1e-4,grooveContactDetected=bool(closing),
-                  firstGrooveContactFraction=closing[0][0] if closing else None)
+                  firstGrooveContactFraction=closing[0][0] if closing else None,shaftContactDetected=any((e,f) in bore and pressure>1000 for _,e,f,pressure in contact_values(folder/"case.dat","contact stress")))
     (folder/"verification.json").write_text(json.dumps(report,indent=2))
     return {"status":"Asymmetric STEP contact compression; mesh convergence and folding require their separate gates", "results":[report]}
 
@@ -390,7 +492,7 @@ def coupon() -> dict:
     return {"status": "Numerical contact coupon only; does not establish part contact or locking", "results": results}
 
 
-def axis_deck(nr: int, nz: int, contact: bool) -> tuple[str, str]:
+def axis_deck(nr: int, nz: int, contact: bool,d1: float=2e-8,bonded: bool=False,penalty: float=1e12) -> tuple[str, str]:
     nodes: dict[int, tuple[float, float, float]] = {}
     lookup: dict[tuple[int, int], int] = {}
     for j in range(2*nz+1):
@@ -425,7 +527,7 @@ def axis_deck(nr: int, nz: int, contact: bool) -> tuple[str, str]:
 {plate_id},S1
 *SURFACE INTERACTION,NAME=CONTACT
 *SURFACE BEHAVIOR,PRESSURE-OVERCLOSURE=LINEAR
-1.E12
+{penalty:.12g}
 *CONTACT PAIR,INTERACTION=CONTACT,TYPE=SURFACE TO SURFACE
 FOAMTOP,PLATEBOTTOM
 """
@@ -440,7 +542,7 @@ Synthetic annular axisymmetric coupon; verify whole-part RF convention against i
 {element_text}
 *MATERIAL,NAME=EDUCATIONAL
 *HYPERELASTIC,NEO HOOKE
-500000.,2.E-8
+500000.,{d1:.12g}
 *SOLID SECTION,ELSET=FOAM,MATERIAL=EDUCATIONAL
 {plate_elements}*NSET,NSET=BOTTOM
 {ids(bottom)}
@@ -450,6 +552,8 @@ Synthetic annular axisymmetric coupon; verify whole-part RF convention against i
     if contact:
         deck += "*NSET,NSET=PLATEN\n"+",".join(map(str,platen))+"\n"
     deck += surfaces+"*BOUNDARY\nBOTTOM,2,2,0.\n"
+    if bonded:
+        deck += "BOTTOM,1,1,0.\n"
     if contact:
         deck += "PLATEN,1,1,0.\n"
     deck += f"""*STEP,NLGEOM,INC=300
@@ -466,6 +570,33 @@ U
 *END STEP
 """
     return deck, load_set
+
+
+def rubber() -> dict:
+    references=[]
+    for nr,nz in [(8,16),(12,24)]:
+        deck,load_set=axis_deck(nr,nz,True,d1=2e-9,bonded=True)
+        folder=OUT/"rubber-axisymmetric"/f"{nr}-{nz}"
+        report=invoke(folder,deck)
+        top=totals(folder/"case.dat",load_set)
+        bottom=totals(folder/"case.dat","BOTTOM")
+        if not top or abs(top[-1][0]-1)>1e-8 or not bottom:
+            raise ValueError("Nearly incompressible reference did not complete")
+        force=-180*top[-1][1][1]
+        imbalance=180*abs(top[-1][1][1]+bottom[-1][1][1])
+        if force<=0 or imbalance/force>.01:
+            raise ValueError("Nearly incompressible reference balance failed")
+        report.update(forceN=force,imbalanceN=imbalance,radialElements=nr,axialElements=nz)
+        references.append(report)
+        (folder/"verification.json").write_text(json.dumps(report,indent=2))
+    if abs(references[0]["forceN"]-references[1]["forceN"])/references[1]["forceN"]>.01:
+        raise ValueError("Reduced-integration axisymmetric reference did not converge within 1%")
+    results=[step_compression(size,.3,False,family="annular",d1=2e-9)["results"][0] for size in ("0_0060","0_0045","0_0035")]
+    fine=results[-1]["forceN"]
+    difference=abs(fine-references[-1]["forceN"])/references[-1]["forceN"]
+    if difference>.05:
+        raise ValueError(f"Nearly incompressible 3D/reference force difference {difference:.3%} exposes unacceptable locking/contact error")
+    return {"status":"Nearly incompressible bonded-base/sliding-platen rubber refinement vs independent CAX8R reduced-integration reference", "relative3DReferenceDifference":difference,"bulkToShearRatio":1000.,"references":references,"results":results}
 
 
 def axisymmetric() -> dict:
@@ -499,12 +630,13 @@ def axisymmetric() -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--case", choices=["coupon","axisymmetric","step","mesh-convergence"], default="coupon")
+    parser.add_argument("--case", choices=["coupon","axisymmetric","step","mesh-convergence","rubber","recovery"], default="coupon")
     parser.add_argument("--mesh",choices=["0_0060","0_0045","0_0035"],default="0_0060")
     parser.add_argument("--compression",type=float,default=.3)
     parser.add_argument("--fold-contact",action="store_true")
+    parser.add_argument("--guide-shaft",action="store_true")
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    result = coupon() if args.case == "coupon" else axisymmetric() if args.case=="axisymmetric" else mesh_convergence(args.compression) if args.case=="mesh-convergence" else step_compression(args.mesh,args.compression,args.fold_contact)
+    result = coupon() if args.case == "coupon" else axisymmetric() if args.case=="axisymmetric" else recovery() if args.case=="recovery" else rubber() if args.case=="rubber" else mesh_convergence(args.compression) if args.case=="mesh-convergence" else step_compression(args.mesh,args.compression,args.fold_contact,guide=args.guide_shaft)
     (OUT / f"{args.case}-verification.json").write_text(json.dumps(result, indent=2))
     print(json.dumps({"case": args.case, "status": result["status"], "forcesN": [r.get("forceN",r.get("wholePartForceN")) for r in result["results"]]}))

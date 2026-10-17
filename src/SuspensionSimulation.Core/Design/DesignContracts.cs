@@ -58,6 +58,7 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalBehavior? Behavior {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public WheelSpecification? Wheel {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImportedBumpCurveEvidence? BumpCurveEvidence {get;init;}
     [JsonIgnore] public bool IsRuntimeDerived {get;init;}
 }
 public sealed record RackSpecification(double TravelAtLockM,double SteeringWheelLockDegrees);

@@ -1,9 +1,10 @@
-param([string]$Repository = (Split-Path $PSScriptRoot -Parent))
+param([string]$Repository = (Split-Path $PSScriptRoot -Parent),[ValidateSet('Asymmetric','Annular')][string]$Geometry='Asymmetric')
 $ErrorActionPreference='Stop'
 $culture=[System.Globalization.CultureInfo]::InvariantCulture
 $mesher=Join-Path $Repository 'artifacts/fea-toolchain/gmsh-4.15.2/gmsh-4.15.2-Windows64/gmsh.exe'
 if((Get-FileHash -LiteralPath $mesher -Algorithm SHA256).Hash -ne '317C43391E5B1FAB3A1DD80DC5245DAD6E2D087910F4B8EBC234BD6D4B8F41A1'){throw 'Gmsh does not match the reviewed 4.15.2 executable.'}
-$folder=Join-Path $Repository 'artifacts/fea-step-mesh-spike'
+$folder=Join-Path $Repository $(if($Geometry -eq 'Asymmetric'){'artifacts/fea-step-mesh-spike'}else{'artifacts/fea-annular-mesh-spike'})
+$stepName=if($Geometry -eq 'Asymmetric'){'asymmetric-mm.step'}else{'annular-mm.step'}
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
 function Invoke-Gmsh([string]$Name,[string[]]$Arguments){
     $start=[System.Diagnostics.ProcessStartInfo]::new($mesher)
@@ -20,14 +21,13 @@ function Invoke-Gmsh([string]$Name,[string[]]$Arguments){
 }
 $cad=@'
 SetFactory("OpenCASCADE");
-// Millimetre CAD coordinates. Off-centre side groove prevents an axisymmetric reduction.
+// Millimetre CAD coordinates; explicit import to SI below.
 Cylinder(1)={0,0,0,0,0,40,20};
 Cylinder(2)={0,0,-1,0,0,42,4};
 BooleanDifference(3)={Volume{1};Delete;}{Volume{2};Delete;};
-Box(4)={12,-25,16,15,50,8};
-BooleanDifference(5)={Volume{3};Delete;}{Volume{4};Delete;};
-Save "asymmetric-mm.step";
 '@
+if($Geometry -eq 'Asymmetric'){$cad+="`nBox(4)={12,-25,16,15,50,8};`nBooleanDifference(5)={Volume{3};Delete;}{Volume{4};Delete;};"}
+$cad+="`nSave `"$stepName`";"
 [System.IO.File]::WriteAllText((Join-Path $folder 'create.geo'),$cad)
 $creation=Invoke-Gmsh 'create' @('create.geo','-0','-nt','4','-v','4')
 $reports=foreach($size in @(.006,.0045,.0035)){
@@ -40,7 +40,7 @@ Geometry.OCCFixSmallEdges=0;
 Geometry.OCCFixSmallFaces=0;
 Geometry.OCCSewFaces=0;
 Geometry.OCCMakeSolids=0;
-Merge "asymmetric-mm.step";
+Merge "$stepName";
 v()=Volume{:};
 Printf("SOLID_COUNT=%g",#v());
 Physical Volume("bumper",1)={v()};
@@ -61,6 +61,6 @@ Mesh.HighOrderOptimize=2;
     if($quadraticTets -eq 0){throw 'No quadratic volume elements were generated.'}
     [pscustomobject]@{meshSizeM=$size;nodes=$count;quadraticTetrahedra=$quadraticTets;heightM=$zmax-$zmin;seconds=$run.seconds;peakWorkingSetBytes=$run.peakWorkingSetBytes;meshSha256=(Get-FileHash -LiteralPath (Join-Path $folder $mesh) -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
-@{status='STEP import/units/three-mesh preparation only; no contact solve or force convergence claim';mesher='Gmsh 4.15.2 / OpenCASCADE';healing='Explicit healing operations disabled';highOrderMeshOptimization=2;stepSha256=(Get-FileHash -LiteralPath (Join-Path $folder 'asymmetric-mm.step') -Algorithm SHA256).Hash.ToLowerInvariant();meshes=@($reports)} |
+@{status='STEP import/units/three-mesh preparation only; no contact solve or force convergence claim';geometry=$Geometry;mesher='Gmsh 4.15.2 / OpenCASCADE';healing='Explicit healing operations disabled';highOrderMeshOptimization=2;stepSha256=(Get-FileHash -LiteralPath (Join-Path $folder $stepName) -Algorithm SHA256).Hash.ToLowerInvariant();meshes=@($reports)} |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $folder 'verification.json')
 $reports | Format-Table meshSizeM,nodes,quadraticTetrahedra,heightM,seconds

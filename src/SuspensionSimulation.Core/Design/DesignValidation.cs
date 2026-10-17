@@ -33,6 +33,7 @@ public static class DesignValidation
         else Require(component.Kind!=ComponentKind.Wheel,"Wheel contact dimensions are missing.");
         if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
         MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
+        ImportedBumpCurve.Validate(component);
         if(component.AxialGauge is {} gauge)
         {
             Require(component.Kind==ComponentKind.RigidLink&&component.Ports.Length==2,"Axial spin gauges require a two-port rigid rod.");

@@ -22,6 +22,7 @@ if(args.Contains("--write-viz-limit-cases")) {SuspensionSimulation.Tests.Visuali
 if(args.Contains("--check-installed-equilibrium")) {try {SuspensionSimulation.Tests.InstalledEquilibriumChecks.Verify();Console.WriteLine("Installed equilibrium checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-physical-garage")) {try {SuspensionSimulation.Tests.PhysicalGarageChecks.Verify();Console.WriteLine("Physical Garage checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-installed-analysis")) {try {SuspensionSimulation.Tests.InstalledAnalysisChecks.Verify();Console.WriteLine("Installed analysis checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-imported-bump")) {try {SuspensionSimulation.Tests.ImportedBumpCurveChecks.Verify();Console.WriteLine("Imported bump curve checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
@@ -34,6 +35,7 @@ Run("installed static and loaded equilibrium derive pose alignment and balanced 
 Run("stock Garage seeding equipment selection frozen revisions and reference solving are consistent",SuspensionSimulation.Tests.GarageAnalysisChecks.Verify);
 Run("physical Garage migration selections exposed adjustments ownership and independent imports preserve saved setups",SuspensionSimulation.Tests.PhysicalGarageChecks.Verify);
 Run("installed analysis freezes source equipment and settings with physical roll tangents replay and cancellation",SuspensionSimulation.Tests.InstalledAnalysisChecks.Verify);
+Run("imported bump curves preserve units raw evidence bounds and mounted equilibrium behavior",SuspensionSimulation.Tests.ImportedBumpCurveChecks.Verify);
 Run("Garage named entries round-trip independently with revisions archive recovery and conflict protection",SuspensionSimulation.Tests.GarageChecks.Persistence);
 Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);
 Run("Garage contracts reject geometry alignment rate overrides and double mass accounting",SuspensionSimulation.Tests.DesignContractChecks.Ownership);

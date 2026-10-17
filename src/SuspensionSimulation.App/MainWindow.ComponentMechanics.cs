@@ -151,6 +151,12 @@ public partial class MainWindow
     }
     private ComponentDefinition ApplyComponentMechanicalEdits(ComponentDefinition component)
     {
+        if(component.Kind==ComponentKind.BumpStop&&component.BumpCurveEvidence is not null)
+        {
+            var evidence=ReadBumpEvidence();var existing=(BumpCurveBehavior)component.Behavior!;
+            component=component with {Behavior=ImportedBumpCurve.Behavior(evidence,existing.FirstPortId,existing.SecondPortId),BumpCurveEvidence=evidence,
+                Identity=component.Identity with {Provenance=component.Identity.Provenance with {Kind=evidence.Provenance,Source="Imported CSV SHA-256 "+evidence.RawSha256}}};
+        }
         if(component.Kind==ComponentKind.Rack) component=component with {Rack=new(PhysicalMetres("rackTravel"),Physical("rackLock"))};
         if(component.Kind==ComponentKind.Wheel)
         {

@@ -203,7 +203,7 @@ public partial class MainWindow
         using(var drawing=visual.RenderOpen())
         {
             drawing.DrawImage(layout,new Rect(0,0,ActualWidth,ActualHeight));
-            var inspector=_workspace==Workspace.ComponentDesigner?_componentViewport:_inspectionEnabled&&RootGrid.Visibility==Visibility.Visible?_inspectionViewport:null;
+            var inspector=_workspace==Workspace.ComponentDesigner?_componentViewport:_workspace==Workspace.AssemblyEditor?_assemblyViewport:_inspectionEnabled&&RootGrid.Visibility==Visibility.Visible?_inspectionViewport:null;
             if(inspector is not null)
             {
                 var origin=inspector.Viewport.TranslatePoint(new Point(0,0),this);

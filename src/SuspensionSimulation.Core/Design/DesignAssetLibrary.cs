@@ -1,11 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Collections.Immutable;
 
 namespace SuspensionSimulation.Design;
 
 /// <summary>Immutable revisions with one atomic head pointer and optimistic per-asset publication.</summary>
-public sealed class DesignAssetLibrary(string root)
+public interface IDesignAssetSource
+{
+    ComponentDefinition? LoadComponent(string id,string? revision=null);
+    AssemblyDefinition? LoadAssembly(string id,string? revision=null);
+}
+public sealed class DesignAssetLibrary(string root):IDesignAssetSource
 {
     public string Root {get;}=Path.GetFullPath(root);
     private static void Id(string id)
@@ -36,7 +42,12 @@ public sealed class DesignAssetLibrary(string root)
     public ComponentDefinition Publish(ComponentDefinition component,string? expectedRevision)
     {ComponentAuthoring.ValidateForPublish(component);return Publish("components",component,expectedRevision);}
     public AssemblyDefinition Publish(AssemblyDefinition assembly,string? expectedRevision)
-    {DesignValidation.Validate(assembly);return Publish("assemblies",assembly,expectedRevision);}
+    {
+        DesignValidation.Validate(assembly);var graph=new AssemblyGraphResolver(this).CompileDraft(assembly);
+        // Capture inferred lengths once; subsequent geometry revisions cannot silently change a rigid rod's rest length.
+        assembly=assembly with {Joints=[..assembly.Joints.Select(j=>j.Kind==JointKind.RigidDistance&&j.DistanceM is null?j with {DistanceM=graph.Joints.Single(x=>x.Path=="/"+j.Id).DistanceM}:j)]};
+        return Publish("assemblies",assembly,expectedRevision);
+    }
     private T Publish<T>(string kind,T value,string? expectedRevision)
     {
         var identity=Identity(value!);var folder=Folder(kind,identity.AssetId);Directory.CreateDirectory(folder);
@@ -53,6 +64,35 @@ public sealed class DesignAssetLibrary(string root)
     private static object WithIdentity(object value,RevisionIdentity identity)=>value switch {ComponentDefinition x=>x with {Identity=identity},AssemblyDefinition x=>x with {Identity=identity},_=>throw new ArgumentException("Unsupported asset type.")};
     private static string Serialize(object value)=>value switch {ComponentDefinition x=>DesignJson.Serialize(x),AssemblyDefinition x=>DesignJson.Serialize(x),_=>throw new ArgumentException("Unsupported asset type.")};
     private static string Hash(object value)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(value))));
+    internal static void VerifyRevision(object value)
+    {
+        var identity=Identity(value);
+        if(identity.RevisionId.Length!=64||Hash(WithIdentity(value,identity with {RevisionId=""}))!=identity.RevisionId) throw new InvalidDataException("Asset content hash mismatch.");
+    }
+    /// <summary>Import an independent clone. Original revisions and hashes remain archived; existing heads are untouched.</summary>
+    public AssemblyDefinition ImportClone(PortableDesignBundle bundle)
+    {
+        AssemblyGraphResolver.OpenBundle(bundle);
+        var json=DesignJson.Serialize(bundle);var hash=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+        var archive=Path.Combine(Root,"assets","imports");Directory.CreateDirectory(archive);var file=Path.Combine(archive,hash+".json");
+        if(!File.Exists(file)) Atomic(file,json);
+        var mapped=new Dictionary<(AssetKind,string),RevisionIdentity>();
+        RevisionIdentity NewIdentity(RevisionIdentity identity)=>identity with {AssetId=Guid.NewGuid().ToString("N"),RevisionId="draft",Name=identity.Name+" (import)",Provenance=identity.Provenance with {Source="Imported bundle SHA-256 "+hash+"; original source: "+identity.Provenance.Source}};
+        foreach(var component in bundle.Components)
+        {var published=Publish(component with {Identity=NewIdentity(component.Identity)},null);mapped.Add((AssetKind.Component,component.Identity.AssetId),published.Identity);}
+        AssemblyDefinition ImportAssembly(string id)
+        {
+            if(mapped.TryGetValue((AssetKind.Assembly,id),out var already)) return LoadAssembly(already.AssetId,already.RevisionId)!;
+            var source=bundle.Assemblies.Single(x=>x.Identity.AssetId==id);
+            var children=source.Instances.Select(instance=>
+            {
+                var identity=instance is ComponentInstance?mapped[(AssetKind.Component,instance.Definition.AssetId)]:ImportAssembly(instance.Definition.AssetId).Identity;
+                return instance with {Definition=new(identity.AssetId,identity.RevisionId)};
+            }).ToImmutableArray();
+            var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children},null);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
+        }
+        return ImportAssembly(bundle.Root.AssetId);
+    }
     private static void Atomic(string path,string text)
     {
         var temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";

@@ -148,15 +148,17 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
     {
         if(_scene is null || Viewport.Camera is not HCamera camera || Viewport.ActualHeight<=0) return;
         var positions=_scene.Points.Select(x=>x.PositionM).ToList();
+        foreach(var segment in _scene.Segments) {positions.Add(segment.StartM);positions.Add(segment.EndM);}
         foreach(var w in _scene.Wheels)
             foreach(var x in new[]{-1,1}) foreach(var y in new[]{-1,1}) foreach(var z in new[]{-1,1})
                 positions.Add(w.CenterM+new Vector3((float)(x*w.RadiusM),(float)(y*w.WidthM/2),(float)(z*w.RadiusM)));
+        if(positions.Count==0) {positions.Add(new Vector3(-.2f,-.2f,0));positions.Add(new Vector3(.2f,.2f,.2f));}
         var center=positions.Aggregate(Vector3.Zero,(sum,p)=>sum+p)/positions.Count;
         var forward=new Vector3((float)camera.LookDirection.X,(float)camera.LookDirection.Y,(float)camera.LookDirection.Z);forward=Vector3.Normalize(forward);
         var up=new Vector3((float)camera.UpDirection.X,(float)camera.UpDirection.Y,(float)camera.UpDirection.Z);
         var right=Vector3.Normalize(Vector3.Cross(forward,up));up=Vector3.Normalize(Vector3.Cross(right,forward));
         var horizontal=positions.Select(p=>Vector3.Dot(p-center,right)).ToArray();var vertical=positions.Select(p=>Vector3.Dot(p-center,up)).ToArray();
-        camera.Width=1.15*Math.Max(2*horizontal.Max(Math.Abs),2*vertical.Max(Math.Abs)*Viewport.ActualWidth/Viewport.ActualHeight);
+        camera.Width=Math.Max(.05,1.15*Math.Max(2*horizontal.Max(Math.Abs),2*vertical.Max(Math.Abs)*Viewport.ActualWidth/Viewport.ActualHeight));
         camera.Position=new Point3D(center.X-forward.X*6,center.Y-forward.Y*6,center.Z-forward.Z*6);
         camera.LookDirection=new Vector3D(forward.X*6,forward.Y*6,forward.Z*6);
     }

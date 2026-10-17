@@ -71,11 +71,19 @@ public partial class MainWindow
     {
         if(!Enum.IsDefined(workspace)) throw new ArgumentOutOfRangeException(nameof(workspace));
         if(workspace==Workspace.ComponentDesigner && _componentViewport is null) BuildComponentDesigner();
+        if(workspace==Workspace.AssemblyEditor && _assemblyViewport is null) BuildAssemblyEditor();
+        if(workspace==Workspace.ComponentDesigner) ComponentAction(RefreshComponentLibrary);
+        if(workspace==Workspace.AssemblyEditor)
+        {
+            AssemblyAction(RefreshAssemblyCatalog);
+            if(_assemblyBaseRevision is not null&&_assemblyPublishedRaw==CaptureAssemblyRaw()) AssemblyAction(RefreshAssemblyDependencies);
+        }
         _workspace=workspace;RootGrid.Visibility=IsSimulationWorkspace?Visibility.Visible:Visibility.Collapsed;
         foreach(var (destination,view) in _workspaceViews) view.Visibility=destination==workspace?Visibility.Visible:Visibility.Collapsed;
         if(IsSimulationWorkspace) {SetInspectionMode(workspace==Workspace.Visualizer3D);EnsureGarageAnalysisCurrent();}
         else _inspectionViewport?.SetActive(false);
         _componentViewport?.SetActive(workspace==Workspace.ComponentDesigner && WindowState!=WindowState.Minimized);
+        _assemblyViewport?.SetActive(workspace==Workspace.AssemblyEditor && WindowState!=WindowState.Minimized);
         Title=IsSimulationWorkspace?"Suspension Simulation — Stock GR86 vs BRZ":"Suspension Simulation — "+WorkspaceName(workspace);
     }
 
@@ -84,6 +92,7 @@ public partial class MainWindow
         workspace=_workspace.ToString(),
         analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
         component=_componentReady?new {assetId=_componentId,baseRevision=_componentBaseRevision,rawDraft=CaptureComponentRaw(),camera=_componentViewport?.CaptureCamera()}:null,
+        assembly=_assemblyReady?new {assetId=_assemblyId,baseRevision=_assemblyBaseRevision,rawDraft=CaptureAssemblyRaw(),camera=_assemblyViewport?.CaptureCamera(),manifest=_assemblyGraph?.Manifest,conflict=_assemblyConflict}:null,
         drafts=_workspaceDrafts.ToDictionary(x=>x.Key.ToString(),x=>new {name=x.Value.Name.Text,notes=x.Value.Notes.Text})
     };
     private void RestoreShellState(JsonElement ui)
@@ -107,6 +116,13 @@ public partial class MainWindow
             ComponentAction(()=>RestoreComponentRaw(raw.GetString()!,true));
             if(component.TryGetProperty("camera",out var camera) && camera.ValueKind==JsonValueKind.Object) _componentViewport?.RestoreCamera(camera);
             _componentViewport?.SetActive(_workspace==Workspace.ComponentDesigner&&WindowState!=WindowState.Minimized);
+        }
+        if(shell.TryGetProperty("assembly",out var assembly) && assembly.ValueKind==JsonValueKind.Object && assembly.TryGetProperty("rawDraft",out var assemblyRaw) && assemblyRaw.ValueKind==JsonValueKind.String)
+        {
+            if(_assemblyViewport is null) BuildAssemblyEditor();
+            AssemblyAction(()=>RestoreAssemblyRaw(assemblyRaw.GetString()!,true));
+            if(assembly.TryGetProperty("camera",out var camera) && camera.ValueKind==JsonValueKind.Object) _assemblyViewport?.RestoreCamera(camera);
+            _assemblyViewport?.SetActive(_workspace==Workspace.AssemblyEditor&&WindowState!=WindowState.Minimized);
         }
     }
 }

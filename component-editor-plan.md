@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–2 complete. Stages 3–11 remain to be implemented; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
+Prepared: 2026-10-16. Status: Stages 0–3 complete. Stages 4–11 remain to be implemented; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -556,3 +556,12 @@ Priority change: the user requested Garage before component authoring. The first
 - Published revisions are immutable and content-verified, with atomic head publication, optimistic conflict checks, independent clones, revision comparisons, undo/redo and raw-text recovery drafts. Existing mass metadata survives edits. Component authoring does not run vehicle physics. The viewport releases rendering/timer resources while hidden.
 - 87/87 regression checks pass. `--component-proof` verifies all four templates, dimension changes, custom points, publishing/reopening, undo/redo, measurement, recovery and hidden rendering. Captures under `artifacts/component-designer` were inspected. Build succeeded; NuGet vulnerability lookup was unavailable through the restricted network (NU1900).
 - Next: Stage 3 nested graph resolution, assembly editing and mobility checks. These rigid templates are synthetic authoring examples; they do not establish a physically validated vehicle topology.
+
+### Stage 3 checkpoint — 2026-10-17
+
+- Assembly Editor inserts component/assembly instances, edits their placements, ports and typed joints, mates port frames, groups selected children while preserving crossing connections, mirrors instances, and publishes revisions. Undo/redo, raw drafts, shell recovery and hidden viewport lifecycle are covered. A synthetic analytic corner is available as an authoring example.
+- Graph compilation rejects transitive cycles, missing interfaces, unsupported mates, conflicting exact/latest revisions, invalid frame axes and distance lengths. Latest heads are captured once per dependency. Compatible updates propagate together; incompatible updates retain the complete previous graph, including a content-verified fallback stored on disk. Distance-joint rest lengths are captured on publication.
+- Numerical constraint-Jacobian checks cover all seven joint primitives. The analytic grounded corner has rank 17 and one operating freedom; a spatially mirrored nested pair has two. Redundant constraints and unclosed poses are reported. This is local mobility validation, not a certificate of finite travel, load equilibrium or OEM accuracy.
+- Portable bundles include every exact source revision and its content hash. Frozen reopening does not follow later heads; import creates independent identities, pins child revisions and archives the source bundle.
+- 88/88 regression checks pass. `--assembly-proof` passes grouping, mating, mirroring, undo, recovery, compatible refresh, conflict retention after reopening, frozen export and hidden rendering. The shell and Garage-analysis proofs also pass; captures under `artifacts/assembly-editor` were inspected. Empty assembly camera fitting was fixed. Build succeeds with the previously disclosed NU1900 network warning.
+- Next: Stage 4 explicit front/rear topology and continuation. The analytic double-wishbone example is not a replacement for the GR86 rear's trailing/toe-link mechanism.

@@ -60,6 +60,7 @@ public partial class App : Application
             if(e.Args.Contains("--garage-proof")) window.RunGarageProof();
             if(e.Args.Contains("--garage-analysis-proof")) window.RunGarageAnalysisProof();
             if(e.Args.Contains("--component-proof")) window.RunComponentProof();
+            if(e.Args.Contains("--assembly-proof")) window.RunAssemblyProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

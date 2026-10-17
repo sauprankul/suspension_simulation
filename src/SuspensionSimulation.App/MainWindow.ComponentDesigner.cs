@@ -52,7 +52,7 @@ public partial class MainWindow
     private void BuildComponentDesigner()
     {
         var proof=Environment.GetCommandLineArgs().Any(x=>x.Contains("proof",StringComparison.Ordinal));
-        _designLibrary=new DesignAssetLibrary(Path.Combine(App.RepositoryRoot,proof?"artifacts/component-designer/"+App.RunId:"library/design"));
+        _designLibrary??=new DesignAssetLibrary(Path.Combine(App.RepositoryRoot,proof?"artifacts/component-designer/"+App.RunId:"library/design"));
         var old=_workspaceViews[Workspace.ComponentDesigner];_shell.Children.Remove(old);
         var metadata=_workspaceDrafts[Workspace.ComponentDesigner];
         ((Panel)metadata.Name.Parent).Children.Remove(metadata.Name);((Panel)metadata.Notes.Parent).Children.Remove(metadata.Notes);
@@ -111,6 +111,7 @@ public partial class MainWindow
         _componentAutosave.Tick+=(_,_)=>{_componentAutosave.Stop();try {_designLibrary.SaveDraft("component-workspace",CaptureComponentRaw());}catch(Exception error) {_componentStatus.Text="Draft recovery could not save: "+error.Message;}};
         foreach(var box in new[]{metadata.Name,metadata.Notes,_componentLength,_componentWidth,_componentHeight}) box.TextChanged+=(_,_)=>ScheduleComponentDraft();
         _componentKind.SelectionChanged+=(_,_)=>ScheduleComponentDraft();
+        _componentPoints.CollectionChanged+=(_,_)=>ScheduleComponentDraft();_componentFrames.CollectionChanged+=(_,_)=>ScheduleComponentDraft();_componentPorts.CollectionChanged+=(_,_)=>ScheduleComponentDraft();_componentEdges.CollectionChanged+=(_,_)=>ScheduleComponentDraft();
         ComponentAction(RefreshComponentLibrary);NewComponent(false);
         _componentRecoveryAtOpen=_designLibrary.ReadDraft("component-workspace");_componentReady=true;
         if(_componentRecoveryAtOpen is not null) _componentStatus.Text="A recovery draft is available. Choose Recover last draft to open it.";

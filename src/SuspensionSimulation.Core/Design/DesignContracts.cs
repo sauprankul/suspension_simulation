@@ -19,6 +19,10 @@ public readonly record struct DesignVector(double X, double Y, double Z)
     [JsonIgnore] public double Length => Math.Sqrt(X*X+Y*Y+Z*Z);
     public double Dot(DesignVector other) => X*other.X+Y*other.Y+Z*other.Z;
     public static DesignVector operator -(DesignVector a, DesignVector b) => new(a.X-b.X,a.Y-b.Y,a.Z-b.Z);
+    public static DesignVector operator +(DesignVector a, DesignVector b) => new(a.X+b.X,a.Y+b.Y,a.Z+b.Z);
+    public static DesignVector operator *(DesignVector a, double b) => new(a.X*b,a.Y*b,a.Z*b);
+    public static DesignVector operator /(DesignVector a, double b) => a*(1/b);
+    public DesignVector Cross(DesignVector b)=>new(Y*b.Z-Z*b.Y,Z*b.X-X*b.Z,X*b.Y-Y*b.X);
 }
 
 // Axis is local +Z, reference direction is local +X; +Y is Z cross X.
@@ -65,10 +69,17 @@ public sealed record ComponentInstance(string Id, AssetReference Definition, Ins
 public sealed record AssemblyInstance(string Id, AssetReference Definition, InstancePlacement Placement)
     : PhysicalInstance(Id, Definition, Placement);
 public sealed record InstancePort(string InstanceId, string PortId);
-public sealed record AssemblyJoint(string Id, JointKind Kind, InstancePort First, InstancePort Second);
+public sealed record AssemblyJoint(string Id, JointKind Kind, InstancePort First, InstancePort Second)
+{
+    public double? DistanceM {get;init;}
+}
 public sealed record ExportedPort(string Id, InstancePort Source);
 public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArray<PhysicalInstance> Instances,
-    ImmutableArray<AssemblyJoint> Joints, ImmutableArray<ExportedPort> Ports);
+    ImmutableArray<AssemblyJoint> Joints, ImmutableArray<ExportedPort> Ports)
+{
+    // Root-relative body or subtree paths. Nested definitions' local grounds are not world anchors.
+    public ImmutableArray<string> GroundedInstances {get;init;}=[];
+}
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ContinuousAdjustmentSelection), "continuous")]

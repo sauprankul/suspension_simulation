@@ -48,8 +48,10 @@ public static class DesignValidation
         {
             Require(Enum.IsDefined(joint.Kind),"Unknown joint kind.");Endpoint(joint.First);Endpoint(joint.Second);
             Require(joint.First.InstanceId != joint.Second.InstanceId,"An assembly joint must connect distinct instances.");
+            if(joint.DistanceM is {} distance) {Require(joint.Kind==JointKind.RigidDistance,"Rest distance belongs only to a distance joint.");Positive(distance,"Joint rest distance");}
         }
         foreach(var port in assembly.Ports) Endpoint(port.Source);
+        Unique(assembly.GroundedInstances,x=>x);
         // Transitive cycles, resolved port compatibility, axes/limits and Jacobian rank belong to graph compilation.
     }
 

@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace SuspensionSimulation.Kinematics;
 
-public enum SceneSource { Solved, FixedChassis, VisualEstimate, UnconstrainedReference }
+public enum SceneSource { Solved, FixedChassis, VisualEstimate, UnconstrainedReference, Authored }
 public sealed record InspectionPoint(string Id, string Label, string Corner, Vector3 PositionM, SceneSource Source);
 public sealed record InspectionSegment(string Id, string Label, string Corner, string Layer,
     Vector3 StartM, Vector3 EndM, SceneSource Source, bool ActiveLimit = false);

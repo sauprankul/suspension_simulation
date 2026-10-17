@@ -42,8 +42,8 @@ public partial class MainWindow : Window
         BuildShell();
         Loaded += (_, _) => Initialise();
         SizeChanged += (_, _) => ScheduleRender();
-        StateChanged += (_,_)=>_inspectionViewport?.SetActive(_inspectionEnabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);
-        Closed += (_,_)=>{_renderTimer.Stop();_inspectionViewport?.Dispose();};
+        StateChanged += (_,_)=>{_inspectionViewport?.SetActive(_inspectionEnabled && IsSimulationWorkspace && WindowState!=WindowState.Minimized);_componentViewport?.SetActive(_workspace==Workspace.ComponentDesigner&&WindowState!=WindowState.Minimized);};
+        Closed += (_,_)=>{_renderTimer.Stop();_inspectionViewport?.Dispose();CloseComponentDesigner();};
     }
 
     private void Initialise()

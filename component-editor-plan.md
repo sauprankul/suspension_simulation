@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–1 complete. Stages 2–11 remain to be implemented.
+Prepared: 2026-10-16. Status: Stages 0–2 complete. Stages 3–11 remain to be implemented; existing visualizers are Garage-driven through the explicitly provisional reference adapter.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -549,3 +549,10 @@ Priority change: the user requested Garage before component authoring. The first
 - Accepted snapshots and exports freeze Garage IDs, revision numbers, entry hashes, selected equipment IDs and the reference catalog hash. Missing/archived/invalid selections reject publication without replacing the last complete result. No silent substitute setup is used.
 - The adapter intentionally retains the accepted **provisional reference physics**, synthetic geometry, estimated limits, legacy workbook conversion and alignment calibration. This satisfies the requested Garage-driven existing visualizers but does not claim completion of new-model Stages 4–6 or the full Stage 7/8 physical migration.
 - 86/86 regression checks pass, plus an app-owned `--garage-analysis-proof` covering stock sources, ignored ad-hoc controls, independent custom equipment, 2D/3D identity, export provenance, revision updates and stale/recovery behavior. Captures are under `artifacts/garage-analysis-proof`. Next: Stage 2 authoring, then graph/topology/force-law gates.
+
+### Stage 2 checkpoint — 2026-10-17
+
+- Component Designer creates dimension-driven rigid links, wishbones, uprights and top mounts. Named points, right-handed frames, typed ports and skeleton edges can be edited in custom-coordinate mode. Joint axes and exact named-point/frame measurements share the existing viewport; arbitrary coordinates and approximate surface picking are also available.
+- Published revisions are immutable and content-verified, with atomic head publication, optimistic conflict checks, independent clones, revision comparisons, undo/redo and raw-text recovery drafts. Existing mass metadata survives edits. Component authoring does not run vehicle physics. The viewport releases rendering/timer resources while hidden.
+- 87/87 regression checks pass. `--component-proof` verifies all four templates, dimension changes, custom points, publishing/reopening, undo/redo, measurement, recovery and hidden rendering. Captures under `artifacts/component-designer` were inspected. Build succeeded; NuGet vulnerability lookup was unavailable through the restricted network (NU1900).
+- Next: Stage 3 nested graph resolution, assembly editing and mobility checks. These rigid templates are synthetic authoring examples; they do not establish a physically validated vehicle topology.

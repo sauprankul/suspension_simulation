@@ -203,7 +203,8 @@ public partial class MainWindow
         using(var drawing=visual.RenderOpen())
         {
             drawing.DrawImage(layout,new Rect(0,0,ActualWidth,ActualHeight));
-            if(_inspectionEnabled && RootGrid.Visibility==Visibility.Visible && _inspectionViewport is {} inspector)
+            var inspector=_workspace==Workspace.ComponentDesigner?_componentViewport:_inspectionEnabled&&RootGrid.Visibility==Visibility.Visible?_inspectionViewport:null;
+            if(inspector is not null)
             {
                 var origin=inspector.Viewport.TranslatePoint(new Point(0,0),this);
                 drawing.DrawImage(HelixToolkit.Wpf.SharpDX.ViewportExtensions.RenderBitmap(inspector.Viewport),new Rect(origin,new Size(inspector.Viewport.ActualWidth,inspector.Viewport.ActualHeight)));

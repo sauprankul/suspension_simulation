@@ -33,6 +33,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
     private InspectionSideSnapshot? _side;
     private long _frameCount;
     private bool _initialFit;
+    private readonly bool _engineeringDashboard;
     private readonly RenderTimerResolution _timerResolution=new();
     internal bool TimerResolutionActive=>_timerResolution.Active;
     private readonly DispatcherTimer _renderPump=new(DispatcherPriority.Background) {Interval=TimeSpan.FromMilliseconds(8)};
@@ -58,8 +59,9 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         }
     }
 
-    public InspectionViewport()
+    public InspectionViewport(bool engineeringDashboard=true)
     {
+        _engineeringDashboard=engineeringDashboard;
         _effects=new DefaultEffectsManager(new EffectsManagerConfiguration {EnableSoftwareRendering=false});
         try
         {
@@ -94,26 +96,30 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         Viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Pan,new MouseGesture(MouseAction.LeftClick)));
         Viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Pan,new MouseGesture(MouseAction.MiddleClick)));
         var grid=new Grid();grid.RowDefinitions.Add(new(){Height=GridLength.Auto});grid.RowDefinitions.Add(new());
-        grid.RowDefinitions.Add(new(){Height=new GridLength(264)});grid.RowDefinitions.Add(new(){Height=new GridLength(0)});
+        grid.RowDefinitions.Add(new(){Height=new GridLength(engineeringDashboard?264:68)});grid.RowDefinitions.Add(new(){Height=new GridLength(0)});
         var tools=new WrapPanel {Margin=new Thickness(0,0,0,5)};
         foreach(var name in new[]{"Isometric","Front","Rear","Side","Top","Fit / reset"})
         {var button=new Button {Content=name,Padding=new Thickness(6,3,6,3),Margin=new Thickness(0,0,3,3)};button.Click+=(_,_)=>Preset(name);tools.Children.Add(button);}
         foreach(var layer in new[]{"chassis","front","rear","bars","wheels","labels","ground","reference"})
         {
-            var check=new CheckBox {Content=layer,IsChecked=_visible.Contains(layer),Margin=new Thickness(3),Foreground=Brushes.White};
+            if(!engineeringDashboard&&layer=="reference") continue;
+            var caption=engineeringDashboard?layer:layer switch {"chassis"=>"Z axes","front"=>"structure","rear"=>"X axes","bars"=>"Y axes","wheels"=>"points",_=>layer};
+            var check=new CheckBox {Content=caption,IsChecked=_visible.Contains(layer),Margin=new Thickness(3),Foreground=Brushes.White};
             _layerChecks[layer]=check;
             check.Checked+=(_,_)=>{_visible.Add(layer);ApplyVisibility();};
             check.Unchecked+=(_,_)=>{_visible.Remove(layer);ApplyVisibility();};tools.Children.Add(check);
         }
+        if(engineeringDashboard)
+        {
         var ghost=new CheckBox {Content="neutral ghost",Foreground=Brushes.White,Margin=new Thickness(3)};
         _layerChecks["ghost"]=ghost;
         ghost.Checked+=(_,_)=>{_visible.Add("ghost");ApplyVisibility();};ghost.Unchecked+=(_,_)=>{_visible.Remove("ghost");ApplyVisibility();};tools.Children.Add(ghost);
         var export=new Button {Content="Export snapshot",Padding=new Thickness(6,3,6,3),Margin=new Thickness(3)};
         export.Click+=(_,_)=>ExportRequested?.Invoke();tools.Children.Add(export);
+        }
         grid.Children.Add(tools);var navigationHost=BuildNavigationHost();Grid.SetRow(navigationHost,1);grid.Children.Add(navigationHost);
         var info=new StackPanel {Margin=new Thickness(0,4,0,0),ClipToBounds=true};
-        info.Children.Add(_travel);
-        info.Children.Add(BuildReadoutDashboard());
+        if(engineeringDashboard) {info.Children.Add(_travel);info.Children.Add(BuildReadoutDashboard());}
         info.Children.Add(new TextBlock {Text="Drag model: pan · Drag cube: orbit · Drag ring: roll · Wheel: zoom · Click: inspect",Foreground=Brushes.LightGray,FontSize=10,Height=15});
         var selectionRow=new DockPanel {Height=24};
         var details=new Button {Content="Details",Padding=new Thickness(5,1,5,1)};details.Click+=(_,_)=>ShowDetails();DockPanel.SetDock(details,Dock.Right);selectionRow.Children.Add(details);
@@ -157,6 +163,14 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
 
     public void SetScene(InspectionScene scene)
     {
+        if(!_engineeringDashboard)
+        {
+            var lines=scene.Segments.Select(x=>x.Id).Concat(scene.Points.Select(x=>x.Id+".marker")).ToHashSet();
+            var labels=scene.Segments.Select(x=>x.Id).ToHashSet();
+            foreach(var id in _models.Keys.Where(x=>!x.StartsWith("ground.") && !lines.Contains(x) && !(x.StartsWith("label-leader.")&&labels.Contains(x[13..]))).ToArray())
+            {Viewport.Items.Remove(_models[id].Model);_models.Remove(id);}
+            foreach(var id in _labels.Keys.Where(x=>!labels.Contains(x)).ToArray()) {Viewport.Items.Remove(_labels[id].Model);_labels.Remove(id);}
+        }
         _scene=scene;
         _status.Foreground=Brushes.LightSteelBlue;
         _status.ToolTip=null;
@@ -164,7 +178,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         {
             SetLine(segment.Id,segment.Layer,segment.StartM,segment.EndM,
                 segment.ActiveLimit?Colors.Tomato:segment.Id.EndsWith(".spring")?Colors.LimeGreen:ColorFor(segment.Layer),segment.Source==SceneSource.UnconstrainedReference);
-            if(!segment.Id.EndsWith("-arm-rear") && (segment.Source==SceneSource.Solved || segment.Id is "rack.housing" or "front-bar.axis" or "rear-bar.axis" || segment.Layer=="reference"))
+            if(!segment.Id.EndsWith("-arm-rear") && (segment.Source is SceneSource.Solved or SceneSource.Authored || segment.Id is "rack.housing" or "front-bar.axis" or "rear-bar.axis" || segment.Layer=="reference"))
                 SetLabel(segment.Id,segment.Layer,LabelCaption(segment),(segment.StartM+segment.EndM)/2);
         }
         foreach(var point in scene.Points)
@@ -196,7 +210,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         var selected=SelectedId;
         _components.ItemsSource=scene.Segments.Select(x=>new ComponentChoice(x.Id,$"{x.Corner} · {x.Label}")).Concat(scene.Points.Select(x=>new ComponentChoice(x.Id,$"{x.Corner} · {x.Label}"))).Concat(scene.Wheels.Select(x=>new ComponentChoice(x.Corner+".tire",x.Corner+" · Tire (visual estimate)"))).ToArray();
         _components.SelectedValue=selected;ApplyVisibility();ShowSelection();
-        _status.Text=$"Live · {scene.StateId} · synthetic geometry / provisional equilibrium";
+        _status.Text=_engineeringDashboard?$"Live · {scene.StateId} · synthetic geometry / provisional equilibrium":$"Authored geometry · {scene.StateId}";
         _technical.Text=$"{Adapter} · {(Software?"SOFTWARE":"hardware GPU")} · {scene.StateId}\n{string.Join(" ",scene.Diagnostics)}";
     }
 
@@ -316,7 +330,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
                 "Further load changes the reaction and the remaining free body motion. Unloading releases the stop. RSD is undefined if both axles have active rigid stops.";
         }
     }
-    private static string Source(SceneSource source)=>source switch {SceneSource.FixedChassis=>"fixed chassis",SceneSource.VisualEstimate=>"visual estimate",SceneSource.UnconstrainedReference=>"not constrained by current solver",_=>"solved geometry"};
+    private static string Source(SceneSource source)=>source switch {SceneSource.Authored=>"authored geometry",SceneSource.FixedChassis=>"fixed chassis",SceneSource.VisualEstimate=>"visual estimate",SceneSource.UnconstrainedReference=>"not constrained by current solver",_=>"solved geometry"};
     private static string Coordinates(Vector3 p)=>$"({p.X:0.000}, {p.Y:0.000}, {p.Z:0.000}) m";
     private static Color ColorFor(string layer)=>layer switch {"front"=>Colors.DeepSkyBlue,"rear"=>Colors.Orange,"bars"=>Colors.MediumPurple,"reference"=>Colors.DarkGray,_=>Colors.SlateGray};
     public void SetActive(bool active)

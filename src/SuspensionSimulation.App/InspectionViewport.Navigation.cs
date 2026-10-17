@@ -19,6 +19,8 @@ internal sealed partial class InspectionViewport
     private Point _pickStart;
     private readonly Dictionary<string,CheckBox> _layerChecks=new();
     private int _cubeDowns,_cubeMoves,_cubeUps;
+    public bool MeasurementPicking {get;set;}
+    public event Action<Vector3>? PointPicked;
     internal object CubeInputState=>new {_cubeDowns,_cubeMoves,_cubeUps,drag=_navigationDrag?.ToString(),captured=_navigation.IsMouseCaptured};
 
     private FrameworkElement BuildNavigationHost()
@@ -56,7 +58,10 @@ internal sealed partial class InspectionViewport
             if((point-_pickStart).Length>=4) return;
             // Pan handles the press before Helix raises MouseDown3D. Pick an unmoved
             // release directly, so a click selects while a drag remains a pan.
-            if(Viewport.FindHits(point).FirstOrDefault()?.ModelHit is Element3D {Tag:string id})
+            var hit=Viewport.FindHits(point).FirstOrDefault();
+            if(MeasurementPicking && hit is not null)
+            {PointPicked?.Invoke(new((float)hit.PointHit.X,(float)hit.PointHit.Y,(float)hit.PointHit.Z));e.Handled=true;return;}
+            if(hit?.ModelHit is Element3D {Tag:string id})
                 Select(id.Replace(".marker","",StringComparison.Ordinal));
         };
         Viewport.PreviewMouseWheel+=(_,e)=>{Viewport.AddZoomForce(-e.Delta*.001);e.Handled=true;};

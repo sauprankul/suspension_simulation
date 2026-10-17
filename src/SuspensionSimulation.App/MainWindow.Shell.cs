@@ -70,10 +70,12 @@ public partial class MainWindow
     private void NavigateWorkspace(Workspace workspace)
     {
         if(!Enum.IsDefined(workspace)) throw new ArgumentOutOfRangeException(nameof(workspace));
+        if(workspace==Workspace.ComponentDesigner && _componentViewport is null) BuildComponentDesigner();
         _workspace=workspace;RootGrid.Visibility=IsSimulationWorkspace?Visibility.Visible:Visibility.Collapsed;
         foreach(var (destination,view) in _workspaceViews) view.Visibility=destination==workspace?Visibility.Visible:Visibility.Collapsed;
         if(IsSimulationWorkspace) {SetInspectionMode(workspace==Workspace.Visualizer3D);EnsureGarageAnalysisCurrent();}
         else _inspectionViewport?.SetActive(false);
+        _componentViewport?.SetActive(workspace==Workspace.ComponentDesigner && WindowState!=WindowState.Minimized);
         Title=IsSimulationWorkspace?"Suspension Simulation — Stock GR86 vs BRZ":"Suspension Simulation — "+WorkspaceName(workspace);
     }
 
@@ -81,6 +83,7 @@ public partial class MainWindow
     {
         workspace=_workspace.ToString(),
         analysis=new {a=_analysisA.SelectedValue,b=_analysisB.SelectedValue},
+        component=_componentReady?new {assetId=_componentId,baseRevision=_componentBaseRevision,rawDraft=CaptureComponentRaw(),camera=_componentViewport?.CaptureCamera()}:null,
         drafts=_workspaceDrafts.ToDictionary(x=>x.Key.ToString(),x=>new {name=x.Value.Name.Text,notes=x.Value.Notes.Text})
     };
     private void RestoreShellState(JsonElement ui)
@@ -98,5 +101,12 @@ public partial class MainWindow
                 {fields.Name.Text=draft.GetProperty("name").GetString()??"";fields.Notes.Text=draft.GetProperty("notes").GetString()??"";}
         if(Enum.TryParse<Workspace>(shell.GetProperty("workspace").GetString(),out var destination) && Enum.IsDefined(destination)) NavigateWorkspace(destination);
         else throw new ArgumentException("Unknown saved workspace.");
+        if(shell.TryGetProperty("component",out var component) && component.ValueKind==JsonValueKind.Object && component.TryGetProperty("rawDraft",out var raw) && raw.ValueKind==JsonValueKind.String)
+        {
+            if(_componentViewport is null) BuildComponentDesigner();
+            ComponentAction(()=>RestoreComponentRaw(raw.GetString()!,true));
+            if(component.TryGetProperty("camera",out var camera) && camera.ValueKind==JsonValueKind.Object) _componentViewport?.RestoreCamera(camera);
+            _componentViewport?.SetActive(_workspace==Workspace.ComponentDesigner&&WindowState!=WindowState.Minimized);
+        }
     }
 }

@@ -45,7 +45,11 @@ public sealed record MeasuredDistance(string Id, string StartPointId, string End
 // A component may later compile into multiple rigid internal bodies (e.g. a telescopic shock).
 public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKind Kind,
     ImmutableArray<NamedDesignPoint> Points, ImmutableArray<NamedDesignFrame> Frames,
-    ImmutableArray<AttachmentPort> Ports, ImmutableArray<DesignDimension> Dimensions, ComponentMass? Mass);
+    ImmutableArray<AttachmentPort> Ports, ImmutableArray<DesignDimension> Dimensions, ComponentMass? Mass)
+{
+    public RigidTemplateSpec? Template {get;init;}
+    public ImmutableArray<VisualEdge> VisualEdges {get;init;}=[];
+}
 
 /// <summary>A null revision follows latest compatible published; frozen results always use exact revisions.</summary>
 public sealed record AssetReference(string AssetId, string? RevisionId = null);

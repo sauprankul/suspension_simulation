@@ -36,7 +36,11 @@ public sealed class GarageLibrary(string directory)
     public GarageEntry Save(GarageEntry draft)
     {
         if(string.IsNullOrWhiteSpace(draft.Name) || draft.Name.Trim().Length>120 || draft.Notes is null) throw new ArgumentException("Enter a name of 1–120 characters and valid notes.");
-        if(draft.Configuration is {} setup) DesignValidation.Validate(setup);
+        if(draft.Configuration is {} setup)
+        {
+            DesignValidation.Validate(setup);
+            if(setup.MechanicalValues is null) throw new ArgumentException("A saved physical car must explicitly own its spring/bar values. Migrate or reopen the car in Garage first.");
+        }
         var current=Load(draft.Id);
         if((current?.Revision??0)!=draft.Revision) throw new InvalidOperationException("This Garage entry has a newer saved revision. Reopen it before saving.");
         var saved=draft with {Revision=checked(draft.Revision+1),Name=draft.Name.Trim()};

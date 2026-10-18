@@ -86,6 +86,7 @@ public static class DesignValidation
     public static void Validate(GarageSetup setup)
     {
         Identity(setup.Identity);Reference(setup.RootAssembly);
+        if(setup.MechanicalValues is {} mechanical) InstanceMechanicalValidation.Validate(mechanical);
         Unique(setup.Equipment,x => x.InstancePath+"\0"+x.SlotId);
         Unique(setup.Adjustments,x => x.InstancePath+"\0"+x.AdjustmentId);
         foreach(var equipment in setup.Equipment)

@@ -20,6 +20,7 @@ public sealed record ResolvedAssemblyGraph(AssemblyDefinition Root,ImmutableArra
     public ImmutableArray<ResolvedEquipmentSlot> EquipmentSlots {get;init;}=[];
     public ImmutableArray<ResolvedSetupAdjustment> SetupAdjustments {get;init;}=[];
     public ImmutableArray<EquipmentSelection> SelectedEquipment {get;init;}=[];
+    public ImmutableArray<InstanceMechanicalValue>? ConfiguredMechanics {get;init;}
 }
 public sealed record GraphResolution(ResolvedAssemblyGraph? Graph,bool IsStale,string? Conflict);
 public sealed record PortableDesignBundle(string SchemaVersion,AssetReference Root,ImmutableArray<ComponentDefinition> Components,

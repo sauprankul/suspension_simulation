@@ -59,6 +59,8 @@ internal sealed partial class BumpStudioWindow : Window
         Field(contacts,"plateOuter","Platen outer radius (mm)","30");Field(contacts,"plateInner","Platen central-hole radius (mm)","0");Field(contacts,"lowerGap","Lower fixture gap (mm; negative = interference)","0");Field(contacts,"upperGap","Upper fixture gap (mm; negative = interference)","0");Field(contacts,"friction","Fixture friction coefficient","0");contacts.Children.Add(_lowerBonded);contacts.Children.Add(_upperBonded);contacts.Children.Add(_shaft);Field(contacts,"shaftRadius","Shaft radius (mm)","3.95");Field(contacts,"shaftOffset","Shaft starting offset along frame +Z (mm)","-10");Field(contacts,"shaftLength","Shaft length (mm)","60");
         contacts.Children.Add(new TextBlock {Text="FoldSlave/FoldMaster select the two CAD surface sets that can close against each other. Shaft contacts require explicit bore-face selection. Negative gaps describe an installation step; the verified worker must resolve it before compression.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
         var materials=Tab("Material");materials.Children.Add(_material);materials.Children.Add(_materialInfo);Field(materials,"condition","Material / test conditions","Not supplied");Field(materials,"materialSource","Material source / notes","Needs calibration; no fitted compression data supplied");
+        Field(materials,"law0","Coefficient 1: TPU C1 / foam cp (MPa)","0");Field(materials,"law1","Coefficient 2: TPU C2 / foam c1 (MPa)","0");Field(materials,"law2","Coefficient 3: TPU bulk K (MPa) / foam exponent m1","0");
+        materials.Children.Add(new TextBlock {Text="Preset selection copies Estimated coefficients into this recipe. Edit any coefficient; shared catalog values remain unchanged. TPU uses an isotropic tensile-based estimate; foam uses approximate manufacturer guide-curve scales. No measured calibration or backend approval is implied.",TextWrapping=TextWrapping.Wrap});
         var loadCard=new Button {Content="Import documented material card JSON…",Margin=new Thickness(0,8,0,4)};loadCard.Click+=(_,_)=>Act(ImportMaterialCard);materials.Children.Add(loadCard);
         materials.Children.Add(new TextBlock {Text="Printed TPU / TPE recipe",FontWeight=FontWeights.Bold,Margin=new Thickness(0,12,0,0)});materials.Children.Add(_printRepresentation);
         Field(materials,"grade","Manufacturer and exact filament grade","Not supplied");Vector(materials,"layerNormal","Layer normal in CAD (unit direction)",["0","0","1"]);
@@ -103,6 +105,7 @@ internal sealed partial class BumpStudioWindow : Window
         var material=_material.SelectedItem as BumperMaterialCard??throw new ArgumentException("Select a material card.");BumperPrintRecipe? print=null;
         int Integer(string key)=>int.TryParse(_fields[key].Text,NumberStyles.Integer,CultureInfo.InvariantCulture,out var value)?value:throw new ArgumentException(key+" must be an integer.");
         if(material.Family==BumperMaterialFamily.PrintedTpu) print=new((PrintedGeometryRepresentation)_printRepresentation.SelectedItem,_fields["grade"].Text,Vector("layerNormal"),Metres("layer"),Metres("nozzle"),Metres("lineWidth"),Integer("walls"),Metres("wallThickness"),Integer("topLayers"),Integer("bottomLayers"),_fields["infill"].Text,Number("infillPercent"),_fields["processing"].Text,_fields["conditioning"].Text);
+        if(EstimatedBumperMaterials.Keys(material).Length==3) material=EstimatedBumperMaterials.Override(material,[Number("law0")*1e6,Number("law1")*1e6,Number("law2")*(material.Family==BumperMaterialFamily.PrintedTpu?1e6:1)]);
         var result=material with {Conditions=_fields["condition"].Text,SourceNote=_fields["materialSource"].Text,PrintRecipe=print};BumpStudioContracts.ValidateMaterial(result);return result;
     }
     private BumperJobRecipe ReadRecipe()
@@ -155,7 +158,7 @@ internal sealed partial class BumpStudioWindow : Window
         // through a transient write/replace rather than moving controls or presenting half a poll.
         catch(Exception error) when(error is IOException or UnauthorizedAccessException or JsonException) { }
     }
-    private void UpdateMaterial() {if(_material.SelectedItem is BumperMaterialCard card) {_materialInfo.Text=$"{card.Readiness}\n{card.SourceNote}\n"+(card.Law is null?"No constitutive coefficients are supplied. A preparation recipe can be saved; no worker solve can use this card yet.":"Law "+card.Law.ModelKey+" · imported evidence is retained; worker support must be independently verified.");if(_fields.ContainsKey("condition")) {_fields["condition"].Text=card.Conditions;_fields["materialSource"].Text=card.SourceNote;}}}
+    private void UpdateMaterial() {if(_material.SelectedItem is BumperMaterialCard card) {SetMaterialCoefficients(card);_materialInfo.Text=$"{card.Readiness}\n{card.SourceNote}\n"+(card.Law is null?"No constitutive coefficients are supplied. A preparation recipe can be saved; no worker solve can use this card yet.":"Law "+card.Law.ModelKey+" · imported evidence is retained; worker support must be independently verified.");if(_fields.ContainsKey("condition")) {_fields["condition"].Text=card.Conditions;_fields["materialSource"].Text=card.SourceNote;}}}
     private void ImportMaterialCard()
     {
         var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Material card (*.json)|*.json"};if(dialog.ShowDialog(this)!=true) return;var card=DesignJson.Deserialize<BumperMaterialCard>(File.ReadAllText(dialog.FileName));BumpStudioContracts.ValidateMaterial(card);
@@ -166,7 +169,7 @@ internal sealed partial class BumpStudioWindow : Window
     }
     internal void SaveRecipe()
     {
-        var recipe=ReadRecipe();_recipeHash=_service.SaveRecipe(recipe);_status.Text="Preparation recipe saved: "+_service.RecipePath(_recipeHash)+"\n"+recipe.Material.Readiness+" · backend folding/contact verification and worker wiring remain required before solving.";SaveDraft();App.Log("Bumper preparation recipe saved: "+_recipeHash,"CAD");
+        var recipe=ReadRecipe();PreservePresetEvidence(recipe.Material);_recipeHash=_service.SaveRecipe(recipe);_status.Text="Preparation recipe saved: "+_service.RecipePath(_recipeHash)+"\n"+recipe.Material.Readiness+" · backend folding/contact verification and worker wiring remain required before solving.";SaveDraft();App.Log("Bumper preparation recipe saved: "+_recipeHash,"CAD");
     }
     private void ChooseRecipe() {var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Saved preparation recipe (*.json)|*.json",InitialDirectory=Path.Combine(_service.Root,"recipes")};if(dialog.ShowDialog(this)!=true) return;OpenRecipe(Path.GetFileNameWithoutExtension(dialog.FileName));}
     internal void OpenRecipe(string hash)

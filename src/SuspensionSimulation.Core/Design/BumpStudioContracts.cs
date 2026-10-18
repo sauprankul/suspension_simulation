@@ -44,9 +44,7 @@ public static class BumpStudioContracts
     public static bool IsSha(string value)=>value is {Length:64}&&value.All(Uri.IsHexDigit);
     public static IReadOnlyList<BumperMaterialCard> MaterialCatalog()
     {
-        var cards=new List<BumperMaterialCard>();
-        foreach(var density in new[]{350,400,450,500,550,600,650}) cards.Add(new("cellular-pu-"+density,"Microcellular PU · "+density+" kg/m³ · Needs calibration",BumperMaterialFamily.MicrocellularPolyurethane,density+" kg/m³ family",density,null,MaterialReadiness.NeedsCalibration,"Not supplied","Density is descriptive; no material law or manufacturer grade has been fitted.",[]));
-        foreach(var hardness in new[]{85,90,95}) cards.Add(new("printed-tpu-"+hardness,"Printed TPU "+hardness+"A · Needs calibration",BumperMaterialFamily.PrintedTpu,"TPU "+hardness+"A hardness family",null,hardness,MaterialReadiness.NeedsCalibration,"Not supplied","Hardness alone does not identify a compression law. Supply grade, print recipe and supporting compression/directional data.",[]));
+        var cards=EstimatedBumperMaterials.Catalog().ToList();
         cards.Add(new("user-defined","User-defined material · Needs calibration",BumperMaterialFamily.UserDefined,"Unspecified",null,null,MaterialReadiness.NeedsCalibration,"Not supplied","Import a documented compatible material card with its raw-data evidence.",[]));return cards;
     }
     public static void ValidateInspection(BumperCadInspection model)
@@ -68,6 +66,7 @@ public static class BumpStudioContracts
     {
         void Need(bool ok,string message) {if(!ok) throw new ArgumentException(message);}
         Need(material.SchemaVersion=="1.0"&&!string.IsNullOrWhiteSpace(material.Id)&&!string.IsNullOrWhiteSpace(material.Name)&&Enum.IsDefined(material.Family)&&Enum.IsDefined(material.Readiness),"Invalid material card identity.");
+        if(material.Readiness==MaterialReadiness.Calibrated&&material.Law is {} estimatedLaw&&estimatedLaw.FitEvidenceSha256==Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(EstimatedBumperMaterials.Evidence(material.Id))))) throw new ArgumentException("An estimated preset source record cannot establish physical calibration.");
         Need(!string.IsNullOrWhiteSpace(material.Conditions)&&!string.IsNullOrWhiteSpace(material.SourceNote)&&material.EvidenceSha256.All(IsSha),"Material conditions/source/evidence are required.");
         Need((material.DensityKgPerM3 is null||double.IsFinite(material.DensityKgPerM3.Value)&&material.DensityKgPerM3.Value>0)&&(material.ShoreA is null||double.IsFinite(material.ShoreA.Value)&&material.ShoreA is >=0 and <=100),"Invalid density or hardness.");
         if(material.Law is {} law) Need(!string.IsNullOrWhiteSpace(law.ModelKey)&&!string.IsNullOrWhiteSpace(law.StrainEnergyDefinition)&&law.ParametersSi.Count>0&&law.ParametersSi.All(p=>!string.IsNullOrWhiteSpace(p.Key)&&double.IsFinite(p.Value))&&IsSha(law.FitEvidenceSha256)&&material.EvidenceSha256.Contains(law.FitEvidenceSha256),"A material law requires explicit SI parameters, energy definition and retained fitting evidence.");

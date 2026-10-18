@@ -119,9 +119,13 @@ public sealed record PayloadMass(string Id, double MassKg, DesignVector Position
 public sealed record SetupMass(MassAccountingPolicy Policy, double? AggregateBaseMassKg,
     DesignVector BaseCenterOfMassM, ImmutableArray<PayloadMass> AddedPayloads);
 
-// No arbitrary geometry/rate override dictionary, prescribed camber/toe, or additive spring preload.
+// Configured mechanical values belong to this car; alignment remains a solved output.
 public sealed record GarageSetup(RevisionIdentity Identity, AssetReference RootAssembly,
-    ImmutableArray<EquipmentSelection> Equipment, ImmutableArray<AdjustmentSelection> Adjustments, SetupMass Mass);
+    ImmutableArray<EquipmentSelection> Equipment, ImmutableArray<AdjustmentSelection> Adjustments, SetupMass Mass)
+{
+    // Absent only in legacy/frozen documents. Migration captures source values explicitly.
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<InstanceMechanicalValue>? MechanicalValues {get;init;}
+}
 public sealed record ResolvedDependency(AssetKind Kind, string AssetId, string RevisionId, string Sha256);
 public sealed record FrozenResultManifest(string RootAssemblyId, ImmutableArray<ResolvedDependency> Dependencies);
 

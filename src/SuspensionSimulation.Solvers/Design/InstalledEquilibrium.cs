@@ -176,7 +176,9 @@ public sealed class InstalledEquilibrium
         var cg=state.Masses.Aggregate(new DesignVector(0,0,0),(sum,m)=>sum+m.Point*m.Kg)/mass;
         var wheels=state.Geometry.Motion.Wheels.Select(w=>
         {var forward=state.Chassis.Rotate(w.Forward);var outward=state.Chassis.Rotate(w.Outward);return w with {CenterM=state.Chassis.World(w.CenterM),Forward=forward,Outward=outward,CamberRad=-Math.Atan2(outward.Z,Math.Sqrt(outward.X*outward.X+outward.Y*outward.Y)),HeadingRad=Math.Atan2(forward.Y,forward.X)};}).ToImmutableArray();
-        var inputHash=Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(DesignJson.Serialize(new {input,manifest=_graph.Manifest,adjustments=_graph.AppliedAdjustments}))));
+        var inputText=DesignJson.Serialize(new {input,manifest=_graph.Manifest,adjustments=_graph.AppliedAdjustments});
+        if(_graph.ConfiguredMechanics is {} configured) inputText+="\nconfigured-mechanics:"+DesignJson.Serialize(configured);
+        var inputHash=Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(inputText)));
         return new(input,state.Chassis,state.Geometry.Motion,state.Geometry.Mechanics,wheels,[..normal],[..reactions],[.._graph.Root.Vehicle!.RideHeightDatums.Select(p=>new SolvedRideHeight(p.Id,p.Name,state.Chassis.World(p.PositionM).Z))],mass,cg,forceResidual,moment,residual,iterations,_poseEvaluations)
             {Manifest=_graph.Manifest,Adjustments=_graph.AppliedAdjustments,InputSha256=inputHash};
     }

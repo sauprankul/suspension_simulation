@@ -12,7 +12,7 @@ namespace SuspensionSimulation.App;
 
 internal sealed record GarageHardwareChoice(string Id,string Name);
 internal sealed record GaragePhysicalDraft(AssetReference Root,EquipmentSelection[] Equipment,Dictionary<string,string> Adjustments,
-    string Policy,string BaseKg,string CgX,string CgY,string CgZ,GaragePayloadRow[] Payloads);
+    string Policy,string BaseKg,string CgX,string CgY,string CgZ,GaragePayloadRow[] Payloads,GarageMechanicalDraftRow[]? Mechanics=null);
 internal sealed record GarageWorkspaceRecovery(string? SelectedId,Dictionary<string,GaragePhysicalDraft> Drafts);
 internal sealed class GaragePayloadRow
 {
@@ -42,13 +42,14 @@ public partial class MainWindow
         _designLibrary??=new DesignAssetLibrary(Path.Combine(App.RepositoryRoot,proof?"artifacts/component-designer/"+App.RunId:"library/design"));
         _physicalGarageCatalog=new(_designLibrary,App.RepositoryRoot);
         _physicalGarageCatalog.Migrate(_garage!);
+        if(_assemblyReady) RefreshAssemblyCatalog(); // Stock complete cars are seeded after the editor is built.
         _garageRoot.ToolTip="Published vehicle assembly. Hardware geometry and available slots/adjusters are owned by the Assembly Editor. References follow latest published revisions unless the saved setup pins a revision.";
         editor.Children.Insert(6,_garagePhysicalPanel);
         _garageRoot.SelectionChanged+=(_,_)=>
         {
             if(_garagePhysicalUpdating||_garageSelected is null||_garageRoot.SelectedValue is not string id) return;
             CachePhysicalGarageDraft();var previous=_garagePhysicalDrafts.GetValueOrDefault(_garageSelected.Id)??new GaragePhysicalDraft(new(id),[],[],nameof(MassAccountingPolicy.AggregateBase),"1360.778","51.5","0","460",[]);
-            _garagePhysicalDrafts[_garageSelected.Id]=previous with {Root=new(id),Equipment=[],Adjustments=[]};
+            _garagePhysicalDrafts[_garageSelected.Id]=previous with {Root=new(id),Equipment=[],Adjustments=[],Mechanics=null};
             FillPhysicalGarage(_garageSelected);
         };
     }
@@ -63,7 +64,7 @@ public partial class MainWindow
         return new(setup.RootAssembly,setup.Equipment.ToArray(),setup.Adjustments.ToDictionary(a=>GarageAdjustmentKey(a.InstancePath,a.AdjustmentId),a=>a switch
         {ContinuousAdjustmentSelection c=>GarageNumber(c.Fraction),DiscreteAdjustmentSelection d=>d.ChoiceId,_=>""}),
             setup.Mass.Policy.ToString(),setup.Mass.AggregateBaseMassKg is {} kg?GarageNumber(kg):"",GarageNumber(setup.Mass.BaseCenterOfMassM.X*1000),GarageNumber(setup.Mass.BaseCenterOfMassM.Y*1000),GarageNumber(setup.Mass.BaseCenterOfMassM.Z*1000),
-            setup.Mass.AddedPayloads.Select(p=>new GaragePayloadRow {Id=p.Id,Kg=GarageNumber(p.MassKg),Xmm=GarageNumber(p.PositionM.X*1000),Ymm=GarageNumber(p.PositionM.Y*1000),Zmm=GarageNumber(p.PositionM.Z*1000)}).ToArray());
+            setup.Mass.AddedPayloads.Select(p=>new GaragePayloadRow {Id=p.Id,Kg=GarageNumber(p.MassKg),Xmm=GarageNumber(p.PositionM.X*1000),Ymm=GarageNumber(p.PositionM.Y*1000),Zmm=GarageNumber(p.PositionM.Z*1000)}).ToArray(),setup.MechanicalValues is {} mechanics?MechanicalDraft(mechanics):null);
     }
     private void CachePhysicalGarageDraft()
     {
@@ -89,7 +90,7 @@ public partial class MainWindow
             else if(field.Input is TextBox) text="invalid:"+text;
             adjustments[key]=text;
         }
-        _garagePhysicalDrafts[entry.Id]=new(before.Root,equipment.ToArray(),adjustments,_garageMassPolicy.SelectedItem as string??before.Policy,_garageBaseMass.Text,_garageCgX.Text,_garageCgY.Text,_garageCgZ.Text,_garagePayloads.Select(p=>new GaragePayloadRow {Id=p.Id,Kg=p.Kg,Xmm=p.Xmm,Ymm=p.Ymm,Zmm=p.Zmm}).ToArray());
+        _garagePhysicalDrafts[entry.Id]=new(before.Root,equipment.ToArray(),adjustments,_garageMassPolicy.SelectedItem as string??before.Policy,_garageBaseMass.Text,_garageCgX.Text,_garageCgY.Text,_garageCgZ.Text,_garagePayloads.Select(p=>new GaragePayloadRow {Id=p.Id,Kg=p.Kg,Xmm=p.Xmm,Ymm=p.Ymm,Zmm=p.Zmm}).ToArray(),CaptureMechanicalDraft());
     }
     private static double AdjustmentToDisplay(AdjustmentPath path,double fraction)=>path switch
     {ThreadedAdjustmentPath t=>(t.MinimumLengthM+fraction*(t.MaximumLengthM-t.MinimumLengthM)-t.NominalLengthM)*1000,_=>fraction*100};
@@ -104,8 +105,10 @@ public partial class MainWindow
             var roots=_designLibrary!.Assemblies().Where(a=>a.Vehicle is not null).Select(a=>a.Identity.AssetId==draft.Root.AssetId&&draft.Root.RevisionId is not null?_designLibrary.LoadAssembly(a.Identity.AssetId,draft.Root.RevisionId)??a:a).ToArray();_garageRoot.ItemsSource=roots;_garageRoot.SelectedValue=draft.Root.AssetId;
             void Label(string name)=>_garagePhysicalPanel.Children.Add(new TextBlock {Text=name,FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,8,0,3)});
             Label("Physical vehicle assembly");_garagePhysicalPanel.Children.Add(_garageRoot);
+            var openCar=new Button {Content="Open complete vehicle in Assembly Editor",Margin=new Thickness(0,4,0,4)};openCar.Click+=(_,_)=>AssemblyAction(OpenGarageVehicle);_garagePhysicalPanel.Children.Add(openCar);
             _garagePhysicalPanel.Children.Add(new TextBlock {Text="Geometry and installation dimensions are synthetic/estimated. Static camber, toe and ride height are calculated from the installed hardware.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});
             var graph=new AssemblyGraphResolver(_designLibrary).Compile(draft.Root,draft.Equipment);_garagePhysicalGraph=graph;
+            FillGarageMechanical(graph,draft);
             foreach(var slot in graph.EquipmentSlots)
             {
                 Label(slot.InstancePath+" · "+slot.Definition.Name);
@@ -178,7 +181,7 @@ public partial class MainWindow
         }
         var policy=Enum.Parse<MassAccountingPolicy>(draft.Policy);var fields=_workspaceDrafts[Workspace.Garage];
         var original=entry.Configuration??_physicalGarageCatalog!.Create(fields.Name.Text);
-        var setup=original with {Identity=original.Identity with {Name=fields.Name.Text},RootAssembly=draft.Root,Equipment=[..draft.Equipment],Adjustments=[..selections],
+        var setup=original with {Identity=original.Identity with {Name=fields.Name.Text},RootAssembly=draft.Root,Equipment=[..draft.Equipment],Adjustments=[..selections],MechanicalValues=ReadMechanicalValues(draft.Mechanics??throw new ArgumentException("Review the car's spring/bar configuration first.")),
             Mass=new(policy,policy==MassAccountingPolicy.AggregateBase?GarageReadNumber(draft.BaseKg,"Base mass"):null,new(GarageReadNumber(draft.CgX,"CG X")/1000,GarageReadNumber(draft.CgY,"CG Y")/1000,GarageReadNumber(draft.CgZ,"CG Z")/1000),
                 [..draft.Payloads.Select(p=>new PayloadMass(p.Id,GarageReadNumber(p.Kg,"Payload mass"),new(GarageReadNumber(p.Xmm,"Payload X")/1000,GarageReadNumber(p.Ymm,"Payload Y")/1000,GarageReadNumber(p.Zmm,"Payload Z")/1000)))])};
         _=new GarageSetupResolver(_designLibrary!).Resolve(setup);return setup;

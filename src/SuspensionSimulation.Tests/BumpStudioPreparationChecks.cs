@@ -26,7 +26,14 @@ internal static class BumpStudioPreparationChecks
         Reject(()=>BumpStudioContracts.RequireVerifiedWorker(recipe,model,new HashSet<string>(),false));Reject(()=>BumpStudioContracts.RequireVerifiedWorker(recipe,model,new HashSet<string>(),true));
         var fitted=material with {Readiness=MaterialReadiness.Estimated,EvidenceSha256=[sha],Law=new("synthetic-contract-law",new Dictionary<string,double>{{"syntheticParameter",1}}.ToImmutableDictionary(),"Synthetic schema fixture only; no physical material prediction",sha),Validity=new(.3,"quasi-static loading","Synthetic contract conditions")};
         Reject(()=>BumpStudioContracts.RequireVerifiedWorker(recipe with {Material=fitted},model,new HashSet<string>{"synthetic-contract-law"},true));
-        foreach(var hardness in new[]{85,90,95}) {var card=BumpStudioContracts.MaterialCatalog().Single(c=>c.Id=="printed-tpu-"+hardness);if(card.Law is not null||card.Readiness!=MaterialReadiness.NeedsCalibration||card.ShoreA!=hardness) throw new Exception("Printed TPU placeholder fabricated material coefficients.");Reject(()=>BumpStudioContracts.ValidateMaterial(card));}
+        foreach(var card in EstimatedBumperMaterials.Catalog())
+        {
+            BumpStudioContracts.ValidateMaterial(card);if(card.Readiness!=MaterialReadiness.Estimated||card.Law is null) throw new Exception("Research preset was incorrectly classified.");
+            var keys=EstimatedBumperMaterials.Keys(card);var values=keys.Select(k=>card.Law.ParametersSi[k]).ToArray();values[0]*=1.2;var changed=EstimatedBumperMaterials.Override(card,values);
+            if(changed.Law!.ParametersSi[keys[0]]==card.Law.ParametersSi[keys[0]]||changed.Readiness!=MaterialReadiness.Estimated||BumpStudioContracts.Hash(changed)==BumpStudioContracts.Hash(card)) throw new Exception("Material override did not retain independent Estimated coefficients.");
+            values[0]=-1;Reject(()=>EstimatedBumperMaterials.Override(card,values));
+            Reject(()=>BumpStudioContracts.RequireVerifiedWorker(recipe with {Material=card},model,new HashSet<string>{card.Law.ModelKey},false));
+        }
         var round=DesignJson.Deserialize<BumperJobRecipe>(DesignJson.Serialize(recipe));if(BumpStudioContracts.Hash(round)!=BumpStudioContracts.Hash(recipe)) throw new Exception("Frozen recipe identity did not round trip.");
     }
     internal static void Verify()=>VerifyAsync().GetAwaiter().GetResult();
@@ -54,7 +61,7 @@ internal static class BumpStudioPreparationChecks
                 [new("lower",RigidBumperFixtureKind.AnnularPlane,frame,0,.03,0,false),new("upper",RigidBumperFixtureKind.AnnularPlane,frame with {OriginM=new(0,0,.04)},0,.03,0,true)],material,new(.003,2,true));
             var hash=service.SaveRecipe(recipe);if(service.LoadRecipe(hash).Material.PrintRecipe!=material.PrintRecipe) throw new Exception("Job recipe/print settings did not round trip.");
             var evidenceFile=Path.Combine(folder,"synthetic-evidence.txt");File.WriteAllText(evidenceFile,"Synthetic evidence-retention fixture; no material calibration claim.");var evidenceSha=service.PreserveMaterialEvidence(evidenceFile);
-            var withEvidence=recipe with {Material=material with {EvidenceSha256=[evidenceSha]}};var evidenceRecipeHash=service.SaveRecipe(withEvidence);File.WriteAllText(service.MaterialEvidencePath(evidenceSha),"tampered");
+            var withEvidence=recipe with {Material=material with {EvidenceSha256=material.EvidenceSha256.Add(evidenceSha)}};var evidenceRecipeHash=service.SaveRecipe(withEvidence);File.WriteAllText(service.MaterialEvidencePath(evidenceSha),"tampered");
             try {service.LoadRecipe(evidenceRecipeHash);throw new Exception("Modified material evidence was accepted.");}catch(InvalidDataException) { }
             void Reject(Action action) {try {action();}catch(ArgumentException) {return;}catch(InvalidOperationException) {return;}throw new Exception("Invalid preparation recipe was accepted.");}
             Reject(()=>service.SaveRecipe(recipe with {Contacts=recipe.Contacts.SetItem(0,recipe.Contacts[0] with {SlaveFaceTags=[int.MaxValue]})}));

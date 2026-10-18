@@ -53,6 +53,8 @@ Planning originally created only this document. Execution begins from viewer bas
 
 ## 3. Ownership: component, assembly, setup, result
 
+**Confirmed replacement rule, 2026-10-17:** reusable components/assemblies declare configurable parameters and allowed ranges; the saved complete-car configuration owns selected values per instance, including spring rate, torsion dimensions/material properties and material coefficients. Mechanical adjuster positions are saved; camber/toe/ride height remain calculated. This supersedes older shared-rate/dimension ownership statements below. Legacy concrete definitions may remain solely for migration/frozen compatibility. The current migration covers spring rates and torsion sections; general declarative templates and configured-context Component Editor/material binding remain unfinished.
+
 Keep four distinct concepts:
 
 | Layer | Owns | Must not own |
@@ -694,3 +696,9 @@ Priority change: the user requested Garage before component authoring. The first
 - Profiled actual isolated stock GR86/BRZ Garage inputs in optimized builds while the numerical study and regression work were active. Source resolution/validation/constructor phases are tens of milliseconds; repeated mechanism poses and dense finite-difference Jacobians dominate equilibrium work. The measured cold A/B request was 57.46 seconds with 16.8 GB of cumulative managed allocations; this is allocation traffic, not simultaneous RAM use or an isolated-machine latency guarantee. See `artifacts/installed-profile/summary.md` and the retained input/timing records.
 - Replaced the growing residual list and final array copy with one exactly sized output array. All constraint equations, row ordering, numerical steps and tolerances are preserved. Production-method allocations per 10000 driven residual evaluations fall from 140.00 MB to 97.36 MB (30.5%). This is not a total-job speedup claim.
 - **2500 bitwise comparisons** against the unchanged Release implementation pass across both stock vehicles, mirrored corners, all seven joint families, empty graphs, seeded finite poses and optional valid drivers (`artifacts/installed-residual-equivalence`). Focused installed equilibrium and analysis checks pass, including frozen replay, conflicts and cancellation. The final Release build passes and the user's latest editor state is restored. Broader numerical performance and production FEA/correlation work remain open.
+
+### Configured cars and editable material estimates — 2026-10-17
+
+- Saved physical cars explicitly own spring rate and torsion ID/OD/effective G per instance. Migration captures current values once; later shared-part changes do not overwrite them. Both visualizers and frozen replay apply these values. Garage edits/save/duplicate/invalid-input recovery and complete-vehicle Assembly Editor access are implemented. General configurable templates/ranges and configured-context Component Editor/material binding remain open.
+- Studio has Estimated TPU85/90/95A and PU350–650 presets with three editable coefficients retained in each recipe. Sources, assumptions, formulas and limits are in `docs/material-presets.md`. This is an estimated workflow, not physical calibration or backend admission. Focused persistence/replay/cancellation, STEP/material/evidence checks pass; the material override/reopen/raw-recovery native proof passes.
+- The latest full-Newton/no-line-search folding attempt failed after3442.4s at42.5511% absolute compression against requested60%. Its partial curve remains rejected. No replacement heavy job was started during this bounded ownership/material checkpoint. Production FEA and full plan completion remain pending.

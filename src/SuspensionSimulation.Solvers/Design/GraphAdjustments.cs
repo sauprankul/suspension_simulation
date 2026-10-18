@@ -29,9 +29,10 @@ public static class GraphAdjustments
             var body=lookup[p.BodyPath];var port=body.Component.Ports.Single(x=>x.Id==p.PortId);
             return p with {Frame=body.Transform.Frame(body.Component.Frames.Single(f=>f.Id==port.FrameId).Frame)};
         }
-        return source with {Bodies=bodies,Joints=[..source.Joints.Select(j=>j with {First=Port(j.First),Second=Port(j.Second)})],
+        var result=source with {Bodies=bodies,Joints=[..source.Joints.Select(j=>j with {First=Port(j.First),Second=Port(j.Second)})],
             Exports=source.Exports.ToImmutableDictionary(x=>x.Key,x=>Port(x.Value),StringComparer.Ordinal),Interfaces=source.Interfaces.ToImmutableDictionary(x=>x.Key,x=>Port(x.Value),StringComparer.Ordinal),
             ElasticElements=[..source.ElasticElements.Select(e=>e with {Component=Adjust(e.Path,e.Component),First=Port(e.First),Second=Port(e.Second)})],AppliedAdjustments=[..resolved]};
+        return GarageMechanicalConfiguration.Apply(result,source.ConfiguredMechanics);
     }
     public static double ThreadedOffset(ResolvedAssemblyGraph graph,string path,string? adjustmentId)
     {

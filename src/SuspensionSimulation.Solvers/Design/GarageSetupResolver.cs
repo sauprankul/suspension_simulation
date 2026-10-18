@@ -14,7 +14,7 @@ public sealed class GarageSetupResolver(IDesignAssetSource source)
         foreach(var selected in setup.Adjustments)
             if(!graph.SetupAdjustments.Any(a=>a.InstancePath==selected.InstancePath&&a.Definition.Id==selected.AdjustmentId))
                 throw new ArgumentException("Adjustment is not exposed to Garage: "+selected.InstancePath+":"+selected.AdjustmentId);
-        var frozen=GraphAdjustments.Freeze(graph,setup.Adjustments);
+        var frozen=GarageMechanicalConfiguration.Apply(GraphAdjustments.Freeze(graph,setup.Adjustments),setup.MechanicalValues);
         _=new InstalledEquilibrium(frozen); // Reject absent/unsupported vehicle contacts before scheduling a job.
         if(setup.Mass.Policy==MassAccountingPolicy.ComponentSum)
             foreach(var part in frozen.Bodies.Select(b=>(b.Path,b.Component)).Concat(frozen.ElasticElements.Select(e=>(e.Path,e.Component))))

@@ -21,7 +21,11 @@ public sealed class StepBumperPreparation(string repository,string libraryRoot)
     public string PreserveMaterialEvidence(string file)
     {var bytes=File.ReadAllBytes(file);if(bytes.Length is 0 or >20000000) throw new ArgumentException("Material evidence must be nonempty and at most 20 MB per artifact.");var hash=BytesHash(bytes);ImmutableWrite(MaterialEvidencePath(hash),bytes);return hash;}
     private void CheckMaterialEvidence(BumperMaterialCard card)
-    {foreach(var hash in card.EvidenceSha256) {var file=MaterialEvidencePath(hash);if(!File.Exists(file)||BytesHash(File.ReadAllBytes(file))!=hash) throw new InvalidDataException("Retain the original material evidence artifact with SHA-256 "+hash+" before saving this material card.");}}
+    {
+        if(card.Readiness==MaterialReadiness.Estimated&&EstimatedBumperMaterials.Catalog().Any(c=>c.Id==card.Id))
+        {var bytes=Encoding.UTF8.GetBytes(EstimatedBumperMaterials.Evidence(card.Id));var hash=BytesHash(bytes);if(card.EvidenceSha256.Contains(hash)&&!File.Exists(MaterialEvidencePath(hash))) ImmutableWrite(MaterialEvidencePath(hash),bytes);}
+        foreach(var hash in card.EvidenceSha256) {var file=MaterialEvidencePath(hash);if(!File.Exists(file)||BytesHash(File.ReadAllBytes(file))!=hash) throw new InvalidDataException("Retain the original material evidence artifact with SHA-256 "+hash+" before saving this material card.");}
+    }
     private static string CheckedSha(string hash)=>BumpStudioContracts.IsSha(hash)?hash:throw new ArgumentException("Invalid content hash.");
     private static string BytesHash(byte[] bytes)=>Convert.ToHexStringLower(SHA256.HashData(bytes));
     private static void ImmutableWrite(string path,byte[] bytes)

@@ -8,12 +8,13 @@ public sealed class PhysicalGarageCatalog(DesignAssetLibrary library,string repo
 {
     public TwinsInstalledModels Models {get;}=TwinsInstalledCatalog.Seed(library,repository);
     public Dictionary<string,string> MigrationConflicts {get;}=new(StringComparer.Ordinal);
-    public GarageSetup Create(string name,bool brz=false)=>new(new(Guid.NewGuid().ToString("N"),"draft",name,
+    public GarageSetup Create(string name,bool brz=false)=>OwnValues(new(new(Guid.NewGuid().ToString("N"),"draft",name,
         new(DataProvenance.Estimated,"Reference equipment with synthetic geometry and estimated installation dimensions/CG; total base mass includes the reference driver once.",null)),
-        new((brz?Models.Brz:Models.Gr86).Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[]));
+        new((brz?Models.Brz:Models.Gr86).Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[])));
+    private GarageSetup OwnValues(GarageSetup setup)=>setup with {MechanicalValues=GarageMechanicalConfiguration.Capture(new AssemblyGraphResolver(library).Compile(setup.RootAssembly,setup.Equipment))};
     public GarageSetup Migrate(GarageEntry entry)
     {
-        if(entry.Configuration is {} configured) return configured;
+        if(entry.Configuration is {} configured) return configured.MechanicalValues is null?OwnValues(configured):configured;
         var equipment=entry.ReferenceEquipment??throw new InvalidOperationException("Choose a physical root assembly for this entry.");
         if(equipment.ModelId!=ReferenceGarageCatalog.ModelId) throw new InvalidOperationException("Unsupported legacy vehicle model; explicit migration is required.");
         string Variant(string id,string role)=>id=="stock-gr86-2022/"+role?"gr86":id=="stock-brz-2022/"+role?"brz":throw new InvalidOperationException("Cannot migrate unknown equipment: "+id);
@@ -25,11 +26,11 @@ public sealed class PhysicalGarageCatalog(DesignAssetLibrary library,string repo
             foreach(var side in new[]{"L","R"}) {var path=(axle=="front"?"F":"R")+side+"-spring";selections.Add(new(path,path,new("installed-"+spring+"-"+axle+"-spring")));}
             selections.Add(new(axle+"-bar",axle+"-bar",new("installed-"+bar+"-"+axle+"-bar-assembly")));
         }
-        return Create(entry.Name,entry.Id==ReferenceGarageCatalog.BrzId) with {Equipment=[..selections]};
+        return OwnValues(Create(entry.Name,entry.Id==ReferenceGarageCatalog.BrzId) with {Equipment=[..selections]});
     }
     public void Migrate(GarageLibrary garage)
     {
-        foreach(var entry in garage.List().Where(e=>e.Configuration is null&&e.ReferenceEquipment is not null))
+        foreach(var entry in garage.List().Where(e=>e.Configuration is {} setup?setup.MechanicalValues is null:e.ReferenceEquipment is not null))
         {
             try
             {

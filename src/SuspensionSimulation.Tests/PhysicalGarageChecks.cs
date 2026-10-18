@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using SuspensionSimulation.Design;
 using SuspensionSimulation.Solvers.Design;
 using SuspensionSimulation.Solvers.HeadToHead;
@@ -18,6 +19,7 @@ internal static class PhysicalGarageChecks
             if(garage.List().Any(e=>e.Revision!=2||e.Configuration is null)) throw new Exception("Physical migration did not append exactly once.");
             var resolver=new GarageSetupResolver(library);var stock=garage.Load(ReferenceGarageCatalog.Gr86Id)!;var brz=garage.Load(ReferenceGarageCatalog.BrzId)!;
             var graph=resolver.Resolve(stock.Configuration!);var graphB=resolver.Resolve(brz.Configuration!);
+            VerifyCarOwnedValues(library,garage,catalog,stock,graph,resolver);
             if(graph.EquipmentSlots.Length!=18||graph.SetupAdjustments.Length!=0||graphB.Root.Identity.AssetId==graph.Root.Identity.AssetId) throw new Exception("Stock hardware setup exposure failed.");
             var custom=garage.Duplicate(stock);var setup=custom.Configuration! with {Equipment=[..custom.Configuration!.Equipment,new("FL-damper","FL-damper",new("example-adjustable-front-damper")),new("front/left/top-mount","top-mount",new("example-camber-plate"))],
                 Adjustments=[new ContinuousAdjustmentSelection("FL-damper","perch",.75),new ContinuousAdjustmentSelection("front/left/top-mount","camber-slot",.6)],Mass=custom.Configuration.Mass with {AddedPayloads=[new("ballast",20,new(-.8,0,.2))]}};
@@ -44,5 +46,34 @@ internal static class PhysicalGarageChecks
             Reject(setup); // Saved settings must not silently disappear after a hardware revision.
         }
         finally {if(Directory.Exists(folder)) Directory.Delete(folder,true);}
+    }
+    private static void VerifyCarOwnedValues(DesignAssetLibrary library,GarageLibrary garage,PhysicalGarageCatalog catalog,GarageEntry stock,ResolvedAssemblyGraph graph,GarageSetupResolver resolver)
+    {
+        var owned=stock.Configuration!.MechanicalValues??throw new Exception("Migrated car has no explicit mechanical values.");
+        if(owned.OfType<InstanceSpringRate>().Count()!=4||owned.OfType<InstanceTorsionSection>().Count()!=2) throw new Exception("Migration did not capture every spring/bar instance.");
+        var legacy=stock.Configuration with {MechanicalValues=null};var migrated=catalog.Migrate(stock with {Configuration=legacy});
+        if(migrated.MechanicalValues is null||DesignJson.Serialize(legacy).Contains("mechanicalValues",StringComparison.Ordinal)) throw new Exception("Legacy compatibility or explicit migration failed.");
+        var values=owned.Select(v=>v switch {InstanceSpringRate s when s.InstancePath=="FL-spring"=>s with {RateKgfPerMm=s.RateKgfPerMm*1.4},InstanceTorsionSection b=>b with {OutsideDiameterM=b.OutsideDiameterM*1.05},_=>v}).ToImmutableArray();
+        var duplicate=garage.Duplicate(stock);duplicate=garage.Save(duplicate with {Configuration=duplicate.Configuration! with {MechanicalValues=values}});
+        var reopened=new GarageLibrary(garage.DirectoryPath).Load(duplicate.Id)!;var configured=resolver.Resolve(reopened.Configuration!);
+        var spring=(CompressionSpringBehavior)configured.ElasticElements.Single(e=>e.Path=="FL-spring").Component.Behavior!;
+        var original=(CompressionSpringBehavior)graph.ElasticElements.Single(e=>e.Path=="FL-spring").Component.Behavior!;
+        if(spring.RateKgfPerMm!=original.RateKgfPerMm*1.4||DesignJson.Serialize(garage.Load(stock.Id)!.Configuration!.MechanicalValues)!=DesignJson.Serialize(owned)) throw new Exception("Car values leaked across entries or were not persisted.");
+        var springDefinition=library.LoadComponent(configured.ElasticElements.Single(e=>e.Path=="FL-spring").Component.Identity.AssetId)!;
+        var oldBehavior=(CompressionSpringBehavior)springDefinition.Behavior!;var beforeRevision=springDefinition.Identity.RevisionId;
+        if(oldBehavior.RateKgfPerMm!=original.RateKgfPerMm) throw new Exception("Editing car values published a shared part.");
+        var bundle=AssemblyGraphResolver.ExportConfigured(new AssemblyGraphResolver(library).Compile(reopened.Configuration!.RootAssembly,reopened.Configuration.Equipment));
+        var frozen=DesignJson.Deserialize<GarageSetup>(DesignJson.Serialize(reopened.Configuration));
+        var replay=GarageSetupResolver.Freeze(AssemblyGraphResolver.OpenBundle(bundle),frozen);
+        var zero=new double[new ConstraintMechanism(configured).CoordinateCount];
+        if(DesignJson.Serialize(new InstalledMechanics(new ConstraintMechanism(configured)).Evaluate(zero,false))!=DesignJson.Serialize(new InstalledMechanics(new ConstraintMechanism(replay)).Evaluate(zero,false))) throw new Exception("Frozen car configuration changed force/energy replay.");
+        var refrozen=GraphAdjustments.Freeze(configured,configured.AppliedAdjustments.Select(a=>a.Selection.ChoiceId is {} id?(AdjustmentSelection)new DiscreteAdjustmentSelection(a.InstancePath,a.AdjustmentId,id):new ContinuousAdjustmentSelection(a.InstancePath,a.AdjustmentId,a.Selection.Fraction??0)));
+        if(((CompressionSpringBehavior)refrozen.ElasticElements.Single(e=>e.Path=="FL-spring").Component.Behavior!).RateKgfPerMm!=spring.RateKgfPerMm) throw new Exception("Adjustment/solver construction discarded car-owned values.");
+        foreach(var invalid in new[]{values.RemoveAt(0),values.Add(values[0]),values.SetItem(0,new InstanceSpringRate("missing",1)),values.SetItem(0,new InstanceSpringRate(values[0].InstancePath,double.NaN)),values.SetItem(0,new InstanceTorsionSection(values[0].InstancePath,79e9,.02,.03))})
+        {try {resolver.Resolve(frozen with {MechanicalValues=invalid});throw new Exception("Invalid car mechanical configuration accepted.");}catch(ArgumentException) { }}
+        // Source revisions remain reusable defaults; they must not overwrite this saved car.
+        library.Publish(springDefinition with {Behavior=oldBehavior with {RateKgfPerMm=oldBehavior.RateKgfPerMm*1.01}},beforeRevision);
+        if(((CompressionSpringBehavior)resolver.Resolve(reopened.Configuration).ElasticElements.Single(e=>e.Path=="FL-spring").Component.Behavior!).RateKgfPerMm!=spring.RateKgfPerMm) throw new Exception("Source default silently replaced car-owned spring rate.");
+        var current=library.LoadComponent(springDefinition.Identity.AssetId)!;library.Publish(springDefinition,current.Identity.RevisionId);
     }
 }

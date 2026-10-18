@@ -61,7 +61,7 @@ public static class DesignValidation
             foreach(var value in assignments)
             {
                 Require(DefinitionParameters.ValidId(value.ParameterId),"Invalid child parameter ID.");
-                Require((value.Value is null)!=(value.FromParameterId is null),"Assign a literal value or an owner parameter.");
+                Require((value.Value is null?0:1)+(value.FromParameterId is null?0:1)+(value.ChoiceId is null?0:1)==1,"Assign one numeric literal, named choice or owner parameter.");
                 if(value.Value is {} literal) Require(double.IsFinite(literal),"Configuration value must be finite.");
                 if(value.FromParameterId is {} id) Require((assembly.Parameters??[]).Any(p=>p.Id==id),"Forwarded parameter is not declared by the immediate owner: "+id);
             }
@@ -86,7 +86,18 @@ public static class DesignValidation
             var instance=assembly.Instances.SingleOrDefault(x=>x.Id==slot.InstanceId);
             Require(instance is not null,$"Equipment slot {slot.Id} has no child instance.");
             Require(slot.CompatibleAssetIds.Contains(instance!.Definition.AssetId),$"Slot {slot.Id} must accept its default hardware.");
+            if(slot.Options is {} options)
+            {
+                Require(!options.IsDefaultOrEmpty&&options.Select(o=>o.ChoiceId).Distinct(StringComparer.Ordinal).Count()==options.Length,"Equipment options need unique named choice IDs.");
+                Require(options.Select(o=>o.Definition.AssetId).ToHashSet(StringComparer.Ordinal).SetEquals(slot.CompatibleAssetIds),"Equipment options must match approved hardware.");
+                foreach(var option in options) {Text(option.ChoiceId);Reference(option.Definition);foreach(var value in option.ParameterValues) {Require((value.Value is null?0:1)+(value.FromParameterId is null?0:1)+(value.ChoiceId is null?0:1)==1,"Invalid equipment child assignment.");if(value.Value is {} number) Require(double.IsFinite(number),"Equipment configuration must be finite.");if(value.FromParameterId is {} id) Require((assembly.Parameters??[]).Any(p=>p.Id==id),"Equipment forwarding must use an immediate owner parameter.");}}
+                if(slot.ParameterId is {} slotParameterId)
+                {var parameter=(assembly.Parameters??[]).SingleOrDefault(p=>p.Id==slotParameterId);Require(parameter?.Choices is {} choices&&choices.Select(c=>c.Id).ToHashSet(StringComparer.Ordinal).SetEquals(options.Select(o=>o.ChoiceId)),"Equipment parameter must declare exactly its named options.");}
+            }
+            else Require(slot.ParameterId is null&&assembly.ConfigurationVersion is null,"Scoped equipment requires explicit options.");
         }
+        Require(assembly.ConfigurationVersion is null or 2,"Unsupported configuration interface version.");
+        if(assembly.ConfigurationVersion==2) Require((assembly.SetupAdjustments??[]).IsEmpty,"Scoped assemblies cannot expose arbitrary descendant adjustments.");
         Unique(assembly.SetupAdjustments??[],x=>x.InstancePath);
         foreach(var exposure in assembly.SetupAdjustments??[]) {Text(exposure.Name);if(exposure.AdjustmentIds is {} ids) Unique(ids,x=>x);}
         Unique(assembly.GroundedInstances,x=>x);

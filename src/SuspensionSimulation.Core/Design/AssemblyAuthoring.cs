@@ -28,8 +28,8 @@ public static class AssemblyAuthoring
         var parentSeats=(parent.SpringSeats??[]).Except(childSeats).Select(s=>new SpringSeatBinding(GroupedPath(s.SpringPath),GroupedPath(s.DamperPath))).ToImmutableArray();
         var childSlots=(parent.EquipmentSlots??[]).Where(s=>ids.Contains(s.InstanceId)).ToImmutableArray();
         var childAdjustments=(parent.SetupAdjustments??[]).Where(s=>Inside(s.InstancePath)).ToImmutableArray();
-        var forwarded=parent.Instances.Where(x=>ids.Contains(x.Id)).SelectMany(x=>x.ParameterValues??[]).Select(x=>x.FromParameterId).OfType<string>().ToHashSet(StringComparer.Ordinal);
-        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]) {SpringSeats=childSeats.IsEmpty?null:childSeats,EquipmentSlots=parent.EquipmentSlots is null?null:childSlots,SetupAdjustments=parent.SetupAdjustments is null?null:childAdjustments,Parameters=forwarded.Count==0?null:[..(parent.Parameters??[]).Where(p=>forwarded.Contains(p.Id))]};
+        var forwarded=parent.Instances.Where(x=>ids.Contains(x.Id)).SelectMany(x=>x.ParameterValues??[]).Concat(childSlots.SelectMany(s=>(s.Options??[]).SelectMany(o=>o.ParameterValues))).Select(x=>x.FromParameterId).OfType<string>().Concat(childSlots.Select(s=>s.ParameterId).OfType<string>()).ToHashSet(StringComparer.Ordinal);
+        var child=new AssemblyDefinition(childIdentity,[..parent.Instances.Where(x=>ids.Contains(x.Id))],internalJoints,[..exports.Select(x=>new ExportedPort(x.Value,x.Key))]) {SpringSeats=childSeats.IsEmpty?null:childSeats,EquipmentSlots=parent.EquipmentSlots is null?null:childSlots,SetupAdjustments=parent.SetupAdjustments is null?null:childAdjustments,Parameters=forwarded.Count==0?null:[..(parent.Parameters??[]).Where(p=>forwarded.Contains(p.Id))],ConfigurationVersion=parent.ConfigurationVersion};
         var instances=parent.Instances.Where(x=>!ids.Contains(x.Id)).Append(new AssemblyInstance(instanceId,new(childIdentity.AssetId),IdentityPlacement) {ParameterValues=forwarded.Count==0?null:[..forwarded.Order(StringComparer.Ordinal).Select(id=>new ParameterAssignment(id,FromParameterId:id))]}).ToImmutableArray();
         var grounded=parent.GroundedInstances.Select(path=>ids.Any(id=>path==id||path.StartsWith(id+"/",StringComparison.Ordinal))?instanceId+"/"+path:path).ToImmutableArray();
         return new(parent with {Instances=instances,Joints=outsideJoints,Ports=parentPorts,GroundedInstances=grounded,SpringSeats=parentSeats.IsEmpty?null:parentSeats,
@@ -43,6 +43,7 @@ public static class AssemblyAuthoring
         if(source.Placement.Reflection is not null) throw new ArgumentException("Group an already mirrored instance before mirroring it again.");
         var placement=source.Placement with {Reflection=plane};
         PhysicalInstance mirror=source switch {ComponentInstance c=>c with {Id=newId,Placement=placement},AssemblyInstance a=>a with {Id=newId,Placement=placement},_=>throw new ArgumentException("Unknown instance kind.")};
-        return assembly with {Instances=assembly.Instances.Add(mirror)};
+        var slot=(assembly.EquipmentSlots??[]).SingleOrDefault(s=>s.InstanceId==sourceId&&s.Options is not null);
+        return assembly with {Instances=assembly.Instances.Add(mirror),EquipmentSlots=slot is null?assembly.EquipmentSlots:(assembly.EquipmentSlots??[]).Add(slot with {Id=slot.Id+"-"+newId,InstanceId=newId,Name=slot.Name+" (mirror)"})};
     }
 }

@@ -33,9 +33,9 @@ public partial class MainWindow
             if(_designLibrary.LoadAssembly(originalRoot)!.Instances.Any(i=>i.Id=="FL-bumper")) throw new InvalidOperationException("Custom assembly changed the original vehicle.");
             NavigateWorkspace(Workspace.Garage);RefreshGarage(ReferenceGarageCatalog.Gr86Id);GarageAction("Duplicate");var customId=_garageSelected!.Id;
             _workspaceDrafts[Workspace.Garage].Name.Text="Saved synthetic imported bumper";_garageRoot.SelectedValue=customRoot;
-            foreach(var value in baseline.A.Entry.Configuration.ParameterValues??[]) if(_garageRootParameterInputs.TryGetValue(value.ParameterId,out var input)) input.Text=ParameterDeclarationRow.N(value.Value);
+            foreach(var value in baseline.A.Entry.Configuration.ParameterValues??[]) {if(_garageRootParameterInputs.ContainsKey(value.ParameterId)) SetGarageContractValue(value.ParameterId,value.Value);if(_garageRootChoiceInputs.TryGetValue(value.ParameterId,out var choice)) choice.SelectedValue=value.ChoiceId;}
             CachePhysicalGarageDraft();FillPhysicalGarage(_garageSelected!);
-            if(!_garagePhysicalEquipment.ContainsKey("FL-bumper:FL-bumper")) throw new InvalidOperationException("Garage did not generate the bumper's equipment picker.");
+            if(_garagePhysicalEquipment.Count!=0||_garagePhysicalAdjustments.Count!=0||!_garagePhysicalGraph!.ElasticElements.Any(e=>e.Path=="FL-bumper")) throw new InvalidOperationException("Garage did not resolve the fixed owner bumper through root-only configuration.");
             GarageAction("Save changes");var custom=_garage!.Load(customId)!;
             if(custom.Configuration!.RootAssembly.AssetId!=customRoot) throw new InvalidOperationException("Garage did not save the custom mounted assembly.");
             await Task.Delay(200);CaptureLayout(Path.Combine(folder,"garage.png"));GarageAction("Open 2D");await WaitForInstalledAnalysis();var first=_acceptedInstalled!;

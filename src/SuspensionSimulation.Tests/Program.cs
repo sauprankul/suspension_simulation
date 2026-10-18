@@ -28,10 +28,12 @@ if(args.Contains("--check-elastic-authoring")) {try {SuspensionSimulation.Tests.
 if(args.Contains("--check-bump-studio")) {try {SuspensionSimulation.Tests.BumpStudioPreparationChecks.Verify();Console.WriteLine("Bump Studio preparation checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-fea-diagnostic")) {try {SuspensionSimulation.Tests.FeaDiagnosticChecks.VerifyActualExports();Console.WriteLine("FEA diagnostic viewing checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-definition-parameters")) {try {SuspensionSimulation.Tests.DefinitionParameterChecks.Verify();Console.WriteLine("Definition parameter checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-scoped-adjustments")) {try {SuspensionSimulation.Tests.ScopedAdjustmentChecks.Verify();Console.WriteLine("Scoped adjustment checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
 Run("properties remain immutable to importers while parameters require explicit immediate-owner configuration through nested assemblies",SuspensionSimulation.Tests.DefinitionParameterChecks.Verify);
+Run("named holes mechanical positions and equipment choices obey immediate importer boundaries and exact portable replay",SuspensionSimulation.Tests.ScopedAdjustmentChecks.Verify);
 Run("component templates drive rigid geometry and immutable revisions preserve history conflicts measurements and drafts",SuspensionSimulation.Tests.ComponentAuthoringChecks.Verify);
 Run("nested assemblies preserve mirrored mobility, atomic latest resolution, grouping and graph conflicts",SuspensionSimulation.Tests.AssemblyGraphChecks.Verify);
 Run("explicit twins topology closes through travel and rack steering with active rear traction links and separate shock mounts",SuspensionSimulation.Tests.TwinsTopologyChecks.Verify);

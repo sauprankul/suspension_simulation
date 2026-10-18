@@ -10,6 +10,7 @@ public sealed class GarageSetupResolver(IDesignAssetSource source)
     public static ResolvedAssemblyGraph Freeze(ResolvedAssemblyGraph graph,GarageSetup setup)
     {
         DesignValidation.Validate(setup);
+        if(graph.Root.ConfigurationVersion==2&&(!setup.Equipment.IsEmpty||!setup.Adjustments.IsEmpty)) throw new ArgumentException("Garage configures only root parameters; descendant equipment and adjuster overrides are forbidden.");
         var configured=DefinitionParameters.Resolve(graph.Root.Parameters??[],setup.ParameterValues??[]);
         if(!configured.SequenceEqual(graph.ParameterConfigurations.Single(c=>c.InstancePath=="").Values)) throw new ArgumentException("Resolved parameter configuration does not match the saved Garage setup.");
         if(graph.Root.Parameters is not null&&setup.MechanicalValues is not null) throw new ArgumentException("Properties cannot be overridden with legacy mechanical values.");

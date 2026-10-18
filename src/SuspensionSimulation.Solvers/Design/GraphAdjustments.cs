@@ -17,13 +17,23 @@ public static class GraphAdjustments
         ComponentDefinition Adjust(string path,ComponentDefinition component)
         {
             component=sourceDefinitions[component.Identity.AssetId];
-            component=MechanicalTemplates.Resolve(component,source.ParameterConfigurations.SingleOrDefault(c=>c.InstancePath==path)?.Values??[]);
+            var configured=source.ParameterConfigurations.SingleOrDefault(c=>c.InstancePath==path)?.Values??[];
+            // Start with source geometry, then combine the bound importer settings in one freeze.
+            var scalar=component with {AdjustmentParameters=null};
+            component=MechanicalTemplates.Resolve(scalar,configured);
             var values=new Dictionary<string,AdjustmentSetting>(StringComparer.Ordinal);
             foreach(var selection in selected.Where(s=>s.InstancePath==path)) values.Add(selection.AdjustmentId,selection switch
             {ContinuousAdjustmentSelection c=>new(c.Fraction),DiscreteAdjustmentSelection d=>new(ChoiceId:d.ChoiceId),_=>throw new ArgumentException("Unsupported adjustment selection.")});
+            var sourceComponent=sourceDefinitions[component.Identity.AssetId];
+            if(sourceComponent.AdjustmentParameters is not null)
+            {
+                var bound=ComponentParameters.Settings(sourceComponent,configured);
+                foreach(var a in sourceComponent.Adjustments??[])
+                {var setting=bound.GetValueOrDefault(a.Id)??a.Default;if(values.TryGetValue(a.Id,out var external)&&external!=setting) throw new ArgumentException("Imported mechanical settings cannot override a property or configured parameter: "+path+":"+a.Id);values[a.Id]=setting;}
+            }
             foreach(var a in component.Adjustments??[])
             {var setting=values.GetValueOrDefault(a.Id)??a.Default;resolved.Add(new(path,a.Id,setting,AdjustmentPaths.Evaluate(a.Path,setting)));}
-            return AdjustmentPaths.Freeze(component,values);
+            return AdjustmentPaths.Freeze(component with {AdjustmentParameters=sourceComponent.AdjustmentParameters},values);
         }
         var bodies=source.Bodies.Select(b=>b with {Component=Adjust(b.Path,b.Component)}).ToImmutableArray();var lookup=bodies.ToDictionary(b=>b.Path,StringComparer.Ordinal);
         ResolvedPort Port(ResolvedPort p)

@@ -10,6 +10,25 @@ namespace SuspensionSimulation.App;
 
 public partial class MainWindow
 {
+    internal async void RunInstalledFirstViewProof()
+    {
+        var folder=Path.Combine(App.RepositoryRoot,"artifacts","installed-first-view-ui");Directory.CreateDirectory(folder);Exception? failure=null;
+        try
+        {
+            await WaitForInstalledAnalysis();NavigateWorkspace(Workspace.Visualizer3D);
+            var watch=Stopwatch.StartNew();var framed=false;
+            while(watch.Elapsed<TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(100);var report=_inspectionViewport!.SceneFramingForProof();
+                if(!report.Pending&&report.PointCount>0&&report.Outside==0) {framed=true;break;}
+            }
+            if(!framed) throw new InvalidOperationException("The initial 3D view did not frame its configured car without a view-button action.");
+            // Let the first GPU scene render settle before capturing the newly created viewport.
+            await Task.Delay(1000);CaptureLayout(Path.Combine(folder,"first-view.png"));
+        }
+        catch(Exception error) {failure=error;App.LogException("Installed first-view proof",error);}
+        File.WriteAllText(Path.Combine(folder,"proof.json"),JsonSerializer.Serialize(new {success=failure is null,error=failure?.ToString()}));Application.Current.Shutdown(failure is null?0:2);
+    }
     internal async void RunInstalledLayoutProof()
     {
         var folder=Path.Combine(App.RepositoryRoot,"artifacts","installed-analysis-layout");Directory.CreateDirectory(folder);Exception? failure=null;
@@ -46,7 +65,7 @@ public partial class MainWindow
             var initial=_acceptedInstalled;AFrontSpring.Text="999";AFrontId.Text="999";Render();await Task.Delay(150);
             if(!ReferenceEquals(initial,_acceptedInstalled)) throw new InvalidOperationException("Hidden legacy specification controls still drive analysis.");
             var stock=_garage!.Load(ReferenceGarageCatalog.Gr86Id)!;var custom=_garage.Duplicate(stock);var setup=custom.Configuration!;
-            setup=setup with {Equipment=[..setup.Equipment.Where(e=>e.InstancePath is not "FL-spring" and not "FR-spring"),new("FL-spring","FL-spring",new("installed-brz-front-spring")),new("FR-spring","FR-spring",new("installed-brz-front-spring"))]};
+            setup=setup with {ParameterValues=[..setup.ParameterValues!.Value.Select(p=>p.ParameterId is "FL-spring.rate" or "FR-spring.rate"?p with {Value=p.Value*1.15}:p)]};
             custom=_garage.Save(custom with {Name="Saved physical comparison",Configuration=setup});RefreshAnalysisChoices();_analysisA.SelectedValue=custom.Id;await WaitForInstalledAnalysis();
             if(_acceptedInstalled!.A.Entry.Revision!=custom.Revision||Math.Abs(_acceptedInstalled.A.State.Chassis.HeaveM-initial.A.State.Chassis.HeaveM)<1e-5) throw new InvalidOperationException("Saved hardware did not affect physical equilibrium.");
             NavigateWorkspace(Workspace.HeadToHead);await WaitForInstalledAnalysis();CaptureLayout(Path.Combine(folder,"2d.png"));var comparison=_acceptedInstalled;

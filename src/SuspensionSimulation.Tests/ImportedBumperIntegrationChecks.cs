@@ -40,7 +40,7 @@ internal static class ImportedBumperIntegrationChecks
                 throw new Exception("Bumper installation changed arbitrary source-frame geometry or misaligned its axial reference.");
             try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"another",first,first,false,configuration);throw new Exception("Same-support bumper was installed.");}catch(ArgumentException) { }
             try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"FL-bumper",first,second,false,configuration);throw new Exception("Duplicate bumper instance was installed.");}catch(ArgumentException) { }
-            var custom=garage.Duplicate(stock);custom=garage.Save(custom with {Name="Synthetic saved imported bumper",Configuration=custom.Configuration! with {RootAssembly=new(root.Identity.AssetId),Equipment=[..custom.Configuration!.Equipment,new("FL-bumper","FL-bumper",new(bumper.Identity.AssetId))]}});
+            var custom=garage.Duplicate(stock);custom=garage.Save(custom with {Name="Synthetic saved imported bumper",Configuration=custom.Configuration! with {RootAssembly=new(root.Identity.AssetId)}});
             custom=garage.Load(custom.Id)!;var snapshot=await engine.SolveAsync(2,custom,custom,0,0,0);
             var firstState=snapshot.A.State;var bumperState=firstState.Mechanics.Elements.Single(e=>e.Path=="FL-bumper");
             if(bumperState.ForceOrTorque<=0||Math.Abs(firstState.Chassis.HeaveM-baseline.A.State.Chassis.HeaveM)<1e-5||Math.Abs(firstState.Wheels[0].CamberRad-baseline.A.State.Wheels[0].CamberRad)<1e-6) throw new Exception("Saved imported bumper did not affect actual equilibrium and alignment.");

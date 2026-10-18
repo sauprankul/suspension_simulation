@@ -74,6 +74,19 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
     {
         if(bundle.Equipment is {Length:>0}) throw new InvalidOperationException("Import the authored source assembly separately from a configured Garage result.");
         AssemblyGraphResolver.OpenBundle(bundle);
+        var importerContexts=new Dictionary<string,ImmutableArray<ParameterValue>>(StringComparer.Ordinal);
+        void CaptureContexts(AssemblyDefinition definition,ImmutableArray<ParameterValue> values)
+        {
+            if(!importerContexts.TryAdd(definition.Identity.AssetId,values)) return;
+            foreach(var instance in definition.Instances.OfType<AssemblyInstance>())
+            {
+                var options=(definition.EquipmentSlots??[]).SingleOrDefault(s=>s.InstanceId==instance.Id)?.Options;
+                foreach(var option in options??[new EquipmentOption("",instance.Definition,instance.ParameterValues??[])])
+                {var child=bundle.Assemblies.Single(a=>a.Identity.AssetId==option.Definition.AssetId);CaptureContexts(child,DefinitionParameters.Import(child.Parameters??[],option.ParameterValues,definition.Parameters??[],values));}
+            }
+        }
+        var importedRoot=bundle.Assemblies.Single(a=>a.Identity.AssetId==bundle.Root.AssetId);
+        CaptureContexts(importedRoot,DefinitionParameters.Resolve(importedRoot.Parameters??[],bundle.ParameterValues??[]));
         var json=DesignJson.Serialize(bundle);var hash=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
         var archive=Path.Combine(Root,"assets","imports");Directory.CreateDirectory(archive);var file=Path.Combine(archive,hash+".json");
         if(!File.Exists(file)) Atomic(file,json);
@@ -90,14 +103,13 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
                 var identity=instance is ComponentInstance?mapped[(AssetKind.Component,instance.Definition.AssetId)]:ImportAssembly(instance.Definition.AssetId).Identity;
                 return instance with {Definition=new(identity.AssetId,identity.RevisionId)};
             }).ToImmutableArray();
-            var slots=source.EquipmentSlots is {} declared?declared.Select(slot=>slot with {CompatibleAssetIds=[..slot.CompatibleAssetIds.Select(asset=>mapped.GetValueOrDefault((source.Instances.Single(i=>i.Id==slot.InstanceId) is ComponentInstance?AssetKind.Component:AssetKind.Assembly,asset))?.AssetId??asset)]}).ToImmutableArray():(ImmutableArray<EquipmentSlot>?)null;
-            var preview=AssemblyGraphResolver.OpenBundle(bundle).ParameterConfigurations.Single(x=>x.InstancePath==FindPath(id)).Values;
-            string FindPath(string target)
+            var slots=source.EquipmentSlots is {} declared?declared.Select(slot=>
             {
-                string? Walk(AssemblyDefinition a,string path)
-                {if(a.Identity.AssetId==target) return path;foreach(var child in a.Instances.OfType<AssemblyInstance>()) {var found=Walk(bundle.Assemblies.Single(x=>x.Identity.AssetId==child.Definition.AssetId),path.Length==0?child.Id:path+"/"+child.Id);if(found is not null) return found;}return null;}
-                return Walk(bundle.Assemblies.Single(x=>x.Identity.AssetId==bundle.Root.AssetId),"")??throw new InvalidDataException("Imported assembly has no instance.");
-            }
+                var kind=source.Instances.Single(i=>i.Id==slot.InstanceId) is ComponentInstance?AssetKind.Component:AssetKind.Assembly;
+                if(slot.Options is {} options&&kind==AssetKind.Assembly) foreach(var option in options) ImportAssembly(option.Definition.AssetId);
+                return slot with {CompatibleAssetIds=[..slot.CompatibleAssetIds.Select(asset=>mapped.GetValueOrDefault((kind,asset))?.AssetId??asset)],Options=slot.Options is {} choices?[..choices.Select(o=>o with {Definition=mapped.TryGetValue((kind,o.Definition.AssetId),out var identity)?new(identity.AssetId,identity.RevisionId):o.Definition})]:null};
+            }).ToImmutableArray():(ImmutableArray<EquipmentSlot>?)null;
+            var preview=importerContexts[id];
             var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children,EquipmentSlots=slots},null,preview);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
         }
         return ImportAssembly(bundle.Root.AssetId);

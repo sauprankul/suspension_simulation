@@ -95,11 +95,12 @@ public partial class MainWindow
         foreach(var grid in _assemblyGrids) {grid.CommitEdit();grid.CommitEdit();}
         CommitAssemblyParameters();
         if(_assemblyParameterAssignments.Any(p=>!_assemblyInstances.Any(i=>i.Id==p.Instance))) throw new ArgumentException("A child parameter assignment names an absent direct child instance.");
+        if(_assemblyEquipmentOptions.Any(o=>!_assemblySlots.Any(s=>s.Id==o.SlotId))||_assemblyEquipmentOptionValues.Any(v=>!_assemblyEquipmentOptions.Any(o=>o.SlotId==v.SlotId&&o.ChoiceId==v.EquipmentChoice))) throw new ArgumentException("Equipment option/configuration names an absent owner slot or option.");
         var metadata=_workspaceDrafts[Workspace.AssemblyEditor];
         var result=new AssemblyDefinition(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>ConfigureAssemblyChild(x.Read()))],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
             {GroundedInstances=[.._assemblyGrounds.Text.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)]};
         result=_assemblyMetadataSeed is {} original?original with {Identity=result.Identity,Instances=result.Instances,Joints=result.Joints,Ports=result.Ports,GroundedInstances=result.GroundedInstances}:result;
-        return result with {Parameters=_assemblyParameters.Count>0?[.._assemblyParameters.Select(p=>p.Read())]:null,EquipmentSlots=_assemblySlots.Count>0?[.._assemblySlots.Select(s=>s.Read())]:null,SetupAdjustments=_assemblyExposures.Count>0?[.._assemblyExposures.Select(s=>s.Read())]:null};
+        return result with {ConfigurationVersion=_assemblyMetadataSeed?.ConfigurationVersion??(_assemblyMetadataSeed is null?2:null),Parameters=_assemblyParameters.Count>0?[.._assemblyParameters.Select(p=>p.Read())]:null,EquipmentSlots=_assemblySlots.Count>0?[.._assemblySlots.Select(ReadOwnerEquipmentSlot)]:null,SetupAdjustments=_assemblyExposures.Count>0?[.._assemblyExposures.Select(s=>s.Read())]:null};
     }
     private int? AssemblyExpectedDof()=>string.IsNullOrWhiteSpace(_assemblyExpectedDof.Text)?null:int.TryParse(_assemblyExpectedDof.Text,out var n)&&n>=0?n:throw new ArgumentException("Expected freedoms must be a nonnegative integer or blank.");
     private void ApplyAssemblyPreview(bool undo)
@@ -142,7 +143,7 @@ public partial class MainWindow
         {
             _assemblyId=a.Identity.AssetId;_assemblyBaseRevision=a.Identity.RevisionId;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;FillAssembly(a);_assemblyDefinition=a;_assemblyConflict=null;
             if(previewValues is not null) {_assemblyParameterPreview.Clear();foreach(var value in previewValues) _assemblyParameterPreview.Add(ParameterPreviewRow.From(value));}
-            if(_assemblyParameterPreview.Any(p=>string.IsNullOrWhiteSpace(p.Value)))
+            if(_assemblyParameterPreview.Any(p=>string.IsNullOrWhiteSpace(p.Value)&&string.IsNullOrWhiteSpace(p.ChoiceId)))
             {
                 _assemblyGraph=null;_assemblyPublishedRaw=_assemblyAcceptedRaw=CaptureAssemblyRaw();_assemblyViewport!.SetScene(new(a.Identity.Name,"authoring","unconfigured-owner",[],[],[],["Supply temporary importer values to inspect this parameterized source."]));RefreshAssemblyCatalog();_assemblyStatus.Text="Opened source. Enter temporary preview importer values on Parameters / imports; no values are stored on the owner definition.";ScheduleAssemblyDraft();return;
             }
@@ -198,7 +199,7 @@ public partial class MainWindow
     private void PublishAssembly()
     {
         ApplyAssemblyPreview(true);var preview=ReadAssemblyPreviewValues();var saved=_designLibrary!.Publish(_assemblyDefinition!,_assemblyBaseRevision,preview);_assemblyBaseRevision=saved.Identity.RevisionId;
-        FillAssembly(saved);
+        FillAssembly(saved);_assemblyParameterPreview.Clear();foreach(var value in preview) _assemblyParameterPreview.Add(ParameterPreviewRow.From(value));
         _assemblyDefinition=saved;_assemblyGraph=new AssemblyGraphResolver(_designLibrary).Compile(new(_assemblyId,saved.Identity.RevisionId),[],preview);_assemblyAcceptedRaw=CaptureAssemblyRaw();RefreshAssemblyCatalog();
         _assemblyPublishedRaw=_assemblyAcceptedRaw;_assemblyConflict=null;SaveAssemblyGraph();
         _assemblyStatus.Text="Published "+saved.Identity.RevisionId[..12]+". Mobility diagnostics remain visible; publication is not vehicle validation.";ScheduleAssemblyDraft();

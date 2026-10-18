@@ -36,6 +36,7 @@ public partial class MainWindow
         var choices=_assemblyGraph?.Interfaces.Where(p=>direct.Contains(p.Key[..p.Key.IndexOf(':')])&&p.Value.SupportedJoints.Contains(JointKind.Spherical)).Select(p=>p.Key).Order(StringComparer.Ordinal).ToArray()??[];
         foreach(var picker in new[]{_assemblyBumperFirst,_assemblyBumperSecond}) {var old=picker.SelectedItem as string;picker.ItemsSource=choices;picker.SelectedItem=old;}
         UpdateBumperInstallationReadout();
+        _assemblyBumperGarage.Content=_assemblyGraph?.Root.ConfigurationVersion==2||_assemblyMetadataSeed is null?"Add a fixed owner equipment slot (parameterize it explicitly later)":"Add legacy equipment compatibility metadata";
     }
     private void UpdateBumperInstallationReadout()
     {
@@ -52,7 +53,7 @@ public partial class MainWindow
         var assembly=ReadAssembly();var before=CaptureAssemblyRaw();
         var added=BumperInstallation.Add(assembly,_designLibrary!,new(bumper.Identity.AssetId),_assemblyBumperId.Text.Trim(),Mount(_assemblyBumperFirst),Mount(_assemblyBumperSecond),_assemblyBumperGarage.IsChecked==true,ReadAssemblyPreviewValues());
         FillAssembly(added);_assemblyAcceptedRaw=before;ApplyAssemblyPreview(true);
-        _assemblyStatus.Text="Bumper installed on its two declared mounting references. Publish this assembly, then select it in Garage. Curve validity is checked by the installed-equilibrium solve.";
+        _assemblyStatus.Text="Bumper installed on its two declared mounting references. In a scoped assembly its owner slot is fixed; expose a named owner choice explicitly on the equipment tabs if needed. Curve validity is checked by installed equilibrium.";
     }
     private void DuplicateAssembly()
     {

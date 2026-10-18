@@ -42,8 +42,8 @@ public static class BumperInstallation
             Instances=assembly.Instances.Add(new ComponentInstance(instanceId,bumperReference,placement)),
             Joints=assembly.Joints.Add(new(instanceId+"-first",JointKind.Spherical,new(instanceId,curve.FirstPortId),firstMount))
                 .Add(new(instanceId+"-second",JointKind.Spherical,new(instanceId,curve.SecondPortId),secondMount)),
-            EquipmentSlots=exposeInGarage?(assembly.EquipmentSlots??[]).Add(new(instanceId,instanceId+" bumper",instanceId,[bumper.Identity.AssetId],
-                "Axial bumper installed on declared mounting references. The Assembly Editor must explicitly approve any alternative bumper and its installation conditions.")):assembly.EquipmentSlots
+            EquipmentSlots=exposeInGarage?(assembly.EquipmentSlots??[]).Add(new EquipmentSlot(instanceId,instanceId+" bumper",instanceId,[bumper.Identity.AssetId],
+                "Axial bumper installed on declared mounting references. The owning assembly must explicitly approve any alternative bumper and its installation conditions.") {Options=assembly.ConfigurationVersion==2?[new EquipmentOption(bumper.Identity.AssetId,bumperReference,[])]:null}):assembly.EquipmentSlots
         };
         _=resolver.CompileDraft(added,configuration);return added;
     }

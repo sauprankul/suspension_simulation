@@ -30,12 +30,12 @@ internal static class InstalledAnalysisChecks
             var rigid=InstalledRollMetricCalculator.Calculate(graphA,snapshot.A.Static with {RigidReactions=[new("FL-damper:bottom",1,0)]},snapshot.A.Static);
             var bothRigid=InstalledRollMetricCalculator.Calculate(graphA,snapshot.A.Static with {RigidReactions=[new("FL-damper:bottom",1,0),new("RL-damper:bottom",1,0)]},snapshot.A.Static);
             if(rigid.FrontDistribution!=1||bothRigid.FrontDistribution is not null) throw new Exception("Rigid axle loading was presented as finite elastic balance.");
-            var modified=b.Configuration! with {Equipment=[..b.Configuration!.Equipment,new("FL-damper","FL-damper",new("example-adjustable-front-damper"))],Adjustments=[new ContinuousAdjustmentSelection("FL-damper","perch",.6)]};
+            var modified=b.Configuration! with {ParameterValues=[..b.Configuration!.ParameterValues!.Value.Select(v=>v.ParameterId=="equipment.FL-damper"?ParameterValue.Choice(v.ParameterId,"example-adjustable-front-damper"):v.ParameterId=="FL-damper.adjustment.perch"?new ParameterValue(v.ParameterId,.6):v)]};
             b=garage.Save(b with {Configuration=modified});var custom=await engine.SolveAsync(2,b,b,0,0,0);
             var export=DesignJson.Serialize(custom);var frozen=DesignJson.Deserialize<InstalledAnalysisSnapshot>(export);
             var source=AssemblyGraphResolver.OpenBundle(frozen.A.Source);var graph=GarageSetupResolver.Freeze(source,frozen.A.Entry.Configuration!);
             var replay=new InstalledEquilibrium(graph).Solve(frozen.A.State.Input,frozen.A.State);
-            if(Math.Abs(replay.Chassis.HeaveM-frozen.A.State.Chassis.HeaveM)>1e-8||replay.InputSha256!=frozen.A.State.InputSha256||frozen.A.Source.Equipment is not {Length:>0}) throw new Exception("Configured equipment/source/settings did not replay exactly from export.");
+            if(Math.Abs(replay.Chassis.HeaveM-frozen.A.State.Chassis.HeaveM)>1e-8||replay.InputSha256!=frozen.A.State.InputSha256||frozen.A.Source.ParameterValues is not {Length:>0}||frozen.A.Source.Equipment is {Length:>0}) throw new Exception("Configured equipment/source/settings did not replay exactly from export.");
             var spring=graph.ElasticElements.Single(e=>e.Path=="FL-spring").Component;
             var sourceSpring=library.LoadComponent(spring.Identity.AssetId)!;
             library.Publish(sourceSpring with {Identity=sourceSpring.Identity with {Name=sourceSpring.Identity.Name+" revised"}},sourceSpring.Identity.RevisionId);

@@ -61,6 +61,7 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public BumperMaterialCard? BumperMaterial {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public WheelSpecification? Wheel {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<AdjustmentParameterBinding>? AdjustmentParameters {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImportedBumpCurveEvidence? BumpCurveEvidence {get;init;}
     [JsonIgnore] public bool IsRuntimeDerived {get;init;}
 }
@@ -101,9 +102,16 @@ public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArra
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<EquipmentSlot>? EquipmentSlots {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SetupAdjustmentExposure>? SetupAdjustments {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<DefinitionParameter>? Parameters {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public int? ConfigurationVersion {get;init;}
 }
 // Slots replace direct children only. Compatibility is explicitly granted by the owning assembly.
-public sealed record EquipmentSlot(string Id,string Name,string InstanceId,ImmutableArray<string> CompatibleAssetIds,string Description);
+public sealed record EquipmentSlot(string Id,string Name,string InstanceId,ImmutableArray<string> CompatibleAssetIds,string Description)
+{
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public string? ParameterId {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<EquipmentOption>? Options {get;init;}
+}
+public sealed record EquipmentOption(string ChoiceId,AssetReference Definition,ImmutableArray<ParameterAssignment> ParameterValues);
+public sealed record AdjustmentParameterBinding(string AdjustmentId,string ParameterId);
 // Null IDs expose all adjustments declared by the selected hardware; an empty list exposes none.
 public sealed record SetupAdjustmentExposure(string InstancePath,string Name,ImmutableArray<string>? AdjustmentIds=null);
 public sealed record ResolvedEquipmentSlot(string InstancePath,EquipmentSlot Definition,AssetKind Kind,AssetReference Default,AssetReference Selected);

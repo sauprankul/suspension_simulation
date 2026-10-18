@@ -144,8 +144,8 @@ public partial class MainWindow
         var kind=(ComponentKind)_componentKind.SelectedItem;
         _componentMass=ReadComponentMass();
         if(!_componentCustom && kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar) return ApplyComponentParameterTemplate(CreateElasticComponent(kind) with {Mass=_componentMass});
-        if(!_componentCustom&&kind==ComponentKind.Wheel) return ComponentAuthoring.CreateWheel(ComponentIdentity(),PhysicalMetres("wheelRadius"),PhysicalMetres("wheelWidth")) with {Mass=_componentMass};
-        if(!_componentCustom) return ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack,Adjustments=_componentMetadataSeed?.Adjustments};
+        if(!_componentCustom&&kind==ComponentKind.Wheel) return ApplyComponentParameterTemplate(ComponentAuthoring.CreateWheel(ComponentIdentity(),PhysicalMetres("wheelRadius"),PhysicalMetres("wheelWidth")) with {Mass=_componentMass});
+        if(!_componentCustom) return ApplyComponentParameterTemplate(ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack,Adjustments=_componentMetadataSeed?.Adjustments});
         var geometry=new ComponentDefinition(ComponentIdentity(),kind,[.._componentPoints.Select(x=>x.Read())],[.._componentFrames.Select(x=>x.Read())],[.._componentPorts.Select(x=>x.Read())],
             [.._componentEdges.Select(x=>(DesignDimension)new MeasuredDistance(x.Id,x.StartPointId,x.EndPointId))],_componentMass)
             {VisualEdges=[.._componentEdges.Select(x=>new VisualEdge(x.Id,x.StartPointId,x.EndPointId))]};
@@ -158,11 +158,12 @@ public partial class MainWindow
         var raw=CaptureComponentRaw();if(undo && _componentAcceptedRaw is {} before && before!=raw) {_componentUndo.Push(before);_componentRedo.Clear();}
         _componentDefinition=component;_componentAcceptedRaw=raw;
         if(!_componentCustom) FillComponentTables(component);
-        _componentViewport!.SetScene(ComponentScene(component));
+        var rendered=component.Parameters is {IsEmpty:false}?MechanicalTemplates.Resolve(component,_componentParameterPreview.Select(p=>p.Read())):component;
+        _componentViewport!.SetScene(ComponentScene(rendered));
         if(component.Behavior is BumpCurveBehavior bump) DrawBumpCurve(bump);
-        var picks=component.Points.Select(x=>new DesignerPick(x.Name,x.PositionM)).Concat(component.Frames.Select(x=>new DesignerPick("Port/frame · "+x.Name,x.Frame.OriginM))).ToArray();
+        var picks=rendered.Points.Select(x=>new DesignerPick(x.Name,x.PositionM)).Concat(rendered.Frames.Select(x=>new DesignerPick("Port/frame · "+x.Name,x.Frame.OriginM))).ToArray();
         _measureA.ItemsSource=picks;_measureB.ItemsSource=picks;_measureA.SelectedIndex=0;_measureB.SelectedIndex=Math.Min(1,picks.Length-1);
-        _measureFrame.ItemsSource=new[]{new DesignerFrameChoice("Component/world",null)}.Concat(component.Frames.Select(x=>new DesignerFrameChoice(x.Name,x.Frame))).ToArray();_measureFrame.SelectedIndex=0;
+        _measureFrame.ItemsSource=new[]{new DesignerFrameChoice("Component/world",null)}.Concat(rendered.Frames.Select(x=>new DesignerFrameChoice(x.Name,x.Frame))).ToArray();_measureFrame.SelectedIndex=0;
         _componentStatus.Text=(_componentCustom?"Custom coordinates":"Template dimensions")+" · valid preview; publish to save a revision.";ScheduleComponentDraft();
     }
     private void FillComponentTables(ComponentDefinition component)

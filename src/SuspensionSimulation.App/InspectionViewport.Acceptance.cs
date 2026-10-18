@@ -6,6 +6,13 @@ namespace SuspensionSimulation.App;
 
 internal sealed partial class InspectionViewport
 {
+    internal (bool Pending,int Fits,int PointCount,int Outside) SceneFramingForProof()
+    {
+        var positions=_scene?.Points.Select(p=>p.PositionM).ToList()??[];
+        if(_scene is {} scene) foreach(var segment in scene.Segments) {positions.Add(segment.StartM);positions.Add(segment.EndM);}
+        var outside=positions.Select(p=>Viewport.Project(new Point3D(p.X,p.Y,p.Z))).Count(p=>!double.IsFinite(p.X)||!double.IsFinite(p.Y)||p.X< -1||p.Y< -1||p.X>Viewport.ActualWidth+1||p.Y>Viewport.ActualHeight+1);
+        return(_fitPending,_completedFits,positions.Count,outside);
+    }
     internal Point CubeScreenPoint(Point p)=>_navigation.PointToScreen(p);
     internal (Point Point,string Id) FindPickTestPoint()
     {

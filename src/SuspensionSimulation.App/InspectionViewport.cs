@@ -32,8 +32,10 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
     private bool _disposed;
     private InspectionSideSnapshot? _side;
     private long _frameCount;
-    private bool _initialFit;
     private bool _sceneFitted;
+    private bool _fitPending=true;
+    private DispatcherOperation? _queuedFit;
+    private int _completedFits;
     private readonly bool _engineeringDashboard;
     private readonly RenderTimerResolution _timerResolution=new();
     internal bool TimerResolutionActive=>_timerResolution.Active;
@@ -91,8 +93,10 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
             try {UpdateNavigationCube();UpdateLabelLayout();if(Viewport.RenderHost is {IsRendering:true} host) host.UpdateAndRender();}
             catch(Exception error) {Failed?.Invoke(error);}
         };
-        Loaded+=(_,_)=>SetActive(IsVisible);
-        Viewport.Loaded+=(_,_)=>{if(!_initialFit) {Fit();_initialFit=true;}};
+        Loaded+=(_,_)=>{SetActive(IsVisible);QueuePendingFit();};
+        Viewport.Loaded+=(_,_)=>QueuePendingFit();
+        Viewport.SizeChanged+=(_,_)=>QueuePendingFit();
+        IsVisibleChanged+=(_,_)=>{if(IsVisible) QueuePendingFit();};
         // Explicit bindings keep the displayed help accurate across renderer defaults.
         Viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Pan,new MouseGesture(MouseAction.LeftClick)));
         Viewport.InputBindings.Add(new MouseBinding(ViewportCommands.Pan,new MouseGesture(MouseAction.MiddleClick)));
@@ -145,15 +149,26 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         Fit();
     }
 
-    private void Fit()
+    internal void RequestSceneFit()
+    {_fitPending=true;QueuePendingFit();}
+    private void QueuePendingFit()
     {
-        if(_scene is null || Viewport.Camera is not HCamera camera || Viewport.ActualHeight<=0) return;
+        if(_disposed||!_fitPending||_queuedFit is not null) return;
+        _queuedFit=Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(()=>{_queuedFit=null;if(!_disposed&&_fitPending) Fit();}));
+    }
+    private void CancelPendingFit()
+    {_fitPending=false;_queuedFit?.Abort();_queuedFit=null;}
+    private bool Fit()
+    {
+        _fitPending=true;
+        if(_scene is null || Viewport.Camera is not HCamera camera || !Viewport.IsVisible || Viewport.ActualWidth<=0 || Viewport.ActualHeight<=0) return false;
         var positions=_scene.Points.Select(x=>x.PositionM).ToList();
         foreach(var segment in _scene.Segments) {positions.Add(segment.StartM);positions.Add(segment.EndM);}
         foreach(var w in _scene.Wheels)
             foreach(var x in new[]{-1,1}) foreach(var y in new[]{-1,1}) foreach(var z in new[]{-1,1})
                 positions.Add(w.CenterM+new Vector3((float)(x*w.RadiusM),(float)(y*w.WidthM/2),(float)(z*w.RadiusM)));
-        if(positions.Count==0) {positions.Add(new Vector3(-.2f,-.2f,0));positions.Add(new Vector3(.2f,.2f,.2f));}
+        // An empty document is not a completed fit: its first populated scene still needs framing.
+        if(positions.Count==0) return false;
         var center=positions.Aggregate(Vector3.Zero,(sum,p)=>sum+p)/positions.Count;
         var forward=new Vector3((float)camera.LookDirection.X,(float)camera.LookDirection.Y,(float)camera.LookDirection.Z);forward=Vector3.Normalize(forward);
         var up=new Vector3((float)camera.UpDirection.X,(float)camera.UpDirection.Y,(float)camera.UpDirection.Z);
@@ -162,7 +177,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         camera.Width=Math.Max(.05,1.15*Math.Max(2*horizontal.Max(Math.Abs),2*vertical.Max(Math.Abs)*Viewport.ActualWidth/Viewport.ActualHeight));
         camera.Position=new Point3D(center.X-forward.X*6,center.Y-forward.Y*6,center.Z-forward.Z*6);
         camera.LookDirection=new Vector3D(forward.X*6,forward.Y*6,forward.Z*6);
-        _sceneFitted=true;
+        _sceneFitted=true;_completedFits++;CancelPendingFit();Viewport.InvalidateRender();return true;
     }
 
     public void SetScene(InspectionScene scene)
@@ -223,6 +238,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         _components.SelectedValue=selected;ApplyVisibility();ShowSelection();
         _status.Text=_engineeringDashboard?$"Live · {scene.StateId} · synthetic geometry / provisional equilibrium":$"Authored geometry · {scene.StateId}";
         _technical.Text=$"{Adapter} · {(Software?"SOFTWARE":"hardware GPU")} · {scene.StateId}\n{string.Join(" ",scene.Diagnostics)}";
+        if(!_sceneFitted||_fitPending) RequestSceneFit();
     }
 
     public void SetState(InspectionSideSnapshot side,double solveMilliseconds)
@@ -384,6 +400,6 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
             _dots[id]=(model,layer);Viewport.Items.Add(model);
         }
     }
-    public void Dispose() {if(_disposed)return;_disposed=true;_renderPump.Stop();_timerResolution.Dispose();Viewport.Dispose();_effects.Dispose();}
+    public void Dispose() {if(_disposed)return;_disposed=true;CancelPendingFit();_renderPump.Stop();_timerResolution.Dispose();Viewport.Dispose();_effects.Dispose();}
     private sealed record ComponentChoice(string Id,string Label);
 }

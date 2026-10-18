@@ -121,7 +121,7 @@ public partial class MainWindow
     private void NewAssembly()
     {
         _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;_assemblyMetadataSeed=null;
-        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();FillAssemblyGarageContracts(null);_assemblyGrounds.Text="";ApplyAssemblyPreview(false);
+        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();FillAssemblyGarageContracts(null);_assemblyGrounds.Text="";ApplyAssemblyPreview(false);_assemblyViewport!.RequestSceneFit();
     }
     private void RefreshAssemblyCatalog()
     {
@@ -142,6 +142,7 @@ public partial class MainWindow
         _assemblyId=a.Identity.AssetId;_assemblyBaseRevision=a.Identity.RevisionId;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;FillAssembly(a);
         _assemblyDefinition=a;_assemblyGraph=resolved.Graph;_assemblyConflict=resolved.Conflict;_assemblyPublishedRaw=_assemblyAcceptedRaw=CaptureAssemblyRaw();
         ShowAssemblyGraph(_assemblyGraph,MechanismMobility.Inspect(_assemblyGraph,AssemblyExpectedDof()));RefreshAssemblyCatalog();
+        _assemblyViewport!.RequestSceneFit();
         if(resolved.IsStale) _assemblyStatus.Text="Dependency conflict; stored graph retained. "+resolved.Conflict;else SaveAssemblyGraph();ScheduleAssemblyDraft();
     }
     private void FillAssembly(AssemblyDefinition a)

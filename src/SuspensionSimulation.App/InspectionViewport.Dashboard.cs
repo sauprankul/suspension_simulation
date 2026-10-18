@@ -94,9 +94,9 @@ internal sealed partial class InspectionViewport
     }
     internal void RestoreCamera(JsonElement camera)
     {
-        _initialFit=true;_sceneFitted=true;
         var p=camera.GetProperty("position");var l=camera.GetProperty("lookDirection");var u=camera.GetProperty("upDirection");
         Viewport.Camera=new HelixToolkit.Wpf.SharpDX.OrthographicCamera {Position=new(p[0].GetDouble(),p[1].GetDouble(),p[2].GetDouble()),LookDirection=new(l[0].GetDouble(),l[1].GetDouble(),l[2].GetDouble()),UpDirection=new(u[0].GetDouble(),u[1].GetDouble(),u[2].GetDouble()),Width=camera.GetProperty("width").GetDouble()};
+        _sceneFitted=true;CancelPendingFit();
         if(camera.TryGetProperty("visibleLayers",out var layers))
         {
             var restored=layers.EnumerateArray().Select(x=>x.GetString()!).ToHashSet();

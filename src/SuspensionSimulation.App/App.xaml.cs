@@ -61,6 +61,7 @@ public partial class App : Application
             if(e.Args.Contains("--garage-analysis-proof")) window.RunGarageAnalysisProof();
             if(e.Args.Contains("--component-proof")) window.RunComponentProof();
             if(e.Args.Contains("--assembly-proof")) window.RunAssemblyProof();
+            if(e.Args.Contains("--assembly-framing-proof")) window.RunAssemblyFramingProof();
             if(e.Args.Contains("--topology-proof")) window.RunTopologyProof();
             if(e.Args.Contains("--mechanics-proof")) window.RunMechanicsProof();
             if(e.Args.Contains("--installed-proof")) window.RunInstalledProof();

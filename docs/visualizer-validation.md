@@ -54,6 +54,8 @@ The refreshed six-state inspection proof measured a maximum absolute estimated t
 
 ## Historical evidence
 
+The shared editor viewport was rechecked on 2026-10-17 after a reported blank assembly on opening. Empty documents no longer consume the initial camera fit; explicit document loads fit after valid visible layout, including a load while hidden. Ordinary edits, dependency refreshes and repeated scene/motion publication retain the camera, and restoring a saved camera cancels any pending fit. The isolated native `--assembly-framing-proof` opens a published assembly translated 20 m from the origin without a preset click: 84 points, zero projected outside the viewport, one initial fit and one fit when subsequently revealing a hidden document. Camera preservation checks pass. Evidence: `artifacts/assembly-framing-ui/proof.json`, `framing.json` and inspected captures.
+
 The 2026-10-15 finite-penalty implementation passed 75 checks and two lifecycle runs (600.76 s swap-chain and 601.9 s D3DImage), but measured about 39–42 fps. Those results and the original 99.417299% top-out RSD are superseded by the current rigid-stop and performance results above. Historical reports remain under `artifacts/visualizer/soak-final.json`, `soak.json` and the plan's dated checkpoints. Historical free-travel fixtures remain regression checks.
 
 The earlier provisional solver showed non-monotonic behavior near some stop thresholds. The verified fixture pairs use actual named limit states at their endpoints; they are local brackets, not calibrated physical thresholds. Original case names and historical data remain available rather than being relabeled as new physics.

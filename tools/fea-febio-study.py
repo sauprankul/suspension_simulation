@@ -159,7 +159,7 @@ def material_evidence(path,state):
     if hashlib.sha256((foam/"source-coupon.json").read_bytes()).hexdigest()!=fit["sourceSha256"]:
         raise ValueError("Foam fitting evidence identity changed")
     sets={item.attrib["name"]:list(map(int,item.text.split(","))) for item in model.findall("Mesh/NodeSet")}
-    checked=verifier.verify_results(foam,{}, {},SimpleNamespace(case="step",fold_contact=False,guide_shaft=False),sets)
+    checked=verifier.verify_results(foam,{}, {},SimpleNamespace(case="foam-contact",fold_contact=False,guide_shaft=False),sets)
     if foam_report["history"]!=checked["history"]: raise ValueError("Foam reaction history differs from verification")
     errors=[]
     for frame in checked["history"]:
@@ -192,7 +192,7 @@ def main(folder,materials=None):
         baseline=adopt(folder,state);state["cases"]["fold-coarse"]=str(folder)
         settings=json.loads((folder/"request.json").read_text())["arguments"]
         common=["tools/fea-febio-spike.py","--case","step","--compression",".6","--fold-contact","--guide-shaft",
-                "--max-updates",str(settings["max_updates"]),"--opt-iterations",str(settings["opt_iterations"]),
+                "--max-updates",str(settings["max_updates"]),"--max-reformations",str(settings.get("max_reformations",35)),"--opt-iterations",str(settings["opt_iterations"]),
                 "--line-search-tolerance",str(settings.get("line_search_tolerance",.9)),"--timeout-hours","8"]
         if settings["guarded_line_search"]: common.append("--guarded-line-search")
         penalty=settings["penalty"];increment=settings["increment"]

@@ -116,7 +116,7 @@ def verify(result):
     try:
         # The generic history/balance/contact checks run without the NH-specific
         # analytic check. Compare the fitted Ogden law independently below.
-        report=febio.verify_results(folder,report,{},SimpleNamespace(case="step",fold_contact=False,guide_shaft=False),sets)
+        report=febio.verify_results(folder,report,{},SimpleNamespace(case="foam-contact",fold_contact=False,guide_shaft=False),sets)
         cp,c,m=result["cpPa"],result["c1Pa"],result["m1"]
         errors=[]
         for frame in report["history"]:

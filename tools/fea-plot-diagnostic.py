@@ -100,7 +100,7 @@ def read_plot(folder,maximum_time=1.,on_frame=None):
                     displacement=np.frombuffer(region,dtype="<f4").reshape((-1,3)).astype(float)
                     if not np.all(np.isfinite(displacement)): raise ValueError("Non-finite displacement")
                     if not np.isfinite(time_value) or time_value<0 or (latest is not None and time_value<=latest[0]):
-                        raise ValueError("Displacement states are not finite and strictly ordered")
+                        raise ValueError("Displacement states are not finite and strictly ordered. XPLT stores float32 times; very small solver increments can round to the same time. Inspect an earlier prefix with --maximum-time; do not merge or invent states.")
                     latest=(time_value,displacement);count+=1
                     if on_frame is not None: on_frame(count-1,time_value,displacement)
                 if not found: raise ValueError("Complete plot state lacks displacement")
@@ -138,15 +138,18 @@ def self_check():
     print(json.dumps({"status":"Pinned plot reader passes independent homogeneous deformation and prescribed-fixture checks","maximumPositionErrorM":coupon_error,"maximumFixtureErrorM":error}))
 
 
-def draw(folder):
+def draw(folder,maximum_time=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-    state=json.loads((folder/"process.json").read_text());maximum_time=state.get("lastConvergedNormalizedTime",1)
+    state=json.loads((folder/"process.json").read_text())
+    source_time=state.get("lastConvergedNormalizedTime",1)
+    maximum_time=source_time if maximum_time is None else min(maximum_time,source_time)
     model,ids,xyz,u,info=read_plot(folder,maximum_time)
-    info.update(maximumFixtureErrorM=check_fixture(model,ids,u,info["normalizedTime"]),curveAccepted=state.get("curveAccepted",False),sourceModelSha256=state["modelSha256"])
+    prefix=info["normalizedTime"]<source_time-1e-7
+    info.update(maximumFixtureErrorM=check_fixture(model,ids,u,info["normalizedTime"]),curveAccepted=state.get("curveAccepted",False) and not prefix,sourceModelSha256=state["modelSha256"],sourceLastAcceptedTime=source_time,earlierPrefix=prefix,requestedMaximumTime=maximum_time)
     lookup={int(n):i for i,n in enumerate(ids)}
     patterns={"tet10":[(0,1,2,4,5,6),(0,3,1,7,8,4),(1,3,2,8,9,5),(2,3,0,9,7,6)],
               "hex8":[(0,1,2,3),(4,5,6,7),(0,4,5,1),(1,5,6,2),(2,6,7,3),(3,7,4,0)],
@@ -174,15 +177,18 @@ def draw(folder):
         ax.set(xlim=(center[0]-radius,center[0]+radius),ylim=(center[1]-radius,center[1]+radius),zlim=(center[2]-radius,center[2]+radius),xlabel="X (mm)",ylabel="Y (mm)",zlabel="Z (mm)",title=title)
         ax.set_box_aspect((1,1,1));ax.set_proj_type("ortho");ax.view_init(elev=13,azim=-70)
         for axis in (ax.xaxis,ax.yaxis,ax.zaxis): axis.set_major_locator(MaxNLocator(3,prune="both"))
-    fig.suptitle("Synthetic bumper deformation — diagnostic only"+("" if info["curveAccepted"] else " — solve incomplete"),fontsize=13)
+    fig.suptitle("Synthetic bumper deformation — diagnostic only"+(" — earlier prefix" if prefix else "" )+("" if state.get("curveAccepted",False) else " — solve incomplete"),fontsize=13)
     fig.text(.5,.025,"Displacement scale 1×. Quadratic faces tessellated for display. No physical-material correlation claimed.",ha="center",fontsize=9)
-    fig.tight_layout(rect=(0,.04,1,.95));output=folder/"deformation-diagnostic.png";fig.savefig(output,dpi=150);plt.close(fig)
-    (folder/"deformation-diagnostic.json").write_text(json.dumps(info,indent=2));print(json.dumps(info|{"image":str(output)}))
+    stem="deformation-diagnostic"+(f"-prefix-{maximum_time:.8f}" if prefix else "")
+    fig.tight_layout(rect=(0,.04,1,.95));output=folder/(stem+".png");fig.savefig(output,dpi=150);plt.close(fig)
+    (folder/(stem+".json")).write_text(json.dumps(info,indent=2));print(json.dumps(info|{"image":str(output)}))
 
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser();parser.add_argument("--self-check",action="store_true");parser.add_argument("--folder",type=Path)
+    parser.add_argument("--maximum-time",type=float,help="Inspect only an earlier unambiguous normalized-time prefix; never repairs or accepts a failed curve.")
     args=parser.parse_args()
+    if args.maximum_time is not None and (not np.isfinite(args.maximum_time) or not 0<=args.maximum_time<=1): parser.error("--maximum-time must be finite and between zero and one")
     if args.self_check: self_check()
-    elif args.folder: draw(args.folder.resolve())
+    elif args.folder: draw(args.folder.resolve(),args.maximum_time)
     else: parser.error("Choose --self-check or --folder")

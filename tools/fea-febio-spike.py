@@ -6,6 +6,7 @@ FEBio Mooney-Rivlin c2=0, pressure_model=2 exactly matches the CCX NH energy.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import ctypes
 from datetime import datetime, timezone
 import hashlib
@@ -84,14 +85,14 @@ def outward_face(nodes, kind, vertices, face):
     return {3:"tri3",4:"quad4",6:"tri6"}[len(indices)], indices
 
 
-def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10, guarded_line_search=False, bulk_modulus=1e8, line_search_tolerance=.9):
+def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10, guarded_line_search=False, bulk_modulus=1e8, line_search_tolerance=.9, max_reformations=35):
     root = ET.Element("febio_spec", version="4.0")
     add(root, "Module", type="solid")
     control = add(root, "Control")
     add(control,"analysis","STATIC")
     add(control,"time_steps",round(1/increment)); add(control,"step_size",increment)
     solver = add(control,"solver")
-    for key,value in {"max_refs":35,"diverge_reform":1,"reform_each_time_step":1,"symmetric_stiffness":0,"dtol":1e-5,"etol":1e-5,"rtol":0,"lstol":line_search_tolerance}.items():
+    for key,value in {"max_refs":max_reformations,"diverge_reform":1,"reform_each_time_step":1,"symmetric_stiffness":0,"dtol":1e-5,"etol":1e-5,"rtol":0,"lstol":line_search_tolerance}.items():
         add(solver,key,value)
     if guarded_line_search:
         # FEBio can backtrack an inverted trial configuration instead of cutting
@@ -179,7 +180,33 @@ def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, co
     return '<?xml version="1.0" encoding="UTF-8"?>\n'+ET.tostring(root,encoding="unicode")
 
 
+@contextmanager
+def worker_lock():
+    """One native worker, including across independent CLI/study wrappers."""
+    import msvcrt
+    OUT.mkdir(parents=True,exist_ok=True)
+    with (OUT/"worker.lock").open("a+b") as stream:
+        if stream.tell()==0: stream.write(b"0");stream.flush()
+        stream.seek(0)
+        try: msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
+        except OSError as error:
+            raise RuntimeError("Another FEBio wrapper owns the worker lock; wait or cancel its job") from error
+        try: yield
+        finally:
+            stream.seek(0);msvcrt.locking(stream.fileno(),msvcrt.LK_UNLCK,1)
+
+
 def invoke(folder, model, timeout=240, cancel_after=None):
+    with worker_lock():
+        # Detect pre-lock legacy workers, or a surviving child of a crashed
+        # wrapper. Never start a second native solve alongside either.
+        names={"febio4.exe",EXE.name.lower()}
+        active=[p.pid for p in psutil.process_iter(["name"]) if (p.info["name"] or "").lower() in names]
+        if active: raise RuntimeError("Another native FEBio worker is active: "+str(active))
+        return invoke_locked(folder,model,timeout,cancel_after)
+
+
+def invoke_locked(folder, model, timeout=240, cancel_after=None):
     pin_path=ROOT/"data/fea/febio-pin.json"
     pin=json.loads(pin_path.read_text(encoding="utf-8-sig"))
     if hashlib.sha256(EXE.read_bytes()).hexdigest()!=EXE_SHA or pin["executableSha256"]!=EXE_SHA:
@@ -271,6 +298,8 @@ def coupon(contact=False):
 
 
 def verify_results(folder, report, metadata, args, sets):
+    if args.case not in ("coupon","contact","foam-contact","step","rubber"):
+        raise ValueError("Unknown verification case: "+args.case)
     top_name="TOP" if args.case=="coupon" else "PLATEN"
     top=history(folder/(top_name+".txt"))
     support_names=[name for name in ("BOTTOM","SHAFTNODES") if name in sets]
@@ -298,7 +327,7 @@ def verify_results(folder, report, metadata, args, sets):
         raise ValueError("Full-history resultant support balance gate failed")
     report.update(metadata,forceN=force,imbalanceN=maximum_imbalance,history=top,
                   forceScaleN=scale,material=metadata.get("material","C1=500000 Pa; C2=0; K=1e8 Pa; pressure_model=2"),synthetic=True)
-    if args.case not in ("step","rubber"):
+    if args.case in ("coupon","contact"):
         expected=ccx.neo_hooke_nominal(1-args.compression)*.02**2
         report.update(expectedForceN=expected,relativeAnalyticError=abs(force-expected)/expected)
         if report["relativeAnalyticError"]>.01: raise ValueError("Independent constitutive/reaction check failed")
@@ -330,6 +359,17 @@ def verify_results(folder, report, metadata, args, sets):
     for required,enabled in (("FOLDCONTACT",args.fold_contact),("SHAFTCONTACT",args.guide_shaft)):
         if enabled and report.get(required,{}).get("maximumPressurePa",0)<=1000:
             raise ValueError(required+" did not engage; this case cannot verify its contact behavior")
+    if args.case in ("step","rubber"):
+        geometry_path=ROOT/"tools/fea-mesh-diagnostic.py"
+        geometry_spec=importlib.util.spec_from_file_location("febio_geometry_check",geometry_path)
+        geometry=importlib.util.module_from_spec(geometry_spec);geometry_spec.loader.exec_module(geometry)
+        checked=geometry.check_history(folder)
+        # Geometry and reaction records must describe the same accepted states.
+        if len(checked["frames"])!=len(top) or any(abs(a["normalizedTime"]-b["time"])>1e-7 for a,b in zip(checked["frames"],top)):
+            raise ValueError("Geometry and reaction accepted frames disagree")
+        report["geometryHistory"]={k:v for k,v in checked.items() if k!="frames"}
+        report["geometryHistory"]["checkerSourceSha256"]=hashlib.sha256(geometry_path.read_bytes()).hexdigest()
+        report["geometryHistory"]["readerSourceSha256"]=hashlib.sha256((ROOT/"tools/fea-plot-diagnostic.py").read_bytes()).hexdigest()
     return report
 
 
@@ -378,6 +418,7 @@ if __name__=="__main__":
     parser.add_argument("--increment",type=float,default=.025)
     parser.add_argument("--penalty",type=float,default=1e12)
     parser.add_argument("--max-updates",type=int,default=0)
+    parser.add_argument("--max-reformations",type=int,default=35,help="Maximum stiffness reformations per increment; more iterations do not change convergence tolerances or physical contact.")
     parser.add_argument("--opt-iterations",type=int,default=10)
     parser.add_argument("--guarded-line-search",action="store_true",help="Backtrack inverted trial states and reform after contact augmentation; unchanged physical model and acceptance tolerances.")
     parser.add_argument("--line-search-tolerance",type=float,default=.9,help="FEBio lstol; zero uses the full Newton step. Accepted displacement/energy/contact thresholds are unchanged.")
@@ -385,8 +426,8 @@ if __name__=="__main__":
     parser.add_argument("--fold-contact",action="store_true")
     parser.add_argument("--guide-shaft",action="store_true")
     args=parser.parse_args()
-    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.opt_iterations<=0 or not math.isfinite(args.timeout_hours) or not 0<args.timeout_hours<=8 or not math.isfinite(args.line_search_tolerance) or not 0<=args.line_search_tolerance<=1:
-        parser.error("Require 0<compression<1, 0<increment<=1, positive finite penalty, nonnegative updates, positive optimal iterations and 0<timeout-hours<=8")
+    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.max_reformations<=0 or args.opt_iterations<=0 or not math.isfinite(args.timeout_hours) or not 0<args.timeout_hours<=8 or not math.isfinite(args.line_search_tolerance) or not 0<=args.line_search_tolerance<=1:
+        parser.error("Require 0<compression<1, 0<increment<=1, positive finite penalty, nonnegative updates, positive reformations/optimal iterations and 0<timeout-hours<=8")
     if args.case=="recovery":
         recovery()
         raise SystemExit(0)
@@ -404,7 +445,7 @@ if __name__=="__main__":
                         material="C1=500000 Pa; C2=0; K="+("1e9" if args.case=="rubber" else "1e8")+" Pa; pressure_model=2")
     else:
         nodes,groups,sets,surfaces=coupon(args.case=="contact")
-    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case in ("step","rubber") else .02,coupon=args.case not in ("step","rubber"),contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations,guarded_line_search=args.guarded_line_search,bulk_modulus=1e9 if args.case=="rubber" else 1e8,line_search_tolerance=args.line_search_tolerance)
+    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case in ("step","rubber") else .02,coupon=args.case not in ("step","rubber"),contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations,guarded_line_search=args.guarded_line_search,bulk_modulus=1e9 if args.case=="rubber" else 1e8,line_search_tolerance=args.line_search_tolerance,max_reformations=args.max_reformations)
     key=f"{args.case}-{args.mesh}-{args.compression:.2f}-"+hashlib.sha256(model.encode()).hexdigest()[:12]
     # Each attempt retains its own deck, source code, settings, history and outcome.
     # Raising the budget must never overwrite the previous rejected benchmark.
@@ -412,6 +453,8 @@ if __name__=="__main__":
     folder.mkdir(parents=True)
     (folder/"source-driver.py").write_bytes(Path(__file__).read_bytes())
     (folder/"source-ccx-reference.py").write_bytes((ROOT/"tools/fea-contact-spike.py").read_bytes())
+    (folder/"source-mesh-diagnostic.py").write_bytes((ROOT/"tools/fea-mesh-diagnostic.py").read_bytes())
+    (folder/"source-plot-diagnostic.py").write_bytes((ROOT/"tools/fea-plot-diagnostic.py").read_bytes())
     (folder/"source-pin.json").write_bytes((ROOT/"data/fea/febio-pin.json").read_bytes())
     (folder/"request.json").write_text(json.dumps({"arguments":vars(args),"metadata":metadata,"driverSha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},indent=2))
     print(json.dumps({"state":"starting","folder":str(folder),"timeoutHours":args.timeout_hours}),flush=True)

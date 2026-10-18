@@ -2,7 +2,8 @@
 
 Reports invalid sampled elements instead of repairing or changing a solve. The
 same reference points as the initial quadratic-tet check are sampled. This is a
-diagnostic, not a proof of global element bijectivity or a publication gate.
+diagnostic, not a proof of global element bijectivity. The full-history check is
+also a conservative numerical rejection gate; passing it never publishes a curve.
 """
 from __future__ import annotations
 
@@ -79,15 +80,45 @@ def self_check():
     print(json.dumps({"status":"Independent affine volume and reflected-element checks passed"}))
 
 
+def check_history(folder):
+    """Check every complete tet10 state, without interpolating or repairing it."""
+    model, ids, xyz, _, info = plot.read_plot(folder)
+    if abs(info["normalizedTime"]-1)>1e-7:
+        raise ValueError("Full geometry verification requires the complete requested stroke")
+    frames=[]
+    def check(index, time_value, displacement):
+        result=sample(model, ids, xyz, displacement)
+        if result["nonpositiveSampledElementIds"]:
+            raise ValueError(f"Nonpositive sampled deformed Jacobian at frame {index}, time {time_value}: {result['nonpositiveSampledElementIds'][:12]}")
+        frames.append({"frameIndex":index,"normalizedTime":time_value,
+                       "minimumSampledRelativeJacobian":result["minimumSampledRelativeJacobian"],
+                       "minimumFourPointQuadratureRelativeJacobian":result["minimumFourPointQuadratureRelativeJacobian"],
+                       "maximumFixtureErrorM":plot.check_fixture(model,ids,displacement,time_value)})
+    plot.read_plot(folder,on_frame=check)
+    if not frames or abs(frames[0]["normalizedTime"])>1e-8:
+        raise ValueError("Full geometry verification requires the actual initial frame")
+    return {"inputFileSha256":info["inputFileSha256"],"framesChecked":len(frames),
+            "tetrahedra":len(model.findall("Mesh/Elements[@type='tet10']/elem")),"locationsPerTet":15,
+            "minimumSampledRelativeJacobian":min(f["minimumSampledRelativeJacobian"] for f in frames),
+            "maximumFixtureErrorM":max(f["maximumFixtureErrorM"] for f in frames),"frames":frames,
+            "claim":"Positive sampled Jacobians and prescribed-fixture motion at every stored state; not a proof of global bijectivity or general collision coverage"}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--folder", type=Path)
     parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--history", action="store_true", help="Check all states through the complete requested stroke; reject sampled inversion or ambiguous plot times")
     args = parser.parse_args()
     if args.self_check:
         self_check()
     if args.folder is None:
         if not args.self_check: parser.error("Specify --folder or --self-check")
+        raise SystemExit(0)
+    if args.history:
+        result=check_history(args.folder)
+        (args.folder/"mesh-history-diagnostic.json").write_text(json.dumps(result,indent=2))
+        print(json.dumps({k:v for k,v in result.items() if k!="frames"}))
         raise SystemExit(0)
     journal = json.loads((args.folder / "process.json").read_text())
     model, ids, xyz, u, info = plot.read_plot(args.folder, journal.get("lastConvergedNormalizedTime", 1.))

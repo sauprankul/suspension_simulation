@@ -15,7 +15,7 @@ using SuspensionSimulation.Kinematics;
 namespace SuspensionSimulation.App;
 
 internal sealed record DesignerRecovery(string AssetId,string? BaseRevision,ComponentKind Kind,bool Custom,string LengthMm,string WidthMm,string HeightMm,
-    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null,ComponentDefinition? Metadata=null,ComponentPhysicsRecovery? Physics=null,BumpImportRecovery? BumpImport=null);
+    string Name,string Notes,DesignerPointRow[] Points,DesignerFrameRow[] Frames,DesignerPortRow[] Ports,DesignerEdgeRow[] Edges,ComponentMass? Mass=null,ComponentDefinition? Metadata=null,ComponentPhysicsRecovery? Physics=null,BumpImportRecovery? BumpImport=null,ComponentParameterRecovery? Parameters=null);
 internal sealed record DesignerPick(string Name,DesignVector Point);
 internal sealed record DesignerFrameChoice(string Name,DesignFrame? Frame);
 
@@ -84,6 +84,7 @@ public partial class MainWindow
         var tabs=new TabControl {Margin=new Thickness(8,0,0,0)};Grid.SetColumn(tabs,2);grid.Children.Add(tabs);
         AddGrid("Points (mm)",_componentPoints);AddGrid("Frames",_componentFrames);AddGrid("Ports",_componentPorts);AddGrid("Edges",_componentEdges);
         AddComponentMechanics(tabs);
+        AddComponentParameterTools(tabs);
         AddBumpCurveImport(tabs);
         var measurements=new StackPanel {Margin=new Thickness(8)};
         measurements.Children.Add(new TextBlock {Text="Named points and port origins",FontWeight=FontWeights.Bold});measurements.Children.Add(_measureA);measurements.Children.Add(_measureB);
@@ -109,6 +110,7 @@ public partial class MainWindow
             Change("Name",saved.Identity.Name,current.Identity.Name);Change("Provenance",saved.Identity.Provenance,current.Identity.Provenance);Change("Dimensions",saved.Dimensions,current.Dimensions);
             Change("Points",saved.Points,current.Points);Change("Frames",saved.Frames,current.Frames);Change("Ports",saved.Ports,current.Ports);Change("Edges",saved.VisualEdges,current.VisualEdges);
             Change("Mechanical behavior",saved.Behavior,current.Behavior);Change("Adjustments",saved.Adjustments,current.Adjustments);Change("Mass",saved.Mass,current.Mass);Change("Wheel dimensions",saved.Wheel,current.Wheel);Change("Rack ratio",saved.Rack,current.Rack);
+            Change("Parameter declarations",saved.Parameters,current.Parameters);Change("Property / parameter bindings",saved.MechanicalTemplate,current.MechanicalTemplate);
             Change("Raw curve source / conditions",saved.BumpCurveEvidence,current.BumpCurveEvidence);
             _componentDiff.Text=differences.Count==0?"Preview matches this revision.":string.Join("\n",differences);
         });history.Children.Add(compare);history.Children.Add(_componentDiff);tabs.Items.Add(new TabItem {Header="History",Content=history});
@@ -141,14 +143,14 @@ public partial class MainWindow
         foreach(var grid in _componentGrids) {grid.CommitEdit();grid.CommitEdit();}
         var kind=(ComponentKind)_componentKind.SelectedItem;
         _componentMass=ReadComponentMass();
-        if(!_componentCustom && kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar) return CreateElasticComponent(kind) with {Mass=_componentMass};
+        if(!_componentCustom && kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar) return ApplyComponentParameterTemplate(CreateElasticComponent(kind) with {Mass=_componentMass});
         if(!_componentCustom&&kind==ComponentKind.Wheel) return ComponentAuthoring.CreateWheel(ComponentIdentity(),PhysicalMetres("wheelRadius"),PhysicalMetres("wheelWidth")) with {Mass=_componentMass};
         if(!_componentCustom) return ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack,Adjustments=_componentMetadataSeed?.Adjustments};
         var geometry=new ComponentDefinition(ComponentIdentity(),kind,[.._componentPoints.Select(x=>x.Read())],[.._componentFrames.Select(x=>x.Read())],[.._componentPorts.Select(x=>x.Read())],
             [.._componentEdges.Select(x=>(DesignDimension)new MeasuredDistance(x.Id,x.StartPointId,x.EndPointId))],_componentMass)
             {VisualEdges=[.._componentEdges.Select(x=>new VisualEdge(x.Id,x.StartPointId,x.EndPointId))]};
         var result=_componentMetadataSeed is {} metadata?metadata with {Identity=geometry.Identity,Kind=geometry.Kind,Points=geometry.Points,Frames=geometry.Frames,Ports=geometry.Ports,Dimensions=geometry.Dimensions,Template=null,Mass=_componentMass,VisualEdges=geometry.VisualEdges}:geometry;
-        return ApplyComponentMechanicalEdits(result);
+        return ApplyComponentParameterTemplate(ApplyComponentMechanicalEdits(result));
     }
     private void ApplyComponentPreview(bool undo)
     {
@@ -191,7 +193,7 @@ public partial class MainWindow
             if(previous.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
             FillComponentTables(previous);
         }
-        else {_componentMetadataSeed=null;_componentMass=null;_useMass.IsChecked=false;_componentCustom=false;_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="New "+_componentKind.SelectedItem;foreach(var grid in _componentGrids) grid.IsReadOnly=true;}
+        else {_componentMetadataSeed=null;_componentMass=null;_useMass.IsChecked=false;_componentCustom=false;ResetComponentParameters();_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="New "+_componentKind.SelectedItem;foreach(var grid in _componentGrids) grid.IsReadOnly=true;}
         _componentHistory.ItemsSource=null;
         FillImportedBumpEvidence(_componentMetadataSeed?.BumpCurveEvidence);ApplyComponentPreview(false);
     }
@@ -201,11 +203,14 @@ public partial class MainWindow
     private void OpenSelectedComponent()
     {
         var component=_componentLibraryList.SelectedItem as ComponentDefinition??throw new ArgumentException("Select a published component.");
+        _componentParameterPreview.Clear();
         _componentMetadataSeed=component;_componentMass=component.Mass;_componentHistory.ItemsSource=_designLibrary!.ComponentRevisions(component.Identity.AssetId);_componentHistory.SelectedIndex=0;
         _componentId=component.Identity.AssetId;_componentBaseRevision=component.Identity.RevisionId;_componentCustom=component.Template is null;
         var metadata=_workspaceDrafts[Workspace.ComponentDesigner];metadata.Name.Text=component.Identity.Name;metadata.Notes.Text=component.Identity.Provenance.Note;_componentKind.SelectedItem=component.Kind;
         if(component.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
-        FillImportedBumpEvidence(component.BumpCurveEvidence);FillComponentTables(component);_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;ApplyComponentPreview(false);
+        FillImportedBumpEvidence(component.BumpCurveEvidence);FillComponentTables(component);_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;
+        if((component.Parameters??[]).Length>0) {_componentDefinition=component;_componentViewport!.SetScene(ComponentScene(component));_componentStatus.Text="Opened source definition. Enter a temporary importer configuration on Parameters to preview; no owner values are stored.";ScheduleComponentDraft();return;}
+        ApplyComponentPreview(false);
         _componentStatus.Text="Opened revision "+component.Identity.RevisionId[..12];
     }
     private void PublishComponent()
@@ -216,7 +221,7 @@ public partial class MainWindow
     }
     private string CaptureComponentRaw()=>JsonSerializer.Serialize(new DesignerRecovery(_componentId,_componentBaseRevision,(ComponentKind)_componentKind.SelectedItem,_componentCustom,
         _componentLength.Text,_componentWidth.Text,_componentHeight.Text,_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text,
-        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass,_componentMetadataSeed,CaptureComponentPhysics(),CaptureBumpImport()));
+        _componentPoints.ToArray(),_componentFrames.ToArray(),_componentPorts.ToArray(),_componentEdges.ToArray(),_componentMass,_componentMetadataSeed,CaptureComponentPhysics(),CaptureBumpImport(),CaptureComponentParameters()));
     private void RestoreComponentRaw(string json,bool identity)
     {
         var raw=JsonSerializer.Deserialize<DesignerRecovery>(json)??throw new ArgumentException("Invalid recovery draft.");_componentUpdating=true;
@@ -226,6 +231,7 @@ public partial class MainWindow
             _componentMass=raw.Mass;
             _componentMetadataSeed=raw.Metadata;
             RestoreComponentPhysics(raw.Physics);
+            RestoreComponentParameters(raw.Parameters);
             RestoreBumpImport(raw.BumpImport);
             _componentKind.SelectedItem=raw.Kind;_componentCustom=raw.Custom;_componentLength.Text=raw.LengthMm;_componentWidth.Text=raw.WidthMm;_componentHeight.Text=raw.HeightMm;
             _workspaceDrafts[Workspace.ComponentDesigner].Name.Text=raw.Name;_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text=raw.Notes;

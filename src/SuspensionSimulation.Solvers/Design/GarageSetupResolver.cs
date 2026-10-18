@@ -6,10 +6,13 @@ namespace SuspensionSimulation.Solvers.Design;
 public sealed class GarageSetupResolver(IDesignAssetSource source)
 {
     public ResolvedAssemblyGraph Resolve(GarageSetup setup)
-        =>Freeze(new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment),setup);
+        =>Freeze(new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment,setup.ParameterValues??[]),setup);
     public static ResolvedAssemblyGraph Freeze(ResolvedAssemblyGraph graph,GarageSetup setup)
     {
         DesignValidation.Validate(setup);
+        var configured=DefinitionParameters.Resolve(graph.Root.Parameters??[],setup.ParameterValues??[]);
+        if(!configured.SequenceEqual(graph.ParameterConfigurations.Single(c=>c.InstancePath=="").Values)) throw new ArgumentException("Resolved parameter configuration does not match the saved Garage setup.");
+        if(graph.Root.Parameters is not null&&setup.MechanicalValues is not null) throw new ArgumentException("Properties cannot be overridden with legacy mechanical values.");
         if(graph.Root.Identity.AssetId!=setup.RootAssembly.AssetId||!graph.SelectedEquipment.SequenceEqual(setup.Equipment)) throw new ArgumentException("Resolved source does not match the saved Garage configuration.");
         foreach(var selected in setup.Adjustments)
             if(!graph.SetupAdjustments.Any(a=>a.InstancePath==selected.InstancePath&&a.Definition.Id==selected.AdjustmentId))

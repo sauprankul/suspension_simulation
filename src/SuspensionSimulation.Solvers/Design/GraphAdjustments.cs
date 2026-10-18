@@ -16,7 +16,9 @@ public static class GraphAdjustments
         var resolved=new List<ResolvedAdjustment>();
         ComponentDefinition Adjust(string path,ComponentDefinition component)
         {
-            component=sourceDefinitions[component.Identity.AssetId];var values=new Dictionary<string,AdjustmentSetting>(StringComparer.Ordinal);
+            component=sourceDefinitions[component.Identity.AssetId];
+            component=MechanicalTemplates.Resolve(component,source.ParameterConfigurations.SingleOrDefault(c=>c.InstancePath==path)?.Values??[]);
+            var values=new Dictionary<string,AdjustmentSetting>(StringComparer.Ordinal);
             foreach(var selection in selected.Where(s=>s.InstancePath==path)) values.Add(selection.AdjustmentId,selection switch
             {ContinuousAdjustmentSelection c=>new(c.Fraction),DiscreteAdjustmentSelection d=>new(ChoiceId:d.ChoiceId),_=>throw new ArgumentException("Unsupported adjustment selection.")});
             foreach(var a in component.Adjustments??[])

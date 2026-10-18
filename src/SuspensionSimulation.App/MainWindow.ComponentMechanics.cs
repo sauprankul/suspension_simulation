@@ -24,8 +24,8 @@ public partial class MainWindow
     {
         var panel=new StackPanel {Margin=new Thickness(10)};
         void Field(string id,string label,string value)
-        {var caption=new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap};_physicalLabels.Add(id,caption);panel.Children.Add(caption);var box=new TextBox {Text=value};_physicalFields.Add(id,box);box.TextChanged+=(_,_)=>ScheduleComponentDraft();panel.Children.Add(box);}
-        panel.Children.Add(new TextBlock {Text="Values apply to the selected component type. Spring and damper dimensions are owned here; Garage only selects compatible hardware and its declared adjustments.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,8)});
+        {var caption=new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap};_physicalLabels.Add(id,caption);panel.Children.Add(caption);var box=new TextBox {Text=value};_physicalFields.Add(id,box);box.TextChanged+=(_,_)=>ScheduleComponentDraft();panel.Children.Add(box);AddMechanicalSourceChoice(panel,id);}
+        panel.Children.Add(new TextBlock {Text="Properties are owned here and read-only to importers. A field can instead reference an owner-declared parameter supplied by its immediate importer. Bump-stop material remains a component property.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,8)});
         Field("rate","Spring rate (kgf/mm)","3");Field("free","Spring free length (mm)","300");Field("block","Spring fully bound length (mm)","100");
         panel.Children.Add(_damperFamilyLabel);panel.Children.Add(_damperFamily);Field("minimum","Minimum eye length (mm)","350");Field("maximum","Maximum eye length (mm)","500");
         Field("compression","Compression damping (N·s/m)","1000");Field("rebound","Rebound damping (N·s/m)","2000");Field("gas","Explicit gas extension force (N)","0");
@@ -89,7 +89,7 @@ public partial class MainWindow
         });adjustment.Children.Add(create);adjustment.Children.Add(new TextBlock {Text="Hole positions and measured stations use the exact named frames from the Frames tab. A slot is straight; an arc or eccentric needs its own radius and angle range. Frame and point IDs stay stable across revisions.",TextWrapping=TextWrapping.Wrap});
         tabs.Items.Add(new TabItem {Header="Adjustments",Content=adjustment});
     }
-    private double Physical(string id)=>DesignerNumbers.Number(_physicalFields[id].Text);
+    private double Physical(string id)=>ComponentMechanicalNumber(id);
     private void UpdateMechanicalVisibility()
     {
         var kind=_componentKind.SelectedItem is ComponentKind selected?selected:ComponentKind.RigidLink;
@@ -108,6 +108,7 @@ public partial class MainWindow
                 _=>_useMass.IsChecked==true
             };
             field.Visibility=_physicalLabels[id].Visibility=visible?Visibility.Visible:Visibility.Collapsed;
+            if(_componentParameterFields.TryGetValue(id,out var source)) source.Panel.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
         }
         _damperFamily.Visibility=_damperFamilyLabel.Visibility=_integratedSeats.Visibility=_bodyAdjustment.Visibility=kind==ComponentKind.Damper?Visibility.Visible:Visibility.Collapsed;
         _perchAdjustment.Visibility=kind==ComponentKind.Damper&&_integratedSeats.IsChecked==true?Visibility.Visible:Visibility.Collapsed;
@@ -132,6 +133,7 @@ public partial class MainWindow
     }
     private void FillComponentMechanics(ComponentDefinition component)
     {
+        _bumpMaterialProperty.Text=component.BumperMaterial is {} material?$"Component material property: {material.Name} · {material.Readiness}\nSource material is preserved on this component revision and is not an assembly/Garage parameter. A source material change must invalidate dependent computed FEA curves; the production FEA publication gate remains pending.":"Material property: unknown / not supplied. No TPU preset is assigned to an imported measurement.";
         void Set(string id,double value)=>_physicalFields[id].Text=DesignerNumbers.Text(value);
         _useMass.IsChecked=component.Mass is not null;if(component.Mass is {} mass) {Set("mass",mass.MassKg);Set("massX",mass.CenterOfMassM.X*1000);Set("massY",mass.CenterOfMassM.Y*1000);Set("massZ",mass.CenterOfMassM.Z*1000);}
         switch(component.Behavior)
@@ -148,6 +150,7 @@ public partial class MainWindow
             foreach(var (id,minField,maxField) in new[]{(damper.SpringSeats?.PerchAdjustmentId,"perchMin","perchMax"),(damper.BodyLengthAdjustmentId,"bodyMin","bodyMax")})
                 if(id is not null&&(component.Adjustments??[]).Single(a=>a.Id==id) is {} definition&&definition.Path is ThreadedAdjustmentPath t)
                 {var nominal=AdjustmentPaths.Evaluate(t,definition.Default);var a=AdjustmentPaths.Evaluate(t,new(0));var b=AdjustmentPaths.Evaluate(t,new(1));Set(minField,(a.OriginM-nominal.OriginM).Dot(t.Datum.Axis)*1000);Set(maxField,(b.OriginM-nominal.OriginM).Dot(t.Datum.Axis)*1000);}
+        FillComponentScopedParameters(component);
     }
     private ComponentDefinition ApplyComponentMechanicalEdits(ComponentDefinition component)
     {

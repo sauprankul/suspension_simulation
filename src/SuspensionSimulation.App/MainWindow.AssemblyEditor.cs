@@ -15,7 +15,7 @@ using SuspensionSimulation.Solvers.Design;
 namespace SuspensionSimulation.App;
 
 internal sealed record AssemblyRecovery(string Id,string? BaseRevision,string Name,string Notes,string Grounds,string ExpectedDof,
-    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null,AssemblyDefinition? Metadata=null,AssemblySlotRow[]? Slots=null,AssemblyExposureRow[]? Exposures=null);
+    AssemblyInstanceRow[] Instances,AssemblyJointRow[] Joints,AssemblyPortRow[] Ports,string? Source=null,AssemblyDefinition? Metadata=null,AssemblySlotRow[]? Slots=null,AssemblyExposureRow[]? Exposures=null,AssemblyParameterRecovery? Parameters=null);
 internal sealed record AssemblyCatalogChoice(string Name,AssetReference Reference,bool IsAssembly);
 
 public partial class MainWindow
@@ -74,6 +74,7 @@ public partial class MainWindow
         tabs.Items.Add(new TabItem {Header="Mate",Content=mate});
         AddTwinsMotionTools(tabs,left);
         AddAssemblyGarageContracts(tabs);
+        AddAssemblyParameterTools(tabs);
         AddBumperInstallation(tabs);
         _workspaceViews[Workspace.AssemblyEditor]=layout;layout.Visibility=Visibility.Collapsed;_shell.Children.Add(layout);
         _assemblyAutosave.Tick+=(_,_)=>{_assemblyAutosave.Stop();try {_designLibrary.SaveDraft("assembly-workspace",CaptureAssemblyRaw());}catch(Exception error) {_assemblyStatus.Text="Draft recovery could not save: "+error.Message;}};
@@ -92,17 +93,20 @@ public partial class MainWindow
     private AssemblyDefinition ReadAssembly()
     {
         foreach(var grid in _assemblyGrids) {grid.CommitEdit();grid.CommitEdit();}
+        CommitAssemblyParameters();
+        if(_assemblyParameterAssignments.Any(p=>!_assemblyInstances.Any(i=>i.Id==p.Instance))) throw new ArgumentException("A child parameter assignment names an absent direct child instance.");
         var metadata=_workspaceDrafts[Workspace.AssemblyEditor];
-        var result=new AssemblyDefinition(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>x.Read())],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
+        var result=new AssemblyDefinition(new(_assemblyId,"draft",metadata.Name.Text,new(DataProvenance.Synthetic,metadata.Notes.Text,_assemblyProvenanceSource)),[.._assemblyInstances.Select(x=>ConfigureAssemblyChild(x.Read()))],[.._assemblyJoints.Select(x=>x.Read())],[.._assemblyPorts.Select(x=>x.Read())])
             {GroundedInstances=[.._assemblyGrounds.Text.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries)]};
         result=_assemblyMetadataSeed is {} original?original with {Identity=result.Identity,Instances=result.Instances,Joints=result.Joints,Ports=result.Ports,GroundedInstances=result.GroundedInstances}:result;
-        return result with {EquipmentSlots=_assemblySlots.Count>0?[.._assemblySlots.Select(s=>s.Read())]:null,SetupAdjustments=_assemblyExposures.Count>0?[.._assemblyExposures.Select(s=>s.Read())]:null};
+        return result with {Parameters=_assemblyParameters.Count>0?[.._assemblyParameters.Select(p=>p.Read())]:null,EquipmentSlots=_assemblySlots.Count>0?[.._assemblySlots.Select(s=>s.Read())]:null,SetupAdjustments=_assemblyExposures.Count>0?[.._assemblyExposures.Select(s=>s.Read())]:null};
     }
     private int? AssemblyExpectedDof()=>string.IsNullOrWhiteSpace(_assemblyExpectedDof.Text)?null:int.TryParse(_assemblyExpectedDof.Text,out var n)&&n>=0?n:throw new ArgumentException("Expected freedoms must be a nonnegative integer or blank.");
     private void ApplyAssemblyPreview(bool undo)
     {
         var definition=ReadAssembly();var raw=CaptureAssemblyRaw();var resolver=new AssemblyGraphResolver(_designLibrary!);
-        var graph=raw==_assemblyPublishedRaw&&_assemblyBaseRevision is not null?resolver.Compile(new(_assemblyId,_assemblyBaseRevision)):resolver.CompileDraft(definition);var report=MechanismMobility.Inspect(graph,AssemblyExpectedDof());
+        var preview=ReadAssemblyPreviewValues();
+        var graph=raw==_assemblyPublishedRaw&&_assemblyBaseRevision is not null?resolver.Compile(new(_assemblyId,_assemblyBaseRevision),[],preview):resolver.CompileDraft(definition,preview);var report=MechanismMobility.Inspect(graph,AssemblyExpectedDof());
         if(undo&&_assemblyAcceptedRaw is {} before&&before!=raw) {_assemblyUndo.Push(before);_assemblyRedo.Clear();}
         _assemblyDefinition=definition;_assemblyGraph=graph;_assemblyAcceptedRaw=raw;ShowAssemblyGraph(graph,report);ScheduleAssemblyDraft();
     }
@@ -121,7 +125,7 @@ public partial class MainWindow
     private void NewAssembly()
     {
         _assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyGraph=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;_assemblyProvenanceSource=null;_assemblyMetadataSeed=null;
-        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();FillAssemblyGarageContracts(null);_assemblyGrounds.Text="";ApplyAssemblyPreview(false);_assemblyViewport!.RequestSceneFit();
+        _workspaceDrafts[Workspace.AssemblyEditor].Name.Text="New assembly";_assemblyInstances.Clear();_assemblyJoints.Clear();_assemblyPorts.Clear();FillAssemblyGarageContracts(null);FillAssemblyScopedParameters(null);_assemblyGrounds.Text="";ApplyAssemblyPreview(false);_assemblyViewport!.RequestSceneFit();
     }
     private void RefreshAssemblyCatalog()
     {
@@ -132,8 +136,19 @@ public partial class MainWindow
         RefreshBumperInstallation();
     }
     private void OpenSelectedAssembly()=>LoadAssembly(_assemblyLibraryList.SelectedItem as AssemblyDefinition??throw new ArgumentException("Select a published assembly."));
-    private void LoadAssembly(AssemblyDefinition a)
+    private void LoadAssembly(AssemblyDefinition a,IEnumerable<ParameterValue>? previewValues=null)
     {
+        if((a.Parameters??[]).Length>0)
+        {
+            _assemblyId=a.Identity.AssetId;_assemblyBaseRevision=a.Identity.RevisionId;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;FillAssembly(a);_assemblyDefinition=a;_assemblyConflict=null;
+            if(previewValues is not null) {_assemblyParameterPreview.Clear();foreach(var value in previewValues) _assemblyParameterPreview.Add(ParameterPreviewRow.From(value));}
+            if(_assemblyParameterPreview.Any(p=>string.IsNullOrWhiteSpace(p.Value)))
+            {
+                _assemblyGraph=null;_assemblyPublishedRaw=_assemblyAcceptedRaw=CaptureAssemblyRaw();_assemblyViewport!.SetScene(new(a.Identity.Name,"authoring","unconfigured-owner",[],[],[],["Supply temporary importer values to inspect this parameterized source."]));RefreshAssemblyCatalog();_assemblyStatus.Text="Opened source. Enter temporary preview importer values on Parameters / imports; no values are stored on the owner definition.";ScheduleAssemblyDraft();return;
+            }
+            _assemblyGraph=new AssemblyGraphResolver(_designLibrary!).Compile(new(_assemblyId,_assemblyBaseRevision),[],ReadAssemblyPreviewValues());_assemblyPublishedRaw=_assemblyAcceptedRaw=CaptureAssemblyRaw();
+            ShowAssemblyGraph(_assemblyGraph,MechanismMobility.Inspect(_assemblyGraph,AssemblyExpectedDof()));RefreshAssemblyCatalog();_assemblyViewport!.RequestSceneFit();SaveAssemblyGraph();ScheduleAssemblyDraft();return;
+        }
         ResolvedAssemblyGraph? previous=null;
         var cached=_designLibrary!.ReadDraft(AssemblyCacheKey(a.Identity.AssetId));
         if(cached is not null) {try {previous=AssemblyGraphResolver.OpenBundle(DesignJson.Deserialize<PortableDesignBundle>(cached));}catch(Exception error) {App.LogException("Stored assembly fallback",error);}}
@@ -154,6 +169,7 @@ public partial class MainWindow
             var metadata=_workspaceDrafts[Workspace.AssemblyEditor];metadata.Name.Text=a.Identity.Name;metadata.Notes.Text=a.Identity.Provenance.Note;
             _assemblyProvenanceSource=a.Identity.Provenance.Source;
             FillAssemblyGarageContracts(a);
+            FillAssemblyScopedParameters(a);
             _assemblyInstances.Clear();foreach(var x in a.Instances) _assemblyInstances.Add(AssemblyInstanceRow.From(x));_assemblyJoints.Clear();foreach(var x in a.Joints) _assemblyJoints.Add(AssemblyJointRow.From(x));
             _assemblyPorts.Clear();foreach(var x in a.Ports) _assemblyPorts.Add(AssemblyPortRow.From(x));_assemblyGrounds.Text=string.Join(",",a.GroundedInstances);
         }
@@ -169,7 +185,8 @@ public partial class MainWindow
     {
         var selected=_assemblyInstanceGrid!.SelectedItems.OfType<AssemblyInstanceRow>().Select(x=>x.Id).ToArray();var parent=ReadAssembly();var id="group-"+Guid.NewGuid().ToString("N")[..8];
         var result=AssemblyAuthoring.Group(parent,selected,parent.Identity with {AssetId=Guid.NewGuid().ToString("N"),Name="Group "+string.Join(" + ",selected)},id);
-        _designLibrary!.Publish(result.Child,null);FillAssembly(result.Parent);ApplyAssemblyPreview(true);RefreshAssemblyCatalog();
+        var childIds=(result.Child.Parameters??[]).Select(p=>p.Id).ToHashSet(StringComparer.Ordinal);var childPreview=ReadAssemblyPreviewValues().Where(v=>childIds.Contains(v.ParameterId)).ToArray();
+        _designLibrary!.Publish(result.Child,null,childPreview);FillAssembly(result.Parent);ApplyAssemblyPreview(true);RefreshAssemblyCatalog();
     }
     private void MirrorAssemblySelection()
     {
@@ -180,9 +197,9 @@ public partial class MainWindow
     }
     private void PublishAssembly()
     {
-        ApplyAssemblyPreview(true);var saved=_designLibrary!.Publish(_assemblyDefinition!,_assemblyBaseRevision);_assemblyBaseRevision=saved.Identity.RevisionId;
+        ApplyAssemblyPreview(true);var preview=ReadAssemblyPreviewValues();var saved=_designLibrary!.Publish(_assemblyDefinition!,_assemblyBaseRevision,preview);_assemblyBaseRevision=saved.Identity.RevisionId;
         FillAssembly(saved);
-        _assemblyDefinition=saved;_assemblyGraph=new AssemblyGraphResolver(_designLibrary).Compile(new(_assemblyId,saved.Identity.RevisionId));_assemblyAcceptedRaw=CaptureAssemblyRaw();RefreshAssemblyCatalog();
+        _assemblyDefinition=saved;_assemblyGraph=new AssemblyGraphResolver(_designLibrary).Compile(new(_assemblyId,saved.Identity.RevisionId),[],preview);_assemblyAcceptedRaw=CaptureAssemblyRaw();RefreshAssemblyCatalog();
         _assemblyPublishedRaw=_assemblyAcceptedRaw;_assemblyConflict=null;SaveAssemblyGraph();
         _assemblyStatus.Text="Published "+saved.Identity.RevisionId[..12]+". Mobility diagnostics remain visible; publication is not vehicle validation.";ScheduleAssemblyDraft();
     }
@@ -190,6 +207,18 @@ public partial class MainWindow
     {
         if(_assemblyBaseRevision is null) {ApplyAssemblyPreview(true);return;}
         if(_assemblyPublishedRaw!=CaptureAssemblyRaw()) throw new ArgumentException("Publish your draft before refreshing dependencies.");
+        if(_assemblyParameters.Count>0)
+        {
+            try
+            {
+                var next=new AssemblyGraphResolver(_designLibrary!).Compile(new(_assemblyId,_assemblyBaseRevision),[],ReadAssemblyPreviewValues());
+                if(_assemblyGraph is {} previous) AssemblyGraphResolver.CheckInterfaces(previous,next);
+                var report=MechanismMobility.Inspect(next,AssemblyExpectedDof());if(!report.IsClosed||(AssemblyExpectedDof() is {} dof&&report.DegreesOfFreedom!=dof)) throw new InvalidOperationException("Updated mechanism does not close with its expected mobility.");
+                var changed=_assemblyGraph?.Manifest.Dependencies.SequenceEqual(next.Manifest.Dependencies)!=true;_assemblyGraph=next;_assemblyConflict=null;if(changed||_twinsMotion is null) ShowAssemblyGraph(next,report);SaveAssemblyGraph();
+            }
+            catch(Exception error) when(error is ArgumentException or InvalidOperationException or IOException) {_assemblyConflict=error.Message;_assemblyStatus.Text="Dependency conflict; previous complete graph retained. "+error.Message;}
+            return;
+        }
         var result=new AssemblyGraphResolver(_designLibrary!).Resolve(new(_assemblyId,_assemblyBaseRevision),_assemblyGraph,g=>
         {
             var report=MechanismMobility.Inspect(g,AssemblyExpectedDof());if(!report.IsClosed) return "Updated joint frames do not close. Last complete graph retained.";
@@ -222,12 +251,16 @@ public partial class MainWindow
         if(dialog.ShowDialog(this)==true) {File.WriteAllText(dialog.FileName,DesignJson.Serialize(bundle));_assemblyStatus.Text="Exported exact revisions and transitive dependency hashes.";}
     }
     private string CaptureAssemblyRaw()=>JsonSerializer.Serialize(new AssemblyRecovery(_assemblyId,_assemblyBaseRevision,_workspaceDrafts[Workspace.AssemblyEditor].Name.Text,_workspaceDrafts[Workspace.AssemblyEditor].Notes.Text,
-        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource,_assemblyMetadataSeed,_assemblySlots.ToArray(),_assemblyExposures.ToArray()));
+        _assemblyGrounds.Text,_assemblyExpectedDof.Text,_assemblyInstances.ToArray(),_assemblyJoints.ToArray(),_assemblyPorts.ToArray(),_assemblyProvenanceSource,_assemblyMetadataSeed,_assemblySlots.ToArray(),_assemblyExposures.ToArray(),CaptureAssemblyParameters()));
     private void ImportAssembly()
     {
         var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Suspension assembly (*.json)|*.json",InitialDirectory=App.RepositoryRoot};
         if(dialog.ShowDialog(this)!=true) return;
-        var bundle=DesignJson.Deserialize<PortableDesignBundle>(File.ReadAllText(dialog.FileName));var imported=_designLibrary!.ImportClone(bundle);RefreshAssemblyCatalog();LoadAssembly(imported);
+        var bundle=DesignJson.Deserialize<PortableDesignBundle>(File.ReadAllText(dialog.FileName));ImportAssemblyBundle(bundle);
+    }
+    private void ImportAssemblyBundle(PortableDesignBundle bundle)
+    {
+        var imported=_designLibrary!.ImportClone(bundle);RefreshAssemblyCatalog();LoadAssembly(imported,bundle.ParameterValues??[]);
         _assemblyStatus.Text="Imported an independent assembly with exact child revisions. Original source bundle and hashes are archived.";
     }
     private void RestoreAssemblyRaw(string json,bool identity)
@@ -239,6 +272,7 @@ public partial class MainWindow
             _assemblyProvenanceSource=raw.Source;
             _assemblyMetadataSeed=raw.Metadata;
             FillAssemblyGarageContracts(raw.Metadata,raw.Slots,raw.Exposures);
+            RestoreAssemblyParameters(raw.Parameters);
             _assemblyGrounds.Text=raw.Grounds;_assemblyExpectedDof.Text=raw.ExpectedDof;_assemblyInstances.Clear();foreach(var x in raw.Instances) _assemblyInstances.Add(x);_assemblyJoints.Clear();foreach(var x in raw.Joints) _assemblyJoints.Add(x);_assemblyPorts.Clear();foreach(var x in raw.Ports) _assemblyPorts.Add(x);
         }
         finally {_assemblyUpdating=false;}

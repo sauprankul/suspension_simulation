@@ -24,21 +24,22 @@ internal static class ImportedBumperIntegrationChecks
             var sourceRoot=library.LoadAssembly(stock.Configuration!.RootAssembly.AssetId)!;
             var root=sourceRoot with {Identity=sourceRoot.Identity with {AssetId="bumper-integration-vehicle",RevisionId="draft",Name="Synthetic GR86 with imported FL bumper"}};
             var first=new InstancePort("front","left-shock-upper");var second=new InstancePort("front","left-shock-lower");
-            root=BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"FL-bumper",first,second,true);root=library.Publish(root,null);
-            var graph=new AssemblyGraphResolver(library).Compile(new(root.Identity.AssetId));var element=graph.ElasticElements.Single(e=>e.Path=="FL-bumper");
+            var configuration=stock.Configuration.ParameterValues??[];
+            root=BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"FL-bumper",first,second,true,configuration);root=library.Publish(root,null,configuration);
+            var graph=new AssemblyGraphResolver(library).Compile(new(root.Identity.AssetId),[],configuration);var element=graph.ElasticElements.Single(e=>e.Path=="FL-bumper");
             if(element.First.BodyPath!=graph.Interfaces["front:left-shock-upper"].BodyPath||element.Second.BodyPath!=graph.Interfaces["front:left-shock-lower"].BodyPath) throw new Exception("Installed bumper lost its selected physical supports.");
             // A source component may use any local origin/orientation. Installing it may not rewrite that geometry.
             DesignVector Rotate(DesignVector value)=>new(value.Z,value.X,value.Y);var shift=new DesignVector(.012,-.034,.056);
             var rotated=library.Publish(bumper with {Identity=bumper.Identity with {AssetId="rotated-integration-bumper",RevisionId="draft"},
                 Points=[..bumper.Points.Select(p=>p with {PositionM=Rotate(p.PositionM)+shift})],
                 Frames=[..bumper.Frames.Select(f=>f with {Frame=new(Rotate(f.Frame.OriginM)+shift,Rotate(f.Frame.Axis),Rotate(f.Frame.ReferenceDirection))})]},null);
-            var rotatedRoot=BumperInstallation.Add(sourceRoot,library,new(rotated.Identity.AssetId),"rotated-bumper",first,second,false);
+            var rotatedRoot=BumperInstallation.Add(sourceRoot,library,new(rotated.Identity.AssetId),"rotated-bumper",first,second,false,configuration);
             var placed=DesignTransform.From(rotatedRoot.Instances.Single(i=>i.Id=="rotated-bumper").Placement);
             var localFirst=rotated.Frames.Single(f=>f.Id=="first").Frame.OriginM;var localSecond=rotated.Frames.Single(f=>f.Id=="second").Frame.OriginM;
             if((placed.Point(localFirst)-element.First.Frame.OriginM).Length>1e-10||(placed.Direction(localSecond-localFirst).Cross(element.Second.Frame.OriginM-element.First.Frame.OriginM)).Length>1e-10||library.LoadComponent(rotated.Identity.AssetId)!.Points[0].PositionM!=shift)
                 throw new Exception("Bumper installation changed arbitrary source-frame geometry or misaligned its axial reference.");
-            try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"another",first,first,false);throw new Exception("Same-support bumper was installed.");}catch(ArgumentException) { }
-            try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"FL-bumper",first,second,false);throw new Exception("Duplicate bumper instance was installed.");}catch(ArgumentException) { }
+            try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"another",first,first,false,configuration);throw new Exception("Same-support bumper was installed.");}catch(ArgumentException) { }
+            try {BumperInstallation.Add(root,library,new(bumper.Identity.AssetId),"FL-bumper",first,second,false,configuration);throw new Exception("Duplicate bumper instance was installed.");}catch(ArgumentException) { }
             var custom=garage.Duplicate(stock);custom=garage.Save(custom with {Name="Synthetic saved imported bumper",Configuration=custom.Configuration! with {RootAssembly=new(root.Identity.AssetId),Equipment=[..custom.Configuration!.Equipment,new("FL-bumper","FL-bumper",new(bumper.Identity.AssetId))]}});
             custom=garage.Load(custom.Id)!;var snapshot=await engine.SolveAsync(2,custom,custom,0,0,0);
             var firstState=snapshot.A.State;var bumperState=firstState.Mechanics.Elements.Single(e=>e.Path=="FL-bumper");

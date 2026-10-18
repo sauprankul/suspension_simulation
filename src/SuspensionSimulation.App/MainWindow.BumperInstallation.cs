@@ -50,15 +50,15 @@ public partial class MainWindow
         var bumper=_assemblyBumperChoice.SelectedItem as ComponentDefinition??throw new ArgumentException("Choose a published bumper curve.");
         InstancePort Mount(ComboBox picker) {var key=picker.SelectedItem as string??throw new ArgumentException("Choose both mounting references.");var split=key.IndexOf(':');return new(key[..split],key[(split+1)..]);}
         var assembly=ReadAssembly();var before=CaptureAssemblyRaw();
-        var added=BumperInstallation.Add(assembly,_designLibrary!,new(bumper.Identity.AssetId),_assemblyBumperId.Text.Trim(),Mount(_assemblyBumperFirst),Mount(_assemblyBumperSecond),_assemblyBumperGarage.IsChecked==true);
+        var added=BumperInstallation.Add(assembly,_designLibrary!,new(bumper.Identity.AssetId),_assemblyBumperId.Text.Trim(),Mount(_assemblyBumperFirst),Mount(_assemblyBumperSecond),_assemblyBumperGarage.IsChecked==true,ReadAssemblyPreviewValues());
         FillAssembly(added);_assemblyAcceptedRaw=before;ApplyAssemblyPreview(true);
         _assemblyStatus.Text="Bumper installed on its two declared mounting references. Publish this assembly, then select it in Garage. Curve validity is checked by the installed-equilibrium solve.";
     }
     private void DuplicateAssembly()
     {
-        var original=ReadAssembly();_assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;
+        var original=ReadAssembly();var preview=ReadAssemblyPreviewValues();_assemblyId=Guid.NewGuid().ToString("N");_assemblyBaseRevision=null;_assemblyUndo.Clear();_assemblyRedo.Clear();_assemblyAcceptedRaw=null;_assemblyPublishedRaw=null;_assemblyConflict=null;
         var copy=original with {Identity=original.Identity with {AssetId=_assemblyId,RevisionId="draft",Name=original.Identity.Name+" — custom"}};
-        FillAssembly(copy);ApplyAssemblyPreview(false);RefreshAssemblyCatalog();
+        FillAssembly(copy);_assemblyParameterPreview.Clear();foreach(var value in preview) _assemblyParameterPreview.Add(ParameterPreviewRow.From(value));ApplyAssemblyPreview(false);RefreshAssemblyCatalog();
         _assemblyStatus.Text="Independent assembly draft created. Shared child components still follow their declared references; publishing this assembly leaves the original assembly unchanged.";
     }
 }

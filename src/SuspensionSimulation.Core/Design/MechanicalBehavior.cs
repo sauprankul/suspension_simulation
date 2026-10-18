@@ -31,7 +31,7 @@ public static class MechanicalValidation
     public static void Validate(ComponentDefinition c)
     {
         if(c.Behavior is not {} behavior)
-        {if(c.Kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.BumpStop or ComponentKind.AntiRollBar) throw new ArgumentException("This elastic component needs a mechanical specification.");return;}
+        {if(c.MechanicalTemplate is not null) {MechanicalTemplates.Validate(c);return;}if(c.Kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.BumpStop or ComponentKind.AntiRollBar) throw new ArgumentException("This elastic component needs a mechanical specification.");return;}
         void Require(bool condition,string message) {if(!condition) throw new ArgumentException(message);}
         void Positive(double v,string name)=>Require(double.IsFinite(v)&&v>0,name+" must be positive and finite.");
         void Nonnegative(double v,string name)=>Require(double.IsFinite(v)&&v>=0,name+" must be nonnegative and finite.");
@@ -42,7 +42,7 @@ public static class MechanicalValidation
         switch(behavior)
         {
             case CompressionSpringBehavior spring:
-                Require(c.Kind==ComponentKind.Spring,"Spring behavior belongs to a spring.");Positive(spring.RateKgfPerMm,"Spring rate");Positive(spring.BlockLengthM,"Block length");Positive(spring.FreeLengthM,"Free length");Require(spring.BlockLengthM<spring.FreeLengthM,"Block length must be below free length.");break;
+                Require(c.Kind==ComponentKind.Spring,"Spring behavior belongs to a spring.");Positive(spring.RateKgfPerMm,"Spring rate");Positive(spring.RateKgfPerMm*DesignConventions.NewtonsPerMetrePerKgfPerMm,"Spring SI stiffness");Positive(spring.BlockLengthM,"Block length");Positive(spring.FreeLengthM,"Free length");Require(spring.BlockLengthM<spring.FreeLengthM,"Block length must be below free length.");break;
             case AxialDamperBehavior damper:
                 Require(c.Kind==ComponentKind.Damper&&Enum.IsDefined(damper.Family),"Invalid damper family.");Positive(damper.MinimumEyeLengthM,"Minimum eye length");Positive(damper.MaximumEyeLengthM,"Maximum eye length");Require(damper.MaximumEyeLengthM>damper.MinimumEyeLengthM,"Damper stroke must be positive.");
                 Nonnegative(damper.CompressionNsPerM,"Compression damping");Nonnegative(damper.ReboundNsPerM,"Rebound damping");Nonnegative(damper.GasExtensionForceN,"Gas force");
@@ -52,7 +52,7 @@ public static class MechanicalValidation
                 break;
             case TorsionBarBehavior bar:
                 Require(c.Kind==ComponentKind.AntiRollBar,"Torsional behavior belongs to an anti-roll bar.");Require(bar.UnitAxis.IsFinite&&Math.Abs(bar.UnitAxis.Length-1)<1e-9,"Torsion axis must be a unit vector.");
-                Positive(bar.ShearModulusPa,"Shear modulus");Positive(bar.OutsideDiameterM,"Bar OD");Nonnegative(bar.InsideDiameterM,"Bar ID");Require(bar.InsideDiameterM<bar.OutsideDiameterM,"Bar ID must be below OD.");Positive(bar.TorsionLengthM,"Torsion section length");Require(double.IsFinite(bar.RestTwistRad),"Rest twist must be finite.");if(bar.PrescribedRateNmPerRad is {} rate) Positive(rate,"Prescribed torsional rate");break;
+                Positive(bar.ShearModulusPa,"Shear modulus");Positive(bar.OutsideDiameterM,"Bar OD");Nonnegative(bar.InsideDiameterM,"Bar ID");Require(bar.InsideDiameterM<bar.OutsideDiameterM,"Bar ID must be below OD.");Positive(bar.TorsionLengthM,"Torsion section length");Require(double.IsFinite(bar.RestTwistRad),"Rest twist must be finite.");if(bar.PrescribedRateNmPerRad is {} rate) Positive(rate,"Prescribed torsional rate");Positive(bar.StiffnessNmPerRad,"Torsional stiffness");break;
             case BumpCurveBehavior curve:
                 Require(c.Kind==ComponentKind.BumpStop&&Enum.IsDefined(curve.Zero),"Invalid bump-stop behavior.");Positive(curve.ContactLengthM,"Contact eye separation");Require(curve.Samples.Length>=2,"A bump curve requires at least two samples.");
                 Require(curve.Samples[0].CompressionM==0,"Curve displacement must start at its declared zero.");if(curve.Zero==CurveZero.Contact) Require(curve.Samples[0].ForceN==0,"A contact-origin curve starts at zero force.");

@@ -39,7 +39,7 @@ public sealed class GarageLibrary(string directory)
         if(draft.Configuration is {} setup)
         {
             DesignValidation.Validate(setup);
-            if(setup.MechanicalValues is null) throw new ArgumentException("A saved physical car must explicitly own its spring/bar values. Migrate or reopen the car in Garage first.");
+            if(setup.ParameterValues is null) throw new ArgumentException("A new saved car must configure its imported assembly's parameters. Migrate or reopen this legacy car first; descendant property overrides cannot be saved.");
         }
         var current=Load(draft.Id);
         if((current?.Revision??0)!=draft.Revision) throw new InvalidOperationException("This Garage entry has a newer saved revision. Reopen it before saving.");

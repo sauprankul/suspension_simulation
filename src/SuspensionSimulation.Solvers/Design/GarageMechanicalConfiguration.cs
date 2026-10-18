@@ -15,6 +15,7 @@ public static class GarageMechanicalConfiguration
     public static ResolvedAssemblyGraph Apply(ResolvedAssemblyGraph graph,ImmutableArray<InstanceMechanicalValue>? values)
     {
         if(values is null) return graph with {ConfiguredMechanics=null}; // Legacy frozen replay only.
+        if(graph.Components.Any(c=>c.MechanicalTemplate is not null)||graph.Root.Parameters is not null) throw new ArgumentException("Scoped definitions accept only declared parameters; legacy property overrides are forbidden.");
         InstanceMechanicalValidation.Validate(values.Value);var lookup=values.Value.ToDictionary(v=>v.InstancePath,StringComparer.Ordinal);
         var required=graph.ElasticElements.Where(e=>e.Component.Behavior is CompressionSpringBehavior or TorsionBarBehavior).Select(e=>e.Path).ToHashSet(StringComparer.Ordinal);
         if(!required.SetEquals(lookup.Keys)) throw new ArgumentException("Saved car mechanical values must cover exactly its installed spring/bar instances. Reopen Garage and review the selected hardware.");

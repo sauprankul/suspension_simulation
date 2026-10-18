@@ -4,7 +4,7 @@ namespace SuspensionSimulation.Design;
 public static class BumperInstallation
 {
     public static AssemblyDefinition Add(AssemblyDefinition assembly,IDesignAssetSource source,AssetReference bumperReference,
-        string instanceId,InstancePort firstMount,InstancePort secondMount,bool exposeInGarage)
+        string instanceId,InstancePort firstMount,InstancePort secondMount,bool exposeInGarage,IEnumerable<ParameterValue>? previewValues=null)
     {
         if(string.IsNullOrWhiteSpace(instanceId)||instanceId.Contains('/')||instanceId.Contains(':')||instanceId.Contains('\0'))
             throw new ArgumentException("Choose a nonempty bumper instance ID without '/' or ':'.");
@@ -12,7 +12,7 @@ public static class BumperInstallation
         var bumper=source.LoadComponent(bumperReference.AssetId,bumperReference.RevisionId)??throw new ArgumentException("Select a published bumper curve.");
         if(bumper.Kind!=ComponentKind.BumpStop||bumper.Behavior is not BumpCurveBehavior curve) throw new ArgumentException("The selected component has no axial bumper curve.");
         ComponentAuthoring.ValidateForPublish(bumper);
-        var resolver=new AssemblyGraphResolver(source);var graph=resolver.CompileDraft(assembly);
+        var resolver=new AssemblyGraphResolver(source);var configuration=(previewValues??[]).ToArray();var graph=resolver.CompileDraft(assembly,configuration);
         ResolvedPort Mount(InstancePort endpoint)
         {
             if(endpoint.InstanceId.Contains('/')||!assembly.Instances.Any(i=>i.Id==endpoint.InstanceId))
@@ -45,6 +45,6 @@ public static class BumperInstallation
             EquipmentSlots=exposeInGarage?(assembly.EquipmentSlots??[]).Add(new(instanceId,instanceId+" bumper",instanceId,[bumper.Identity.AssetId],
                 "Axial bumper installed on declared mounting references. The Assembly Editor must explicitly approve any alternative bumper and its installation conditions.")):assembly.EquipmentSlots
         };
-        _=resolver.CompileDraft(added);return added;
+        _=resolver.CompileDraft(added,configuration);return added;
     }
 }

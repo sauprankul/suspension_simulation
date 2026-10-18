@@ -29,7 +29,7 @@ public sealed class InstalledAnalysisEngine(IDesignAssetSource source)
         {
             cancellation.ThrowIfCancellationRequested();if(entry.Archived) throw new InvalidOperationException("The selected Garage entry is archived.");
             var setup=entry.Configuration??throw new InvalidOperationException("The selected entry needs a physical assembly. Open Garage to migrate or choose one.");
-            var sourceGraph=new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment);
+            var sourceGraph=new AssemblyGraphResolver(source).Compile(setup.RootAssembly,setup.Equipment,setup.ParameterValues??[]);
             var prior=previous is null?null:new[]{previous.A,previous.B}.FirstOrDefault(s=>s.Entry.Id==entry.Id&&s.Source.Root.AssetId==setup.RootAssembly.AssetId);
             if(prior is not null) AssemblyGraphResolver.CheckInterfaces(AssemblyGraphResolver.OpenBundle(prior.Source),sourceGraph);
             var bundle=AssemblyGraphResolver.ExportConfigured(sourceGraph);
@@ -54,7 +54,7 @@ public sealed class InstalledAnalysisEngine(IDesignAssetSource source)
     public bool SourcesMatch(InstalledAnalysisSide side,GarageEntry entry)
     {
         if(DesignJson.Serialize(entry)!=DesignJson.Serialize(side.Entry)||entry.Configuration is null) return false;
-        var graph=new AssemblyGraphResolver(source).Compile(entry.Configuration.RootAssembly,entry.Configuration.Equipment);
+        var graph=new AssemblyGraphResolver(source).Compile(entry.Configuration.RootAssembly,entry.Configuration.Equipment,entry.Configuration.ParameterValues??[]);
         return graph.Manifest.Dependencies.SequenceEqual(side.Source.Manifest.Dependencies);
     }
     private static string Hash(string text)=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));

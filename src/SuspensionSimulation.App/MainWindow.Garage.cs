@@ -26,7 +26,7 @@ public partial class MainWindow
         _garageCatalog=new ReferenceGarageCatalog(Path.Combine(App.RepositoryRoot,"data/reference/stock-86-brz/reference-sheet.json"));
         _garageCatalog.Seed(_garage);
         var editor=(StackPanel)((ScrollViewer)details).Content;
-        ((TextBlock)editor.Children[2]).Text="Saved physical setups · hardware-owned adjustments";
+        ((TextBlock)editor.Children[2]).Text="Saved cars · complete-assembly configurations";
         ((TextBlock)editor.Children[3]).Text="Only saved Garage revisions are used by the visualizers.";
         var equipment=new StackPanel {Margin=new Thickness(0,0,0,15),Visibility=Visibility.Collapsed};
         foreach(var role in new[]{"front-spring","rear-spring","front-bar","rear-bar"})

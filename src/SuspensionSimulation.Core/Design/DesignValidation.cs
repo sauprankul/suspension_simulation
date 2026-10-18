@@ -32,7 +32,9 @@ public static class DesignValidation
         if(component.Wheel is {} wheel) {Require(component.Kind==ComponentKind.Wheel,"Wheel dimensions belong to a wheel component.");Positive(wheel.RollingRadiusM,"Rolling radius");Positive(wheel.WidthM,"Wheel width");}
         else Require(component.Kind!=ComponentKind.Wheel,"Wheel contact dimensions are missing.");
         if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
-        MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
+        MechanicalTemplates.Validate(component);MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
+        if(component.BumperMaterial is {} material)
+        {Require(component.Kind==ComponentKind.BumpStop,"Material belongs to a bump-stop component.");BumpStudioContracts.ValidateMaterial(material);}
         ImportedBumpCurve.Validate(component);
         if(component.AxialGauge is {} gauge)
         {
@@ -50,9 +52,19 @@ public static class DesignValidation
     public static void Validate(AssemblyDefinition assembly)
     {
         Identity(assembly.Identity);Unique(assembly.Instances,x => x.Id);Unique(assembly.Joints,x => x.Id);Unique(assembly.Ports,x => x.Id);
+        DefinitionParameters.Validate(assembly.Parameters??[]);
         foreach(var instance in assembly.Instances)
         {
             Reference(instance.Definition);Frame(instance.Placement.Frame);
+            var assignments=instance.ParameterValues??[];
+            Require(assignments.Select(x=>x.ParameterId).Distinct(StringComparer.Ordinal).Count()==assignments.Length,"Duplicate child parameter assignment.");
+            foreach(var value in assignments)
+            {
+                Require(DefinitionParameters.ValidId(value.ParameterId),"Invalid child parameter ID.");
+                Require((value.Value is null)!=(value.FromParameterId is null),"Assign a literal value or an owner parameter.");
+                if(value.Value is {} literal) Require(double.IsFinite(literal),"Configuration value must be finite.");
+                if(value.FromParameterId is {} id) Require((assembly.Parameters??[]).Any(p=>p.Id==id),"Forwarded parameter is not declared by the immediate owner: "+id);
+            }
             Require(instance is ComponentInstance or AssemblyInstance,"Unknown physical instance kind.");
             if(instance is AssemblyInstance) Require(instance.Definition.AssetId != assembly.Identity.AssetId,"Assembly directly references itself.");
             if(instance.Placement.Reflection is {} mirror)
@@ -86,6 +98,7 @@ public static class DesignValidation
     public static void Validate(GarageSetup setup)
     {
         Identity(setup.Identity);Reference(setup.RootAssembly);
+        if(setup.ParameterValues is {} values) {DefinitionParameters.ValidateValues(values);Require(setup.MechanicalValues is null,"Scoped parameters cannot coexist with legacy descendant overrides.");}
         if(setup.MechanicalValues is {} mechanical) InstanceMechanicalValidation.Validate(mechanical);
         Unique(setup.Equipment,x => x.InstancePath+"\0"+x.SlotId);
         Unique(setup.Adjustments,x => x.InstancePath+"\0"+x.AdjustmentId);

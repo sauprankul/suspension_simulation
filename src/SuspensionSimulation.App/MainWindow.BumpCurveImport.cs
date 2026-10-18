@@ -21,11 +21,13 @@ public partial class MainWindow
     private TabItem? _bumpCurveTab;
     private readonly TextBox _bumpContact=new(){Text="40"},_bumpConditions=new(){Text="Conditions not supplied"},_bumpSource=new(){Text="User supplied axial compression curve"};
     private readonly TextBlock _bumpCurveStatus=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)};
+    private readonly TextBlock _bumpMaterialProperty=new(){Text="Material property: unknown / not supplied. No TPU preset is assigned to an imported measurement.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8)};
     private readonly Canvas _bumpPlot=new(){Height=140,Background=Brushes.Black,Margin=new Thickness(0,8,0,0)};
     private void AddBumpCurveImport(TabControl tabs)
     {
         var panel=new StackPanel {Margin=new Thickness(10)};
         panel.Children.Add(new TextBlock {Text="Imported axial bump-stop curve",FontWeight=FontWeights.Bold});
+        panel.Children.Add(_bumpMaterialProperty);
         panel.Children.Add(new TextBlock {Text="Import measured or estimated CSV as a reusable bumper component. Exact source data, units and conditions are saved with its revision. STEP/FEA publication remains gated on backend validation.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});
         void Field(string label,Control control,string tip) {panel.Children.Add(new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,5,0,2)});control.ToolTip=tip;panel.Children.Add(control);}
         Field("Compression units",_bumpDisplacementUnit,"CSV displacement means shortening from the declared curve zero. No automatic rescaling from guessed units.");

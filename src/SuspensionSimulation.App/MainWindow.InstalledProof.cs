@@ -24,7 +24,7 @@ public partial class MainWindow
             var garage=new GarageLibrary(Path.Combine(folder,App.RunId,"garage"));var accepted=new List<(GarageEntry Entry,ResolvedAssemblyGraph Graph,InstalledEquilibriumResult Result)>();
             foreach(var model in new[]{models.Gr86,models.Brz})
             {
-                var setup=new GarageSetup(new(Guid.NewGuid().ToString("N"),"draft",model.Identity.Name,new(DataProvenance.Estimated,"Physical proof: reference equipment, estimated geometry and dimensions",null)),new(model.Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[]));
+                var setup=new GarageSetup(new(Guid.NewGuid().ToString("N"),"draft",model.Identity.Name,new(DataProvenance.Estimated,"Physical proof: reference equipment, estimated geometry and dimensions",null)),new(model.Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[])) {ParameterValues=[]};
                 var saved=garage.Save(new(Guid.NewGuid().ToString("N"),0,model.Identity.Name,"Isolated physical proof entry",false,setup));var reopened=garage.Load(saved.Id)!;
                 var graph=new AssemblyGraphResolver(library).Compile(reopened.Configuration!.RootAssembly);var frozen=GraphAdjustments.Freeze(graph,reopened.Configuration.Adjustments);
                 var result=await Task.Run(()=>new InstalledEquilibrium(frozen).Solve(new(reopened.Configuration.Mass)));

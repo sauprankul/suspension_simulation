@@ -20,7 +20,7 @@ public partial class MainWindow
             _bumpCsv.Text="compression_mm,force_n\n0,0\n5,400\n10,1400\n20,4200\n40,9000\n";_bumpContact.Text=DesignerNumbers.Mm(eyeLength+.005);
             _bumpProvenance.SelectedItem=DataProvenance.Synthetic;_bumpSource.Text="Synthetic integration proof; no physical part correlation";
             _bumpConditions.Text="Synthetic axial loading; zero separation measured between the declared front strut-eye references";CreateImportedBumpComponent();PublishComponent();var bumper=_componentDefinition!;
-            NavigateWorkspace(Workspace.AssemblyEditor);_assemblyExpectedDof.Text="";LoadAssembly(_designLibrary!.LoadAssembly(baseline.A.Entry.Configuration!.RootAssembly.AssetId)!);var originalRoot=_assemblyId;
+            NavigateWorkspace(Workspace.AssemblyEditor);_assemblyExpectedDof.Text="";LoadAssembly(_designLibrary!.LoadAssembly(baseline.A.Entry.Configuration!.RootAssembly.AssetId)!,baseline.A.Entry.Configuration.ParameterValues??[]);var originalRoot=_assemblyId;
             DuplicateAssembly();var customRoot=_assemblyId;_workspaceDrafts[Workspace.AssemblyEditor].Name.Text="Synthetic imported bumper vehicle";
             _assemblyBumperTab!.IsSelected=true;_assemblyBumperChoice.SelectedValue=bumper.Identity.AssetId;_assemblyBumperFirst.SelectedItem="front:left-shock-upper";_assemblyBumperSecond.SelectedItem="front:left-shock-upper";
             var before=CaptureAssemblyRaw();try {InstallAssemblyBumper();throw new InvalidOperationException("A same-support bumper was installed.");}catch(ArgumentException) { }
@@ -33,6 +33,8 @@ public partial class MainWindow
             if(_designLibrary.LoadAssembly(originalRoot)!.Instances.Any(i=>i.Id=="FL-bumper")) throw new InvalidOperationException("Custom assembly changed the original vehicle.");
             NavigateWorkspace(Workspace.Garage);RefreshGarage(ReferenceGarageCatalog.Gr86Id);GarageAction("Duplicate");var customId=_garageSelected!.Id;
             _workspaceDrafts[Workspace.Garage].Name.Text="Saved synthetic imported bumper";_garageRoot.SelectedValue=customRoot;
+            foreach(var value in baseline.A.Entry.Configuration.ParameterValues??[]) if(_garageRootParameterInputs.TryGetValue(value.ParameterId,out var input)) input.Text=ParameterDeclarationRow.N(value.Value);
+            CachePhysicalGarageDraft();FillPhysicalGarage(_garageSelected!);
             if(!_garagePhysicalEquipment.ContainsKey("FL-bumper:FL-bumper")) throw new InvalidOperationException("Garage did not generate the bumper's equipment picker.");
             GarageAction("Save changes");var custom=_garage!.Load(customId)!;
             if(custom.Configuration!.RootAssembly.AssetId!=customRoot) throw new InvalidOperationException("Garage did not save the custom mounted assembly.");

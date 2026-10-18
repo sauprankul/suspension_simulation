@@ -1,6 +1,6 @@
 # Component Designer, Assembly Editor, and Garage plan
 
-Prepared: 2026-10-16. Status: Stages 0–8 implemented with the documented synthetic/estimated data scope. Both production visualizers consume saved physical Garage setups and the installed-equilibrium solver. Stages 9–11 remain incomplete. FEBio baseline/recovery, fitted compressible-foam contact and three-mesh rubber checks pass; folding/contact verification and its sequential sensitivity study remain active with the user-approved eight-hour per-run budget. Imported CSV curves already integrate with assemblies/Garage/analysis. Stage 10 has real STEP/face/fixture/material preparation, saved recipes and actual diagnostic deformation/force playback; production solve/convergence/publication and physical correlation remain incomplete.
+Prepared: 2026-10-16. Updated: 2026-10-18. Status: Stages 0–8 implemented under the earlier ownership model, with synthetic/estimated data. The confirmed properties/parameters/importer model in §3 now takes priority and requires an ownership migration. Both visualizers consume saved Garage setups. Stages 9–11 remain incomplete: the latest folding attempt failed, so backend admission and production FEA remain gated. STEP preparation, editable Estimated material recipes and diagnostic deformation/force viewing work; full solving/convergence/publication and physical correlation remain incomplete.
 
 This extends the existing WPF/.NET 10 application after the accepted 3D visualization checkpoint. It develops the reusable component/assembly direction in `ROADMAP/phases.md`, especially Phases 04–06, 15–19, 28, and 29. It does not replace `3d-viz-plan.md`; the viewer's hardware-test limitations remain recorded there.
 
@@ -53,20 +53,36 @@ Planning originally created only this document. Execution begins from viewer bas
 
 ## 3. Ownership: component, assembly, setup, result
 
-**Confirmed replacement rule, 2026-10-17:** reusable components/assemblies declare configurable parameters and allowed ranges; the saved complete-car configuration owns selected values per instance, including spring rate, torsion dimensions/material properties and material coefficients. Mechanical adjuster positions are saved; camber/toe/ride height remain calculated. This supersedes older shared-rate/dimension ownership statements below. Legacy concrete definitions may remain solely for migration/frozen compatibility. The current migration covers spring rates and torsion sections; general declarative templates and configured-context Component Editor/material binding remain unfinished.
+**Authoritative terminology, confirmed 2026-10-18:** this replaces the October 17 blanket per-car override rule and any later progress note proposing to edit car-instance values through Component Editor or bind bump-stop materials to Garage.
+
+- **Property:** a value authored on a component or assembly definition. It is read-only when that definition is imported. Only the source definition's editor can change it, by creating a new revision. An importer cannot override it. Latest-compatible revision updates remain explicit source updates; frozen results retain exact old revisions.
+- **Parameter:** a named setting declared by a component or assembly. Its owner declares its meaning, type, units, allowed range/choices and binding to supported behavior. Its owner does not select a concrete value for its own parameter.
+- **Configuration value:** the concrete value assigned to a parameter by the immediate importer. An assembly configures the parameters of its direct component/assembly instances. Garage is the importer of the complete-car assembly and configures only that assembly's parameters.
+
+An importing assembly can assign a literal configuration value to a child parameter, or forward one of its own declared parameters to that child. A literal child configuration is part of the importing assembly definition and cannot be overridden by its parent. Forwarding must be explicit at every nesting boundary; Garage cannot reach into an arbitrary descendant. Reusing one definition twice yields independent configuration values for its two instances.
+
+**Bump-stop material is always a component property.** Selecting TPU95A or PU foam and editing its estimated coefficients is source component/material-recipe authoring. The published component retains that material snapshot. No assembly or Garage material override exists. Changing the material creates a component revision and invalidates any FEA-derived curve that depended on the earlier material. A measured imported curve retains its declared test material/conditions; a changed material cannot silently retain a curve claimed to have been computed for it.
+
+Spring rate and torsion dimensions may be properties or explicitly declared parameters according to the authored component. They are not automatically overridable because of the component's type. During migration, existing saved spring/bar configurations must become explicit parameter bindings or immutable owned source revisions that preserve their accepted behavior. No saved value may be discarded or silently reclassified as an override of a property.
+
+Camber-adjuster position, perch offset and selected mounting holes are mechanical parameters where the hardware supports them. Camber, toe and ride height remain calculated readouts, not direct pose overrides. For example: a plate declares a position parameter; a front-corner assembly forwards its camber-adjustment parameter to that plate; the axle and complete car must explicitly forward it before Garage can set it.
+
+The editor owns the level it edits. Component Editor edits component properties and parameter declarations. Assembly Editor edits assembly properties, parameter declarations and configuration values for direct imported instances. Garage edits configuration values for the imported complete-car assembly. Inspection of an imported property is read-only; editing its source is a separate navigation action. Preview/test configurations belong to an explicit temporary importer context and are not saved as the owner's parameter values.
 
 Keep four distinct concepts:
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| Component definition | Type, local geometry, physical dimensions, connection frames, material/force law, allowed adjustment mechanisms and ranges | Vehicle placement, car-specific selected adjustment values, prescribed camber/toe |
-| Assembly definition | References to components/assemblies, instance placement, mating joints, exported interfaces, supported equipment slots, adjustment exposure and defaults | Copies of child definitions or arbitrary Garage overrides of hard points |
-| Garage setup | Name, root assembly reference, selected compatible equipment, payload/mass configuration, selected values for exposed adjustments | Link lengths, arbitrary pickup coordinates, joint axes, material coefficients, new adjustment ranges |
+| Component definition | Properties including bump-stop material; geometry/interfaces; force law; parameter declarations and bindings | Concrete values for its own parameters; importer overrides of properties; prescribed alignment |
+| Assembly definition | Own properties and parameter declarations; direct imports, their configuration values or forwarding bindings; joints/interfaces | Values for its own parameters; overrides of child properties; arbitrary descendant configuration |
+| Garage setup | Name, complete-car assembly reference and its parameter configuration values; declared setup mass/payload/environment | Overrides of descendant properties or unexposed parameters; material coefficients; arbitrary geometry |
 | Solved result | Resolved revisions, installed pose, equilibrium, ride height, alignment, loads, limits, metrics, diagnostics | Mutable source settings or hidden geometry corrections |
 
 A component can declare a threaded tie-rod adjustment that changes effective installed length. Garage can select its normalized position, but cannot type a new design length or extend its bounds. This is an intended setup adjustment, not permission to edit assembly geometry.
 
-Springs have their prescribed kgf/mm rate in Component Designer. Garage can select a different compatible spring in an exposed equipment slot. It cannot silently alter a shared spring definition. The same distinction applies to bump stops, bars, shocks, and top mounts. For a custom spring, clone/create it in Component Designer and select it in Garage.
+A fixed-rate spring has a rate property edited in Component Designer. A parametric spring instead declares a rate parameter configured by its importing assembly. If a complete car exposes that setting through every intervening assembly, Garage can configure it. Selecting compatible equipment remains subject to the importing assembly's declared interfaces and parameter bindings; it does not grant property overrides.
+
+Validation rejects missing/duplicate/unknown configuration values, wrong units/types, out-of-range values, forwarding to a missing owner parameter, incompatible parameter interfaces and attempts to configure a property. Resolving a nested assembly must retain its source properties, explicit configuration chain and exact source hashes. Saving a definition must not bake a preview configuration into it. Publication, stale-result handling and frozen replay apply to the entire resolved source/configuration chain.
 
 An assembly's physical tree contains only **component instances** and **assembly instances**. Joints and annotations are relationships/metadata, not third kinds of physical object. Selecting parts and choosing “Create group: Rear right” creates a nested assembly with exported connection interfaces. A coilover can similarly be a nested assembly of shock, spring, perches, top mount, and bump stop.
 
@@ -196,6 +212,8 @@ Bent-bar flexibility and arm bending are omitted in the new rigid-arm model unle
 
 Use one reusable `AdjustmentDefinition` for every component type:
 
+The path geometry, affected ports and allowed range/choices are source properties. The selected position is either a fixed source property or a declared parameter configured by the immediate importer. The Garage controls below exist only when that parameter is explicitly forwarded through every assembly to the complete-car interface. The old descendant-path exposure mechanism is compatibility data to be migrated in Stage 8b, not the final ownership rule. A reference/nominal position used to interpret stored geometry is not a selected default for an owner's parameter.
+
 | Kind | Definition | Garage control |
 | --- | --- | --- |
 | Fixed | Single position | Read-only/not offered as an adjustment |
@@ -235,6 +253,7 @@ Layout: library/type browser, shared 3D viewport, property panel, and context-sp
 Required operations:
 
 - Create, clone, rename, save a new revision, inspect revision differences, and search/filter by type.
+- Choose which supported fields are fixed properties and which bind to declared parameters. Parameter declarations contain units/bounds/choices, not selected values. Bump-stop material is always a property. Keep any temporary inspection configuration separate from the published owner.
 - Add named points, axes, frames, and ports; edit coordinates numerically or with constrained handles.
 - Set driving dimensions, select joint capabilities, and scrub permitted motion/adjustment ranges.
 - Reuse the current pan gesture, navigation cube orbit, ring roll, wheel zoom, orthographic views, fit, and reset. Preserve each screen's camera state.
@@ -253,6 +272,8 @@ Measurement mode consumes clicks only while active and must not interfere with n
 Insert a component or assembly from the library, place it approximately, and connect compatible ports. A joint dialog shows its axes, allowed motions, and constrained motions. Provide snap/alignment helpers, explode/isolate views, component measurements, and a motion preview with validity diagnostics.
 
 Placement is an initial/rest transform; joints determine operating motion. Do not let a stored placement override a solved pose. Nested assembly interfaces expose stable named ports and settings, so parents need not reference internal list indices.
+
+Each assembly edits only its own properties, its own parameter declarations and the configuration of direct child imports. Child configurations are literals or references to the immediate owner's declared parameters. Imported child properties are read-only. Grouping must create any forwarding declarations and bindings required by the new boundary; duplication and mirroring retain the original explicit ownership chain without baking a preview value into it.
 
 A complete vehicle assembly normally contains the chassis reference, front/rear structures, four corner assemblies, steering assembly, and front/rear ARB assemblies. Bars connect the left and right corners at axle level; copying a corner must not duplicate an entire cross-car bar.
 
@@ -297,14 +318,14 @@ Opening a car shows editable setup inputs and calculated readouts. It must not e
 | Garage field | Meaning and tooltip requirement |
 | --- | --- |
 | Root assembly | Hardware configuration being used; show resolution/conflict status |
-| Exposed equipment slots | Select compatible springs, shocks, bump stops, bars, top mounts, wheels; choices cannot change interface/topology without validation |
-| Per-corner/axle adjuster settings | Perch offset in mm; camber/toe percentages; named holes; damper clicks when supported; valid ranges originate in components |
+| Declared complete-car equipment parameters | Select compatible springs, shocks, bump stops, bars, top mounts, wheels only through an explicitly declared/forwarded interface; choices cannot change interface/topology without validation. Arbitrary descendant slot selection is legacy Stage 8b migration work. |
+| Declared complete-car mechanical parameters | Spring rate, bar section dimensions or mechanical adjuster settings only if the owning definition declares them and every boundary forwards them. Perch offset in mm; camber/toe percentages; named holes; damper clicks when supported; bounds originate in the owner. |
 | Payload, driver, fuel/ballast mass and locations | Explain whether values add to dry/base mass or are total overrides; never count twice |
 | Base mass properties, when supplied as setup data | Mass and CG relative to the declared chassis datum; clearly distinguish measured inputs from estimates |
 | Environmental condition for material curves | Select a supported temperature/rate condition; unsupported conditions require a new curve or display a limitation |
 | Notes and provenance | Distinguish measured, manufacturer, estimated, and synthetic data |
 
-Wheel/tire dimensions and spring/bar rates belong to selected components, not freeform Garage overrides. Geometry-derived track/wheelbase, static corner weights, CG height above ground, camber, toe, and ride height are readouts. A declared aggregate mass model may be used initially; component mass accumulation is an alternative mode, not an extra quantity added to the same total.
+Wheel/tire dimensions, spring/bar rates and similar inputs are source properties unless explicitly bound to declared parameters. Garage cannot override a property. It supplies values only for the complete car's declared parameters. Bump-stop material stays a component property in every case. Geometry-derived track/wheelbase, static corner weights, CG height above ground, camber, toe, and ride height are readouts. A declared aggregate mass model may be used initially; component mass accumulation is an alternative mode, not an extra quantity added to the same total.
 
 Every editable field's tooltip explains what moves/changes, its units and positive direction, affected behavior, bounds, and whether it is measured or estimated. Example: “Moves the lower spring seat toward the upper seat. At fixed shock length this increases spring compression. The vehicle is rebalanced to calculate its resulting ride height.”
 
@@ -491,6 +512,8 @@ Implement in reviewable vertical slices. The editor/assembly work can proceed in
 | 6. Static geometry/equilibrium | Full installed-length spring forces, bar preload, bumper gap, hard limits, derived ride height/camber/toe | 4–5 | Converged final state drives every readout; no prescribed alignment; mass/contact/force/moment checks pass |
 | 7. Garage | Unlimited named setups, compatible equipment, generated adjustment controls/tooltips, migration | 3, 6 | Stock GR86/BRZ and a custom entry round-trip independently; no forbidden design fields editable; invalid setups cannot run |
 | 8. Analysis-screen integration | Garage A/B dropdowns in head-to-head and 3D, readouts only, frozen result manifests | 7 | Same setup produces same accepted data in both screens; specification panels removed; updates/cancel/stale results handled |
+| 8a. Ownership correction, numeric slice | Property/parameter distinction; immediate-importer literals/forwarding; spring/bar migration; source editor declarations; root Garage configurations | 2–8 | Properties reject importer overrides; no own parameter values in source; independent car values and exact nested frozen replay |
+| 8b. Ownership correction, mechanical adjusters/equipment | Replace legacy descendant adjustment/equipment selections with declared interfaces and explicit ownership at each boundary; continuous positions, named holes and compatible equipment choices | 8a | Camber plate/perch/hole settings and equipment configuration obey §3; existing adjusted cars migrate without changed behavior; no arbitrary descendant reach-through |
 | 9. FEA feasibility spike | Reproducible STEP-to-curve samples in candidate backend, material fits, contact/mesh/hardware report | 0; independent of UI stages | All numerical/backend gates in §10.7 demonstrated or documented backend change selected; no fabricated material presets |
 | 10. Bump Stop Studio | STEP import, face/fixture selection, material picker, jobs, convergence/results, cached curve publication | 2–3, 9 | Both axisymmetric and 3D supported cases work end to end; estimated vs calibrated status preserved; cancellation/failure recoverable |
 | 11. End-to-end integration and correlation | FEA/imported bumper curves in actual assemblies; dependency updates; saved examples and regression coverage | 6–8, 10 | Changed bumper affects engagement/force/alignment through real geometry; exports reproduce revisions; one correlated case documented when data are available |
@@ -699,6 +722,18 @@ Priority change: the user requested Garage before component authoring. The first
 
 ### Configured cars and editable material estimates — 2026-10-17
 
+**Historical checkpoint: its blanket per-car value rule is superseded by §3 and Stage 8a/8b.**
+
 - Saved physical cars explicitly own spring rate and torsion ID/OD/effective G per instance. Migration captures current values once; later shared-part changes do not overwrite them. Both visualizers and frozen replay apply these values. Garage edits/save/duplicate/invalid-input recovery and complete-vehicle Assembly Editor access are implemented. General configurable templates/ranges and configured-context Component Editor/material binding remain open.
 - Studio has Estimated TPU85/90/95A and PU350–650 presets with three editable coefficients retained in each recipe. Sources, assumptions, formulas and limits are in `docs/material-presets.md`. This is an estimated workflow, not physical calibration or backend admission. Focused persistence/replay/cancellation, STEP/material/evidence checks pass; the material override/reopen/raw-recovery native proof passes.
 - The latest full-Newton/no-line-search folding attempt failed after3442.4s at42.5511% absolute compression against requested60%. Its partial curve remains rejected. No replacement heavy job was started during this bounded ownership/material checkpoint. Production FEA and full plan completion remain pending.
+
+### Stage 8a — explicit properties and importer-owned parameter configurations — 2026-10-18
+
+- Replaced the blanket car-instance scalar override model for new saves. Spring rate and torsion G/OD/ID can each be authored as a fixed property or a reference to a local parameter declaration. Owners declare names, units and bounds without choosing their own values. Imported properties, including the bump-stop material snapshot, cannot be configured by an importer.
+- Assemblies assign literals to direct-child parameters or explicitly forward their own parameters. Every nesting boundary is validated; wrong units/ranges, missing/duplicate/unknown values, property overrides and descendant reach-through reject. A parameter-to-property revision is a conflict. Torsion sections with parameterized dimensions use GJ/L rather than a pinned stiffness.
+- Existing accepted spring/bar settings migrate to new scoped source assets and explicit forwarding chains. Original assets and Garage revisions remain intact. Independent saved car settings, edited legacy values and effective shear modulus are retained. New Garage saves require an explicit root configuration; legacy values remain readable for migration and exact old-result replay.
+- Component Editor owns properties/declarations; Assembly Editor owns declarations and direct-child assignments; Garage configures only the complete-car numeric interface. Temporary importer values are clearly separated in editor drafts. Publishing with a different preview value does not change the definition's revision. Frozen bundles retain root configuration and reconstruct the nested chain; grouping, duplication, import and bumper installation preserve it.
+- Source bump material inspection preserves known snapshots and leaves unknown measured materials unknown. Studio recipes still permit estimated presets/manual coefficients. Editing a recipe does not recompute an existing CSV curve. FEA material-to-curve publication remains gated by the failed folding test.
+- **99/99 regressions pass.** Full native physical-Garage and focused scoped-authoring proofs pass, including invalid drafts and duplicate/group/import preview preservation. The optimized Release build succeeds (only the existing unreachable NuGet advisory-feed warning). Both real stock Garage entries migrated to ten root parameter values with no legacy scalar override array. The restored visible Assembly Editor remains one running UI instance; a second launch exits successfully and activates it. State and logs remain exposed through the existing session protocol. Evidence is under `artifacts/scoped-config-regression.log`, `artifacts/physical-garage-ui` and `artifacts/scoped-authoring-ui`. See `docs/property-parameter-ownership.md` for editor usage and compatibility limits.
+- **Next is Stage 8b:** migrate continuous adjusters, named holes and equipment choices from legacy descendant exposures to declared, explicitly forwarded parameter interfaces. Existing mechanical settings remain functional and are visibly marked legacy; the numeric slice does not claim that this further ownership migration is complete. Stage 9 folding/sensitivity and production Studio publication also remain open.

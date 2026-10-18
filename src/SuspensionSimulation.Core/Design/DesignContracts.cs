@@ -56,6 +56,9 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public AxialRodGauge? AxialGauge {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public RackSpecification? Rack {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalBehavior? Behavior {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalTemplate? MechanicalTemplate {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<DefinitionParameter>? Parameters {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public BumperMaterialCard? BumperMaterial {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public WheelSpecification? Wheel {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImportedBumpCurveEvidence? BumpCurveEvidence {get;init;}
@@ -74,7 +77,10 @@ public sealed record InstancePlacement(DesignFrame Frame, MirrorPlane? Reflectio
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ComponentInstance), "component")]
 [JsonDerivedType(typeof(AssemblyInstance), "assembly")]
-public abstract record PhysicalInstance(string Id, AssetReference Definition, InstancePlacement Placement);
+public abstract record PhysicalInstance(string Id, AssetReference Definition, InstancePlacement Placement)
+{
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<ParameterAssignment>? ParameterValues {get;init;}
+}
 public sealed record ComponentInstance(string Id, AssetReference Definition, InstancePlacement Placement)
     : PhysicalInstance(Id, Definition, Placement);
 public sealed record AssemblyInstance(string Id, AssetReference Definition, InstancePlacement Placement)
@@ -94,6 +100,7 @@ public sealed record AssemblyDefinition(RevisionIdentity Identity, ImmutableArra
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public VehicleGeometry? Vehicle {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<EquipmentSlot>? EquipmentSlots {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<SetupAdjustmentExposure>? SetupAdjustments {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<DefinitionParameter>? Parameters {get;init;}
 }
 // Slots replace direct children only. Compatibility is explicitly granted by the owning assembly.
 public sealed record EquipmentSlot(string Id,string Name,string InstanceId,ImmutableArray<string> CompatibleAssetIds,string Description);
@@ -119,11 +126,12 @@ public sealed record PayloadMass(string Id, double MassKg, DesignVector Position
 public sealed record SetupMass(MassAccountingPolicy Policy, double? AggregateBaseMassKg,
     DesignVector BaseCenterOfMassM, ImmutableArray<PayloadMass> AddedPayloads);
 
-// Configured mechanical values belong to this car; alignment remains a solved output.
+// Garage configures the imported complete-car assembly; alignment remains a solved output.
 public sealed record GarageSetup(RevisionIdentity Identity, AssetReference RootAssembly,
     ImmutableArray<EquipmentSelection> Equipment, ImmutableArray<AdjustmentSelection> Adjustments, SetupMass Mass)
 {
-    // Absent only in legacy/frozen documents. Migration captures source values explicitly.
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<ParameterValue>? ParameterValues {get;init;}
+    // Read-only compatibility for old documents/frozen replay; new saves use scoped ParameterValues.
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<InstanceMechanicalValue>? MechanicalValues {get;init;}
 }
 public sealed record ResolvedDependency(AssetKind Kind, string AssetId, string RevisionId, string Sha256);

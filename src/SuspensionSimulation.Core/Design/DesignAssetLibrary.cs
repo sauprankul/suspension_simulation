@@ -41,9 +41,9 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
     }
     public ComponentDefinition Publish(ComponentDefinition component,string? expectedRevision)
     {ComponentAuthoring.ValidateForPublish(component);return Publish("components",component,expectedRevision);}
-    public AssemblyDefinition Publish(AssemblyDefinition assembly,string? expectedRevision)
+    public AssemblyDefinition Publish(AssemblyDefinition assembly,string? expectedRevision,IEnumerable<ParameterValue>? previewValues=null)
     {
-        DesignValidation.Validate(assembly);var graph=new AssemblyGraphResolver(this).CompileDraft(assembly);
+        DesignValidation.Validate(assembly);var graph=new AssemblyGraphResolver(this).CompileDraft(assembly,previewValues??[]);
         // Capture inferred lengths once; subsequent geometry revisions cannot silently change a rigid rod's rest length.
         assembly=assembly with {Joints=[..assembly.Joints.Select(j=>j.Kind==JointKind.RigidDistance&&j.DistanceM is null?j with {DistanceM=graph.Joints.Single(x=>x.Path=="/"+j.Id).DistanceM}:j)]};
         return Publish("assemblies",assembly,expectedRevision);
@@ -91,7 +91,14 @@ public sealed class DesignAssetLibrary(string root):IDesignAssetSource
                 return instance with {Definition=new(identity.AssetId,identity.RevisionId)};
             }).ToImmutableArray();
             var slots=source.EquipmentSlots is {} declared?declared.Select(slot=>slot with {CompatibleAssetIds=[..slot.CompatibleAssetIds.Select(asset=>mapped.GetValueOrDefault((source.Instances.Single(i=>i.Id==slot.InstanceId) is ComponentInstance?AssetKind.Component:AssetKind.Assembly,asset))?.AssetId??asset)]}).ToImmutableArray():(ImmutableArray<EquipmentSlot>?)null;
-            var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children,EquipmentSlots=slots},null);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
+            var preview=AssemblyGraphResolver.OpenBundle(bundle).ParameterConfigurations.Single(x=>x.InstancePath==FindPath(id)).Values;
+            string FindPath(string target)
+            {
+                string? Walk(AssemblyDefinition a,string path)
+                {if(a.Identity.AssetId==target) return path;foreach(var child in a.Instances.OfType<AssemblyInstance>()) {var found=Walk(bundle.Assemblies.Single(x=>x.Identity.AssetId==child.Definition.AssetId),path.Length==0?child.Id:path+"/"+child.Id);if(found is not null) return found;}return null;}
+                return Walk(bundle.Assemblies.Single(x=>x.Identity.AssetId==bundle.Root.AssetId),"")??throw new InvalidDataException("Imported assembly has no instance.");
+            }
+            var result=Publish(source with {Identity=NewIdentity(source.Identity),Instances=children,EquipmentSlots=slots},null,preview);mapped.Add((AssetKind.Assembly,id),result.Identity);return result;
         }
         return ImportAssembly(bundle.Root.AssetId);
     }

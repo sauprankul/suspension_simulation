@@ -36,11 +36,12 @@ internal static class InstalledAnalysisChecks
             var source=AssemblyGraphResolver.OpenBundle(frozen.A.Source);var graph=GarageSetupResolver.Freeze(source,frozen.A.Entry.Configuration!);
             var replay=new InstalledEquilibrium(graph).Solve(frozen.A.State.Input,frozen.A.State);
             if(Math.Abs(replay.Chassis.HeaveM-frozen.A.State.Chassis.HeaveM)>1e-8||replay.InputSha256!=frozen.A.State.InputSha256||frozen.A.Source.Equipment is not {Length:>0}) throw new Exception("Configured equipment/source/settings did not replay exactly from export.");
-            var spring=library.LoadComponent("installed-brz-front-spring")!;var behavior=(CompressionSpringBehavior)spring.Behavior!;
-            library.Publish(spring with {Behavior=behavior with {RateKgfPerMm=behavior.RateKgfPerMm*1.1}},spring.Identity.RevisionId);
+            var spring=graph.ElasticElements.Single(e=>e.Path=="FL-spring").Component;
+            var sourceSpring=library.LoadComponent(spring.Identity.AssetId)!;
+            library.Publish(sourceSpring with {Identity=sourceSpring.Identity with {Name=sourceSpring.Identity.Name+" revised"}},sourceSpring.Identity.RevisionId);
             if(engine.SourcesMatch(custom.A,b)) throw new Exception("Changed source was not detected.");
             var frozenAgain=GarageSetupResolver.Freeze(AssemblyGraphResolver.OpenBundle(frozen.A.Source),frozen.A.Entry.Configuration!);
-            if(frozenAgain.Components.Single(c=>c.Identity.AssetId==spring.Identity.AssetId).Behavior is not CompressionSpringBehavior previous||previous.RateKgfPerMm!=behavior.RateKgfPerMm) throw new Exception("Source update altered frozen result geometry/behavior.");
+            if(frozenAgain.Components.Single(c=>c.Identity.AssetId==spring.Identity.AssetId).Identity.RevisionId!=sourceSpring.Identity.RevisionId) throw new Exception("Source update altered frozen result geometry/behavior.");
             using var canceled=new CancellationTokenSource();canceled.Cancel();try {await engine.SolveAsync(3,a,b,0,0,0,canceled.Token);throw new Exception("Canceled queued job ran.");}catch(OperationCanceledException) { }
             try {await engine.SolveAsync(4,a,b with {Archived=true},0,0,0);throw new Exception("Archived entry produced an accepted comparison.");}catch(InvalidOperationException) { }
             Directory.CreateDirectory(Path.Combine(repository,"artifacts/installed-analysis"));File.WriteAllText(Path.Combine(repository,"artifacts/installed-analysis/frozen-result.json"),export);

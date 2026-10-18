@@ -28,7 +28,7 @@ public partial class MainWindow
         var panel=new StackPanel {Margin=new Thickness(10)};
         panel.Children.Add(new TextBlock {Text="Imported axial bump-stop curve",FontWeight=FontWeights.Bold});
         panel.Children.Add(_bumpMaterialProperty);
-        panel.Children.Add(new TextBlock {Text="Import measured or estimated CSV as a reusable bumper component. Exact source data, units and conditions are saved with its revision. STEP/FEA publication remains gated on backend validation.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});
+        panel.Children.Add(new TextBlock {Text="Import measured or estimated CSV as a reusable bumper component. Exact source data, units and conditions are saved with its revision. Bump Stop Studio also creates components from coarse STEP/FEA jobs.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});
         void Field(string label,Control control,string tip) {panel.Children.Add(new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,5,0,2)});control.ToolTip=tip;panel.Children.Add(control);}
         Field("Compression units",_bumpDisplacementUnit,"CSV displacement means shortening from the declared curve zero. No automatic rescaling from guessed units.");
         Field("Force units",_bumpForceUnit,"Positive axial compression force. N or kN are converted exactly to SI.");
@@ -55,7 +55,7 @@ public partial class MainWindow
         _bumpPlot.SizeChanged+=(_,_)=>{if(_componentDefinition?.Behavior is BumpCurveBehavior b) DrawBumpCurve(b);};
     }
     private ImportedBumpCurveEvidence ReadBumpEvidence()=>new(_bumpCsv.Text,(CurveDisplacementUnit)_bumpDisplacementUnit.SelectedItem,(CurveForceUnit)_bumpForceUnit.SelectedItem,
-        (CurveZero)_bumpZero.SelectedItem,DesignerNumbers.Metres(_bumpContact.Text),_bumpConditions.Text,_bumpSource.Text,(DataProvenance)_bumpProvenance.SelectedItem);
+        (CurveZero)_bumpZero.SelectedItem,DesignerNumbers.Metres(_bumpContact.Text),_bumpConditions.Text,_bumpSource.Text,(DataProvenance)_bumpProvenance.SelectedItem) {AllowSoftening=_componentDefinition?.BumpCurveEvidence?.AllowSoftening};
     private void CreateImportedBumpComponent()
     {
         var evidence=ReadBumpEvidence();_=ImportedBumpCurve.Parse(evidence);var updating=_componentDefinition?.Kind==ComponentKind.BumpStop;
@@ -64,7 +64,7 @@ public partial class MainWindow
         {_componentId=Guid.NewGuid().ToString("N");_componentBaseRevision=null;_componentUndo.Clear();_componentRedo.Clear();_workspaceDrafts[Workspace.ComponentDesigner].Name.Text="Imported bump stop";}
         var identity=new RevisionIdentity(_componentId,"draft",_workspaceDrafts[Workspace.ComponentDesigner].Name.Text,new(evidence.Provenance,evidence.SourceNote,"Imported CSV SHA-256 "+evidence.RawSha256));
         var previous=_componentDefinition?.Behavior as BumpCurveBehavior;
-        var component=updating?_componentDefinition! with {Identity=identity,Behavior=ImportedBumpCurve.Behavior(evidence,previous!.FirstPortId,previous.SecondPortId),BumpCurveEvidence=evidence}:ElasticComponentFactory.ImportedBumper(identity,evidence);
+        var component=updating?_componentDefinition! with {Identity=identity,Behavior=ImportedBumpCurve.Behavior(evidence,previous!.FirstPortId,previous.SecondPortId),BumpCurveEvidence=evidence,BumperFeaSource=null}:ElasticComponentFactory.ImportedBumper(identity,evidence);
         ComponentAuthoring.ValidateForPublish(component);_componentMetadataSeed=component;_componentDefinition=component;_componentMass=component.Mass;_componentCustom=true;
         _componentKind.SelectedItem=ComponentKind.BumpStop;_workspaceDrafts[Workspace.ComponentDesigner].Notes.Text=evidence.SourceNote;_useMass.IsChecked=component.Mass is not null;
         FillComponentTables(component);if(updating) {_componentUndo.Push(before);_componentRedo.Clear();}_componentAcceptedRaw=null;ApplyComponentPreview(false);DrawBumpCurve((BumpCurveBehavior)component.Behavior!);

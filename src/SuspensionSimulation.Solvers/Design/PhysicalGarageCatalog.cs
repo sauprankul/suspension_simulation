@@ -11,7 +11,7 @@ public sealed class PhysicalGarageCatalog(DesignAssetLibrary library,string repo
     public GarageSetup Create(string name,bool brz=false)=>OwnValues(new(new(Guid.NewGuid().ToString("N"),"draft",name,
         new(DataProvenance.Estimated,"Reference equipment with synthetic geometry and estimated installation dimensions/CG; total base mass includes the reference driver once.",null)),
         new((brz?Models.Brz:Models.Gr86).Identity.AssetId),[],[],new(MassAccountingPolicy.AggregateBase,1360.778,new(.0515,0,.46),[])));
-    private GarageSetup OwnValues(GarageSetup setup)=>new ScopedInterfaceMigration(library).Convert(new ScopedConfigurationMigration(library).Convert(setup));
+    private GarageSetup OwnValues(GarageSetup setup)=>new ChassisMigration(library).Convert(new ScopedInterfaceMigration(library).Convert(new ScopedConfigurationMigration(library).Convert(setup)));
     public GarageSetup Migrate(GarageEntry entry)
     {
         if(entry.Configuration is {} configured) return OwnValues(configured);

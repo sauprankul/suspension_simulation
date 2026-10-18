@@ -32,6 +32,7 @@ public partial class MainWindow
         if(draft.RootParameters is not null)
         {
             _garageMechanicalRows=[];
+            foreach(var body in graph.Bodies.Where(b=>b.Component.Chassis is not null)) _garagePhysicalPanel.Children.Add(new Expander {Header="Chassis properties (source owned; read only)",Foreground=System.Windows.Media.Brushes.White,Content=new TextBlock {Text=ChassisDescription(body.Component.Chassis!),Foreground=System.Windows.Media.Brushes.White,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(4)}});
             var readout=string.Join("\n",graph.ElasticElements.Where(e=>e.Component.Behavior is CompressionSpringBehavior or TorsionBarBehavior).Select(e=>e.Component.Behavior switch {CompressionSpringBehavior s=>$"{e.Path}: {s.RateKgfPerMm:0.######} kgf/mm",TorsionBarBehavior b=>$"{e.Path}: OD {b.OutsideDiameterM*1000:0.###} / ID {b.InsideDiameterM*1000:0.###} mm · G {b.ShearModulusPa/1e9:0.######} GPa",_=>""}));
             _garagePhysicalPanel.Children.Add(new Expander {Header="Resolved hardware values (read only here)",Foreground=System.Windows.Media.Brushes.White,Content=new TextBlock {Text=readout,Foreground=System.Windows.Media.Brushes.White,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(4)}});return;
         }

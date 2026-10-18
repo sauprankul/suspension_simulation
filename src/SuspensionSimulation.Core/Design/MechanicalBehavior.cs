@@ -24,7 +24,10 @@ public sealed record TorsionBarBehavior(string FirstPortId,string SecondPortId,D
 public sealed record BumpCurveSample(double CompressionM,double ForceN);
 public enum CurveZero { Contact, Installed }
 public sealed record BumpCurveBehavior(string FirstPortId,string SecondPortId,double ContactLengthM,ImmutableArray<BumpCurveSample> Samples,
-    CurveZero Zero,string Conditions,string EvidenceSha256):MechanicalBehavior(FirstPortId,SecondPortId);
+    CurveZero Zero,string Conditions,string EvidenceSha256):MechanicalBehavior(FirstPortId,SecondPortId)
+{
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public bool? AllowSoftening {get;init;}
+}
 
 public static class MechanicalValidation
 {
@@ -56,7 +59,7 @@ public static class MechanicalValidation
             case BumpCurveBehavior curve:
                 Require(c.Kind==ComponentKind.BumpStop&&Enum.IsDefined(curve.Zero),"Invalid bump-stop behavior.");Positive(curve.ContactLengthM,"Contact eye separation");Require(curve.Samples.Length>=2,"A bump curve requires at least two samples.");
                 Require(curve.Samples[0].CompressionM==0,"Curve displacement must start at its declared zero.");if(curve.Zero==CurveZero.Contact) Require(curve.Samples[0].ForceN==0,"A contact-origin curve starts at zero force.");
-                for(var i=0;i<curve.Samples.Length;i++) {var sample=curve.Samples[i];Nonnegative(sample.CompressionM,"Curve displacement");Nonnegative(sample.ForceN,"Curve force");if(i>0) Require(sample.CompressionM>curve.Samples[i-1].CompressionM&&sample.ForceN>=curve.Samples[i-1].ForceN,"Curve samples must increase in displacement without negative tangent.");}
+                for(var i=0;i<curve.Samples.Length;i++) {var sample=curve.Samples[i];Nonnegative(sample.CompressionM,"Curve displacement");Nonnegative(sample.ForceN,"Curve force");if(i>0) Require(sample.CompressionM>curve.Samples[i-1].CompressionM&&(curve.AllowSoftening==true||sample.ForceN>=curve.Samples[i-1].ForceN),"Curve displacement must increase; force drops require explicitly declared softening.");}
                 Require(!string.IsNullOrWhiteSpace(curve.Conditions)&&curve.EvidenceSha256 is {Length:64}&&curve.EvidenceSha256.All(Uri.IsHexDigit),"Curve conditions and evidence hash are required.");break;
             default:throw new ArgumentException("Unsupported mechanical behavior.");
         }

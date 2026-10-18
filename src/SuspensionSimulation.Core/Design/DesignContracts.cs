@@ -30,7 +30,7 @@ public sealed record DesignFrame(DesignVector OriginM, DesignVector Axis, Design
 public sealed record NamedDesignPoint(string Id, string Name, DesignVector PositionM);
 public sealed record NamedDesignFrame(string Id, string Name, DesignFrame Frame);
 public enum JointKind { Fixed, Revolute, Spherical, Prismatic, Cylindrical, Universal, RigidDistance }
-public enum ComponentKind { RigidLink, Wishbone, Upright, TopMount, Structure, Spring, Damper, BumpStop, AntiRollBar, Rack, Wheel, Connector }
+public enum ComponentKind { RigidLink, Wishbone, Upright, TopMount, Structure, Spring, Damper, BumpStop, AntiRollBar, Rack, Wheel, Connector, Chassis }
 public enum AssetKind { Component, Assembly, Setup }
 public sealed record DesignProvenance(DataProvenance Kind, string Note, string? Source);
 public sealed record RevisionIdentity(string AssetId, string RevisionId, string Name, DesignProvenance Provenance,
@@ -55,6 +55,7 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     public ImmutableArray<VisualEdge> VisualEdges {get;init;}=[];
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public AxialRodGauge? AxialGauge {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public RackSpecification? Rack {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ChassisSpecification? Chassis {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalBehavior? Behavior {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public MechanicalTemplate? MechanicalTemplate {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<DefinitionParameter>? Parameters {get;init;}
@@ -63,6 +64,7 @@ public sealed record ComponentDefinition(RevisionIdentity Identity, ComponentKin
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<GeometryAdjustment>? Adjustments {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImmutableArray<AdjustmentParameterBinding>? AdjustmentParameters {get;init;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ImportedBumpCurveEvidence? BumpCurveEvidence {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public BumperFeaSource? BumperFeaSource {get;init;}
     [JsonIgnore] public bool IsRuntimeDerived {get;init;}
 }
 public sealed record RackSpecification(double TravelAtLockM,double SteeringWheelLockDegrees);
@@ -118,7 +120,10 @@ public sealed record ResolvedEquipmentSlot(string InstancePath,EquipmentSlot Def
 public sealed record ResolvedSetupAdjustment(string InstancePath,string Name,GeometryAdjustment Definition);
 public sealed record SpringSeatBinding(string SpringPath,string DamperPath);
 public sealed record WheelGroundContact(string Corner,string InstancePath,string CenterPointId);
-public sealed record VehicleGeometry(ImmutableArray<WheelGroundContact> Contacts,ImmutableArray<NamedDesignPoint> RideHeightDatums);
+public sealed record VehicleGeometry(ImmutableArray<WheelGroundContact> Contacts,ImmutableArray<NamedDesignPoint> RideHeightDatums)
+{
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public ChassisInstallation? Chassis {get;init;}
+}
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ContinuousAdjustmentSelection), "continuous")]

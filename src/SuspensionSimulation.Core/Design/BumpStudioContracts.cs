@@ -33,10 +33,15 @@ public enum RigidBumperFixtureKind { Plane,AnnularPlane,Cylinder }
 public sealed record RigidBumperFixture(string Id,RigidBumperFixtureKind Kind,DesignFrame FrameInCad,double InnerRadiusM,double OuterRadiusM,double LengthM,bool Driven);
 public sealed record BumperContactPair(string Id,ImmutableArray<int> SlaveFaceTags,ImmutableArray<int> MasterFaceTags,string? RigidFixtureId,double FrictionCoefficient,bool Bonded);
 public sealed record BumperMeshSettings(double TargetElementSizeM,int ElementOrder,bool RequireThreeMeshConvergence);
+public enum BumperSolveQuality { CoarseEstimate }
 // Frame +Z points from the lower fixture toward the upper fixture; the driven fixture compresses along -Z.
 public sealed record BumperJobRecipe(string Name,string InspectionSha256,DesignFrame CompressionFrameInCad,double FreeLengthM,double RequestedCompressionM,
     ImmutableArray<BumperContactPair> Contacts,ImmutableArray<RigidBumperFixture> Fixtures,BumperMaterialCard Material,BumperMeshSettings Mesh,
-    int BudgetSeconds=28800,long MemoryBudgetBytes=2147483648,int ThreadCount=4,string SchemaVersion="1.0");
+    int BudgetSeconds=28800,long MemoryBudgetBytes=2147483648,int ThreadCount=4,string SchemaVersion="1.0")
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public BumperSolveQuality? Quality {get;init;}
+}
 
 public static class BumpStudioContracts
 {
@@ -102,7 +107,8 @@ public static class BumpStudioContracts
             Need(double.IsFinite(pair.FrictionCoefficient)&&pair.FrictionCoefficient>=0,"Contact friction must be finite and nonnegative.");
         }
         Need(recipe.Fixtures.Where(f=>f.Kind!=RigidBumperFixtureKind.Cylinder).All(f=>recipe.Contacts.Any(c=>c.RigidFixtureId==f.Id)),"Each platen needs its actual CAD-face contact selection.");
-        Need(double.IsFinite(recipe.Mesh.TargetElementSizeM)&&recipe.Mesh.TargetElementSizeM>0&&recipe.Mesh.ElementOrder==2&&recipe.Mesh.RequireThreeMeshConvergence,"Production preparation requires a positive quadratic-mesh target and three-mesh convergence.");
+        Need(recipe.Quality is null||Enum.IsDefined(recipe.Quality.Value),"Unknown analysis quality.");
+        Need(double.IsFinite(recipe.Mesh.TargetElementSizeM)&&recipe.Mesh.TargetElementSizeM>0&&recipe.Mesh.ElementOrder==2&&(recipe.Mesh.RequireThreeMeshConvergence||recipe.Quality==BumperSolveQuality.CoarseEstimate),"Use a positive quadratic-mesh target; a single mesh must be explicitly labelled CoarseEstimate.");
         Need(recipe.BudgetSeconds is >0 and <=28800&&recipe.MemoryBudgetBytes>=67108864&&recipe.ThreadCount is >0 and <=4,"Worker budgets must be explicit and bounded (up to eight hours/four threads).");
     }
     public static void RequireVerifiedWorker(BumperJobRecipe recipe,BumperCadInspection model,IReadOnlySet<string> verifiedModelKeys,bool backendGatePassed)

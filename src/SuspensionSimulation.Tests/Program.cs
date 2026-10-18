@@ -29,9 +29,12 @@ if(args.Contains("--check-bump-studio")) {try {SuspensionSimulation.Tests.BumpSt
 if(args.Contains("--check-fea-diagnostic")) {try {SuspensionSimulation.Tests.FeaDiagnosticChecks.VerifyActualExports();Console.WriteLine("FEA diagnostic viewing checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-definition-parameters")) {try {SuspensionSimulation.Tests.DefinitionParameterChecks.Verify();Console.WriteLine("Definition parameter checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-scoped-adjustments")) {try {SuspensionSimulation.Tests.ScopedAdjustmentChecks.Verify();Console.WriteLine("Scoped adjustment checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-chassis")||args.Contains("--check-chassis-contracts")) {try {SuspensionSimulation.Tests.ChassisChecks.Verify(!args.Contains("--check-chassis-contracts"));Console.WriteLine("Chassis checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-bump-fea-product")) {try {await SuspensionSimulation.Tests.BumpFeaProductChecks.RunActualAsync();Console.WriteLine("Bump FEA product checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
+Run("source-owned inextensible chassis EI/GJ and length drive actual mount geometry equilibrium and frozen replay",()=>SuspensionSimulation.Tests.ChassisChecks.Verify());
 Run("properties remain immutable to importers while parameters require explicit immediate-owner configuration through nested assemblies",SuspensionSimulation.Tests.DefinitionParameterChecks.Verify);
 Run("named holes mechanical positions and equipment choices obey immediate importer boundaries and exact portable replay",SuspensionSimulation.Tests.ScopedAdjustmentChecks.Verify);
 Run("component templates drive rigid geometry and immutable revisions preserve history conflicts measurements and drafts",SuspensionSimulation.Tests.ComponentAuthoringChecks.Verify);

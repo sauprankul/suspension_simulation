@@ -48,7 +48,7 @@ def bytes_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def bounded_run(folder,label,arguments):
+def bounded_run(folder,label,arguments,cancel_path=None,timeout=300):
     env=dict(os.environ,OMP_NUM_THREADS="1",OPENBLAS_NUM_THREADS="1",MKL_NUM_THREADS="1")
     start=time.perf_counter();peak=0
     with (folder/(label+".stdout.log")).open("w") as out,(folder/(label+".stderr.log")).open("w") as error:
@@ -58,8 +58,8 @@ def bounded_run(folder,label,arguments):
             while process.poll() is None:
                 try: peak=max(peak,monitor.memory_info().rss)
                 except psutil.NoSuchProcess: pass
-                if (folder/"cancel.request").exists(): raise ValueError("Volume preparation canceled")
-                if time.perf_counter()-start>300 or peak>2*1024**3: raise TimeoutError("Mesher exceeded its five-minute/2-GB budget")
+                if (folder/"cancel.request").exists() or cancel_path is not None and cancel_path.exists(): raise ValueError("Volume preparation canceled")
+                if time.perf_counter()-start>timeout or peak>2*1024**3: raise TimeoutError("Mesher exceeded its declared time/2-GB budget")
                 time.sleep(.05)
         finally:
             if process.poll() is None: process.kill();process.wait()
@@ -95,7 +95,7 @@ def cad_faces(path):
     return faces
 
 
-def prepare(recipe_path,inspection_path,source_path,size=None):
+def prepare(recipe_path,inspection_path,source_path,size=None,output_folder=None,cancel_path=None,timeout=300):
     recipe=json.loads(recipe_path.read_text());inspection=json.loads(inspection_path.read_text())
     if recipe["inspectionSha256"]!=bytes_hash(inspection_path) or inspection["sourceSha256"]!=bytes_hash(source_path):
         raise ValueError("Saved recipe/inspection/source identities disagree")
@@ -106,7 +106,7 @@ def prepare(recipe_path,inspection_path,source_path,size=None):
     if not math.isfinite(target) or not 1e-6<=target<=1: raise ValueError("Invalid explicit mesh size")
     face_tags=[int(face["tag"]) for face in inspection["faces"]]
     if len(face_tags)!=len(set(face_tags)) or min(face_tags)<=0: raise ValueError("CAD face identities must be unique positive tags")
-    folder=ROOT/"artifacts/bump-studio-volume"/("run-"+datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+uuid.uuid4().hex[:8]);folder.mkdir(parents=True)
+    folder=output_folder or ROOT/"artifacts/bump-studio-volume"/("run-"+datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+uuid.uuid4().hex[:8]);folder.mkdir(parents=True)
     (folder/"input.step").write_bytes(source_path.read_bytes());(folder/"inspection.json").write_bytes(inspection_path.read_bytes());(folder/"recipe.json").write_bytes(recipe_path.read_bytes())
     (folder/"source-driver.py").write_bytes(Path(__file__).read_bytes())
     state={"state":"preparing","folder":str(folder),"recipeSha256":bytes_hash(recipe_path),"inspectionSha256":bytes_hash(inspection_path),
@@ -133,10 +133,10 @@ Mesh.HighOrderOptimize=2;
         geo+=f"Mesh.MeshSizeMin={target:.12g};\nMesh.MeshSizeMax={target:.12g};\n"
         for tag in face_tags: geo+=f'Physical Surface("cad_{tag}",{tag})={{{tag}}};\n'
         (folder/"volume.geo").write_text(geo)
-        state["meshing"]=bounded_run(folder,"volume",["volume.geo","-3","-nt","1","-format","msh2","-o","volume.msh","-v","4","-noenv","-nopopup"])
+        state["meshing"]=bounded_run(folder,"volume",["volume.geo","-3","-nt","1","-format","msh2","-o","volume.msh","-v","4","-noenv","-nopopup"],cancel_path,timeout)
         log=(folder/"volume.stdout.log").read_text()+(folder/"volume.stderr.log").read_text()
         if "SOLID_COUNT=1\n" not in log or "Error   :" in log: raise ValueError("Expected exactly one unchanged solid and an error-free volume mesh")
-        state["conversion"]=bounded_run(folder,"conversion",["volume.msh","-0","-nt","1","-format","inp","-o","volume.inp","-v","4","-noenv","-nopopup"])
+        state["conversion"]=bounded_run(folder,"conversion",["volume.msh","-0","-nt","1","-format","inp","-o","volume.inp","-v","4","-noenv","-nopopup"],cancel_path,timeout)
         nodes,elements=parse_inp(folder/"volume.inp");faces=cad_faces(folder/"volume.msh")
         if set(faces)!=set(face_tags): raise ValueError("Volume meshing changed the declared CAD-face mapping")
         for i,key in enumerate(("x","y","z")):

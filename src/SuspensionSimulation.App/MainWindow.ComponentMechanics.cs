@@ -35,6 +35,7 @@ public partial class MainWindow
         Field("effectiveBar","Effective torsional rate (N·m/rad; blank uses GJ/L)","");
         Field("rackTravel","Rack travel at full steering-wheel lock (mm)","55");Field("rackLock","Steering-wheel lock angle (degrees)","450");
         Field("wheelRadius","Effective rigid rolling radius (mm)","310");Field("wheelWidth","Wheel/tire visual width (mm)","220");
+        AddChassisFields(Field);
         panel.Children.Add(_useMass);Field("mass","Mass (kg)","1");Field("massX","Mass datum X (mm)","0");Field("massY","Mass datum Y (mm)","0");Field("massZ","Mass datum Z (mm)","0");
         foreach(var check in new[]{_integratedSeats,_perchAdjustment,_bodyAdjustment,_useMass}) {check.Checked+=(_,_)=>{ScheduleComponentDraft();UpdateMechanicalVisibility();};check.Unchecked+=(_,_)=>{ScheduleComponentDraft();UpdateMechanicalVisibility();};}
         _perchAdjustment.Checked+=(_,_)=>_integratedSeats.IsChecked=true;
@@ -105,7 +106,7 @@ public partial class MainWindow
                 "shear" or "outside" or "inside" or "torsionLength" or "restTwist" or "effectiveBar"=>kind==ComponentKind.AntiRollBar,
                 "rackTravel" or "rackLock"=>kind==ComponentKind.Rack,
                 "wheelRadius" or "wheelWidth"=>kind==ComponentKind.Wheel,
-                _=>_useMass.IsChecked==true
+                _=>id.StartsWith("chassis",StringComparison.Ordinal)?kind==ComponentKind.Chassis:_useMass.IsChecked==true
             };
             field.Visibility=_physicalLabels[id].Visibility=visible?Visibility.Visible:Visibility.Collapsed;
             if(_componentParameterFields.TryGetValue(id,out var source)) source.Panel.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
@@ -150,6 +151,7 @@ public partial class MainWindow
             foreach(var (id,minField,maxField) in new[]{(damper.SpringSeats?.PerchAdjustmentId,"perchMin","perchMax"),(damper.BodyLengthAdjustmentId,"bodyMin","bodyMax")})
                 if(id is not null&&(component.Adjustments??[]).Single(a=>a.Id==id) is {} definition&&definition.Path is ThreadedAdjustmentPath t)
                 {var nominal=AdjustmentPaths.Evaluate(t,definition.Default);var a=AdjustmentPaths.Evaluate(t,new(0));var b=AdjustmentPaths.Evaluate(t,new(1));Set(minField,(a.OriginM-nominal.OriginM).Dot(t.Datum.Axis)*1000);Set(maxField,(b.OriginM-nominal.OriginM).Dot(t.Datum.Axis)*1000);}
+        if(component.Chassis is {} chassis) FillChassisFields(chassis);
         FillComponentScopedParameters(component);
     }
     private ComponentDefinition ApplyComponentMechanicalEdits(ComponentDefinition component)

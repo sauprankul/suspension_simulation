@@ -104,7 +104,7 @@ def reactions(path,expected_ids):
 
 def export(folder,output=None,maximum_frames=61):
     process_sha=sha(folder/"process.json");state=json.loads((folder/"process.json").read_text())
-    if state["state"] not in ("verified","solver_succeeded","failed","canceled","validation_failed"):
+    if state["state"] not in ("verified","solver_succeeded","estimated_complete","failed","canceled","validation_failed"):
         raise ValueError("Export a terminal job; active results require a separate immutable snapshot")
     if state["state"]=="solver_succeeded" and "inputFileSha256" in state:
         raise ValueError("Wait for the wrapper's terminal verification outcome before exporting")
@@ -149,9 +149,13 @@ def export(folder,output=None,maximum_frames=61):
     if not complete: warnings.append("Incomplete solve: requested stroke was not reached. Retained converged increments are diagnostic only.")
     if info["legacyWindowsLineEndings"]: warnings.append("Legacy run: input identity checked against the recorded LF-normalized model hash; raw input SHA is retained separately.")
     curve=[{"compressionM":float(t*stroke),"forceN":float(f)} for t,f in zip(times,forces)]
-    result={"schema":"suspension-fea/diagnostic-result/v1","label":"Synthetic "+("guided grooved bumper" if len(parts)>2 else "compression benchmark"),
-            "complete":complete,"curveAccepted":accepted,"synthetic":True,"sourceModelSha256":state["modelSha256"],"inputFileSha256":input_sha,"plotFileSha256":plot_sha,
-            "requestedCompressionM":stroke,"conditions":"Axial quasi-static compression; exact benchmark material, fixtures and contact settings retained in case.feb. Compression force is the signed sum of driven-face FEBio Rz; positive compression. No smoothing or extrapolation.",
+    coarse=state["state"]=="estimated_complete"
+    if coarse:
+        warnings=[w for w in warnings if "authorize bumper-curve publication" not in w and "Synthetic numerical benchmark" not in w]
+        warnings.append("Coarse single-mesh STEP estimate. Mesh convergence and physical calibration have not been established. Studio may create an Estimated component from the separately checked complete job.")
+    result={"schema":"suspension-fea/diagnostic-result/v1","label":"Coarse STEP bumper estimate" if coarse else "Synthetic "+("guided grooved bumper" if len(parts)>2 else "compression benchmark"),
+            "complete":complete,"curveAccepted":accepted,"synthetic":not coarse,"sourceModelSha256":state["modelSha256"],"inputFileSha256":input_sha,"plotFileSha256":plot_sha,
+            "requestedCompressionM":stroke,"conditions":"Axial quasi-static compression; exact material, fixtures and contact settings retained in case.feb. Compression force is the signed sum of driven-face FEBio Rz; positive compression. No smoothing or extrapolation.",
             "nodes":[{"id":int(n),"positionM":vector(p)} for n,p in zip(ids,xyz)],"triangles":triangles,"parts":parts,"frames":frames,"curve":curve,"warnings":warnings}
     data=json.dumps(result,separators=(",",":"),allow_nan=False).encode()
     if len(data)>50_000_000: raise ValueError("Export exceeds Studio's 50-MB viewing budget; reduce --frames")

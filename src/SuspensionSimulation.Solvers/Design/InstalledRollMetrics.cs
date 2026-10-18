@@ -24,7 +24,7 @@ public static class InstalledRollMetricCalculator
             var chassis=state.Chassis with {RollRad=state.Chassis.RollRad+angle};var travel=state.Motion.Travel.Values;var motion=state.Motion;
             for(var iteration=0;iteration<16;iteration++)
             {
-                cancellation.ThrowIfCancellationRequested();motion=kinematics.Solve(new(travel[0],travel[1],travel[2],travel[3]),state.Input.SteeringWheelDegrees,motion,1e-12);
+                cancellation.ThrowIfCancellationRequested();motion=kinematics.Solve(new(travel[0],travel[1],travel[2],travel[3]),state.Input.SteeringWheelDegrees,motion,1e-12,state.Motion.ChassisFlex);
                 var gaps=motion.Wheels.Select((w,i)=>state.NormalLoadsN[i]>1e-5?chassis.World(w.CenterM).Z-state.Wheels[i].CenterM.Z:0).ToArray();
                 if(gaps.Max(Math.Abs)<1e-11) return mechanics.Evaluate(motion.Pose.Coordinates,false);
                 var slope=chassis.Rotate(new(0,0,1)).Z;

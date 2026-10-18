@@ -12,6 +12,7 @@ public enum CurveForceUnit { Newtons, Kilonewtons }
 public sealed record ImportedBumpCurveEvidence(string CsvUtf8,CurveDisplacementUnit DisplacementUnit,CurveForceUnit ForceUnit,
     CurveZero Zero,double ContactSeparationM,string Conditions,string SourceNote,DataProvenance Provenance,string SchemaVersion="1.0")
 {
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] public bool? AllowSoftening {get;init;}
     [JsonIgnore] public string RawSha256=>Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(CsvUtf8)));
 }
 
@@ -37,7 +38,7 @@ public static class ImportedBumpCurve
             var values=line.Split(',');
             if(values.Length!=2||!double.TryParse(values[0],NumberStyles.Float,CultureInfo.InvariantCulture,out var x)||!double.TryParse(values[1],NumberStyles.Float,CultureInfo.InvariantCulture,out var y)||!double.IsFinite(x)||!double.IsFinite(y)) throw new ArgumentException($"CSV sample {index+1} must contain two finite numbers using a decimal point.");
             x*=evidence.DisplacementUnit==CurveDisplacementUnit.Millimetres?.001:1;y*=evidence.ForceUnit==CurveForceUnit.Kilonewtons?1000:1;
-            if(!double.IsFinite(x)||!double.IsFinite(y)||x<0||y<0||samples.Count>0&&(x<=samples[^1].CompressionM||y<samples[^1].ForceN)) throw new ArgumentException($"CSV sample {index+1}: compression must strictly increase and force must be nonnegative/nondecreasing. No sorting, smoothing or extrapolation is applied.");
+            if(!double.IsFinite(x)||!double.IsFinite(y)||x<0||y<0||samples.Count>0&&(x<=samples[^1].CompressionM||evidence.AllowSoftening!=true&&y<samples[^1].ForceN)) throw new ArgumentException($"CSV sample {index+1}: compression must strictly increase; force must be nonnegative, and force drops require declared softening. No sorting, smoothing or extrapolation is applied.");
             samples.Add(new(x,y));
         }
         if(samples[0].CompressionM!=0||evidence.Zero==CurveZero.Contact&&samples[0].ForceN!=0) throw new ArgumentException("Start displacement at zero; a contact-origin curve must also start at zero force.");
@@ -45,12 +46,13 @@ public static class ImportedBumpCurve
         return [..samples];
     }
     public static BumpCurveBehavior Behavior(ImportedBumpCurveEvidence evidence,string first="first",string second="second")
-        =>new(first,second,evidence.ContactSeparationM,Parse(evidence),evidence.Zero,evidence.Conditions,Fingerprint(evidence));
+        =>new(first,second,evidence.ContactSeparationM,Parse(evidence),evidence.Zero,evidence.Conditions,Fingerprint(evidence)) {AllowSoftening=evidence.AllowSoftening};
     public static void Validate(ComponentDefinition component)
     {
-        if(component.BumpCurveEvidence is not {} evidence) return;
+        if(component.BumpCurveEvidence is not {} evidence) {BumperFeaSources.Validate(component);return;}
         if(component.Kind!=ComponentKind.BumpStop||component.Behavior is not BumpCurveBehavior curve) throw new ArgumentException("Imported bump evidence belongs to a bump-stop curve.");
         var expected=Behavior(evidence,curve.FirstPortId,curve.SecondPortId);
-        if(curve.EvidenceSha256!=expected.EvidenceSha256||curve.ContactLengthM!=expected.ContactLengthM||curve.Zero!=expected.Zero||curve.Conditions!=expected.Conditions||!curve.Samples.SequenceEqual(expected.Samples)) throw new ArgumentException("Curve behavior differs from its frozen raw source/units/conditions.");
+        if(curve.EvidenceSha256!=expected.EvidenceSha256||curve.ContactLengthM!=expected.ContactLengthM||curve.Zero!=expected.Zero||curve.Conditions!=expected.Conditions||curve.AllowSoftening!=expected.AllowSoftening||!curve.Samples.SequenceEqual(expected.Samples)) throw new ArgumentException("Curve behavior differs from its frozen raw source/units/conditions.");
+        BumperFeaSources.Validate(component);
     }
 }

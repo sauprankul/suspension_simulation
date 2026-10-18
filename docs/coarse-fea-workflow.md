@@ -1,0 +1,15 @@
+# Coarse STEP bumper workflow
+
+Open **Component Designer → Bump curve → Prepare STEP bumper / fixtures**. Studio also has a **Load simple example** button; the bundled `data/examples/bumper-cylinder-mm.step` is an authored solid cylinder, 20mm diameter and 40mm high, in millimetres.
+
+1. Choose the source units and import one STEP solid. Inspect its dimensions. Use **Set planar end faces / fixtures** for flat caps in the current compression direction, or select the actual CAD faces manually. Confirm dimensions.
+2. Choose an Estimated TPU85/90/95A or PU350–650 material, or a supported documented card. Its three coefficients are editable here. The published bumper freezes the material as a component property. Infill percentage is metadata and does not scale stiffness; explicitly modeled internal geometry is meshed.
+3. Start with an 8mm mesh target, 8 steps and a short stroke. **Run / curve → Run coarse FEA** creates a separate job with actual quadratic tetrahedra and nonlinear FEBio contact. A time budget up to28,800seconds is available; the initial default is180seconds.
+4. Inspect the curve and **View deformation**. Only a full-stroke completed job enables **Create bumper component**. The source stores the exact raw CSV, material/recipe and STEP/mesh/solver/result hashes. Clicking creation twice reuses the same source component.
+5. In **Assembly Editor → Install bumper**, refresh, select that component and two physical mounting references. Add/export mounting frames first if needed: use the bumper's actual contact datum, rather than distant shock-eye references. Publish the assembly and select it in Garage; both visualizers use the saved configured assembly. Actual force is evaluated only inside the computed range.
+
+Current coarse subset: bonded planar lower cap, sliding/bonded planar upper cap, zero initial fixture gaps, optional aligned shaft with selected bore faces, and one explicit fold-contact pair. General self-contact discovery, interference installation, axisymmetric jobs, automatic mesh-convergence studies and physically correlated folding curves remain open. Unsupported cases give an error. Coarse completion does not imply research validation or material calibration.
+
+The job folder shown in Studio retains `status.json`, original STEP/inspection/recipe, volume mesh, native `solve/case.feb`, solver logs, reaction/plot data and diagnostic export. Live application state includes that path and job progress. Jobs are bounded and serialized; closing Studio requests cancellation. Failed/canceled jobs retain their evidence and cannot create a component. Reopen a completed result using **Open saved completed job**; the last completed job also restores with the Studio draft. Editing inputs does not change an existing job's frozen result.
+
+Local tools are external dependencies: pinned Gmsh4.15.2, installed FEBio4.13.0/PARDISO and Python with NumPy/psutil. `SUSPENSION_FEA_PYTHON` can specify the Python executable; otherwise the user's Anaconda installation is used when available. Executable/dependency pin checks remain enforced.

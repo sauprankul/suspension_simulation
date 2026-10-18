@@ -18,9 +18,10 @@ public sealed class ConstraintMechanism
     private readonly (ResolvedBody Body,DesignVector Axis,DesignVector Normal)[] _gauges;
     private readonly int _jointResidualRows;
     public int GaugeCount=>_gauges.Length;
+    public ChassisBeam? Chassis {get;}
     public ConstraintMechanism(ResolvedAssemblyGraph graph)
     {
-        Graph=graph;FreeBodies=graph.Bodies.Where(x=>!graph.GroundedBodies.Contains(x.Path)).ToArray();
+        Graph=graph;Chassis=graph.Root.Vehicle?.Chassis is null?null:new(graph);FreeBodies=graph.Bodies.Where(x=>!graph.GroundedBodies.Contains(x.Path)).ToArray();
         _jointResidualRows=graph.Joints.Sum(j=>j.Kind switch
         {
             JointKind.Fixed=>6,JointKind.Spherical=>3,JointKind.Revolute=>5,JointKind.Prismatic=>5,
@@ -44,7 +45,7 @@ public sealed class ConstraintMechanism
     private DesignFrame WorldFrame(string bodyPath,DesignFrame world,IReadOnlyList<double> q)
     {
         if(q.Count!=CoordinateCount) throw new ArgumentException("Pose coordinate count differs from this graph.");
-        if(!_lookup.TryGetValue(bodyPath,out var i)) return world;
+        if(!_lookup.TryGetValue(bodyPath,out var i)) return Chassis?.GroundFrame(bodyPath,world)??world;
         return DesignTransform.Displace(world,new DesignVector(q[6*i],q[6*i+1],q[6*i+2])*LengthScaleM,new(q[6*i+3],q[6*i+4],q[6*i+5]),_bodies[bodyPath].Transform.Origin);
     }
     public DesignVector Point(string bodyPath,string pointId,IReadOnlyList<double> q)
@@ -56,7 +57,7 @@ public sealed class ConstraintMechanism
     {var body=_bodies[bodyPath];return WorldFrame(bodyPath,new(body.Transform.Point(local),new(0,0,1),new(1,0,0)),q).OriginM;}
     public DesignVector Direction(string bodyPath,DesignVector local,IReadOnlyList<double> q)
     {
-        var body=_bodies[bodyPath];var v=body.Transform.Direction(local);return _lookup.TryGetValue(bodyPath,out var i)?DesignTransform.Rotate(v,new(q[6*i+3],q[6*i+4],q[6*i+5])):v;
+        var body=_bodies[bodyPath];var v=body.Transform.Direction(local);return _lookup.TryGetValue(bodyPath,out var i)?DesignTransform.Rotate(v,new(q[6*i+3],q[6*i+4],q[6*i+5])):Chassis?.GroundFrame(bodyPath,new(body.Transform.Origin,v,body.Transform.Direction(Math.Abs(local.X)<.9?new(1,0,0):new(0,1,0)))).Axis??v;
     }
     public double[] Residual(double[] q,IReadOnlyList<MechanismDriver>? drivers=null)
     {

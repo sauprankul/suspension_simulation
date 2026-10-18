@@ -44,7 +44,7 @@ internal sealed class BumperDiagnosticWindow : Window
             var loaded=await Task.Run(()=>FeaDiagnosticResults.Load(path));if(_closed||generation!=_openGeneration) return false;
             _loaded=loaded;_viewport.SetDiagnosticResult(loaded.Result);_viewport.ShowDiagnosticFixtures(_fixtures.IsChecked==true);_settingFrame=true;_frame.Maximum=loaded.Result.Frames.Length-1;_frame.Value=0;_frame.IsEnabled=loaded.Result.Frames.Length>1;_settingFrame=false;
             _play.IsEnabled=loaded.Result.Frames.Length>1;_badges.Foreground=loaded.Result.Complete?Brushes.LightSkyBlue:Brushes.Gold;
-            _badges.Text=$"{(loaded.Result.Complete?"COMPLETE RUN":"INCOMPLETE RUN")} · {(loaded.Result.Synthetic?"SYNTHETIC":"SOURCE AS EXPORTED")}\nExported case accepted: {(loaded.Result.CurveAccepted?"yes":"no")}\nBackend/material calibration not certified here";
+            _badges.Text=$"{(loaded.Result.Complete?"COMPLETE RUN":"INCOMPLETE RUN")} · {(loaded.Result.Synthetic?"SYNTHETIC":"SOURCE AS EXPORTED")}\nResearch verification accepted: {(loaded.Result.CurveAccepted?"yes":"no")}\nMaterial calibration not certified here";
             _identity.Text=$"Model SHA-256\n{loaded.Result.SourceModelSha256}\nInput SHA-256\n{loaded.Result.InputFileSha256}\nPlot SHA-256\n{loaded.Result.PlotFileSha256}\nDiagnostic file SHA-256\n{loaded.FileSha256}";
             _status.Text=$"{loaded.Result.Label}\n{loaded.Result.Conditions}\n{string.Join(" · ",loaded.Result.Warnings)}\nFile: {loaded.FilePath}";ShowFrame(0);DrawCurve();App.Log("Opened read-only FEA diagnostic "+loaded.FileSha256+": "+loaded.FilePath,"DIAGNOSTIC");return true;
         }

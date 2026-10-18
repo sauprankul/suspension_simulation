@@ -50,6 +50,7 @@ public partial class MainWindow
                 var component=_designLibrary!.LoadComponent(child.Definition.AssetId,child.Definition.RevisionId)??throw new ArgumentException("Missing child component.");parameters=component.Parameters??[];
                 string Input(NumericDefinition n,string unit)=>n is NumericProperty p?$"{p.Value:R} {unit} (property)":n is NumericParameterReference r?$"parameter {r.ParameterId}":"unsupported";
                 var description=component.MechanicalTemplate switch {SpringMechanicalTemplate s=>"rate: "+Input(s.RateKgfPerMm,"kgf/mm"),TorsionMechanicalTemplate b=>"G: "+Input(b.ShearModulusPa,"Pa")+"; OD: "+Input(b.OutsideDiameterM,"m")+"; ID: "+Input(b.InsideDiameterM,"m"),_=>component.Behavior switch {CompressionSpringBehavior s=>$"Fixed spring rate {s.RateKgfPerMm:R} kgf/mm",TorsionBarBehavior b=>$"Fixed torsion section G {b.ShearModulusPa:R} Pa, OD {b.OutsideDiameterM:R} m, ID {b.InsideDiameterM:R} m",_=>component.Identity.Name}};
+                if(component.Chassis is {} chassis) description=ChassisDescription(chassis);
                 text.Add(child.Id+" · component source (read only)\n"+description);
             }
             else {var assembly=_designLibrary!.LoadAssembly(child.Definition.AssetId,child.Definition.RevisionId)??throw new ArgumentException("Missing child assembly.");parameters=assembly.Parameters??[];text.Add(child.Id+" · assembly "+assembly.Identity.Name+" (source properties read only)");}

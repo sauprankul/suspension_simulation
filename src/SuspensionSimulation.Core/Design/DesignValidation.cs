@@ -32,6 +32,13 @@ public static class DesignValidation
         if(component.Wheel is {} wheel) {Require(component.Kind==ComponentKind.Wheel,"Wheel dimensions belong to a wheel component.");Positive(wheel.RollingRadiusM,"Rolling radius");Positive(wheel.WidthM,"Wheel width");}
         else Require(component.Kind!=ComponentKind.Wheel,"Wheel contact dimensions are missing.");
         if(component.Rack is {} rack) {Require(component.Kind==ComponentKind.Rack,"Rack specification belongs to a rack.");Positive(rack.TravelAtLockM,"Rack travel");Positive(rack.SteeringWheelLockDegrees,"Steering wheel lock angle");}
+        if(component.Chassis is {} chassis)
+        {
+            Require(component.Kind==ComponentKind.Chassis,"Chassis rigidities belong to a chassis component.");ChassisAuthoring.Validate(chassis);
+            Require((component.Parameters??[]).IsEmpty&&component.MechanicalTemplate is null&&component.Behavior is null&&(component.Adjustments??[]).IsEmpty,"Chassis length and rigidities are source properties; importers cannot override them.");
+            var generated=ChassisAuthoring.Create(component.Identity,chassis,component.Mass);Require(component.Points.SequenceEqual(generated.Points)&&component.Frames.SequenceEqual(generated.Frames)&&component.Ports.Length==generated.Ports.Length&&component.Ports.Zip(generated.Ports,(a,b)=>a.Id==b.Id&&a.FrameId==b.FrameId&&a.Role==b.Role&&a.SupportedJoints.SequenceEqual(b.SupportedJoints)).All(x=>x),"Chassis geometry must follow its source dimensions.");
+        }
+        else Require(component.Kind!=ComponentKind.Chassis,"Chassis properties are missing.");
         MechanicalTemplates.Validate(component);MechanicalValidation.Validate(component);AdjustmentPaths.Validate(component);
         if(component.BumperMaterial is {} material)
         {Require(component.Kind==ComponentKind.BumpStop,"Material belongs to a bump-stop component.");BumpStudioContracts.ValidateMaterial(material);}

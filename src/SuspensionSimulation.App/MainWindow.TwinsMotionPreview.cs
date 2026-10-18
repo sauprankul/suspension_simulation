@@ -22,7 +22,7 @@ public partial class MainWindow
         foreach(var variant in new[]{"GR86","BRZ"})
         {
             var installed=new Button {Content="Load installed "+variant+" example",Margin=new Thickness(0,3,0,3),Padding=new Thickness(5,3,5,3)};
-            installed.Click+=(_,_)=>AssemblyAction(()=>{var models=TwinsInstalledCatalog.Seed(_designLibrary!,App.RepositoryRoot);_assemblyExpectedDof.Text="5";LoadAssembly(variant=="GR86"?models.Gr86:models.Brz);_assemblyViewport!.Preset("Isometric");});left.Children.Insert(Math.Min(8,left.Children.Count),installed);
+            installed.Click+=(_,_)=>AssemblyAction(()=>{var setup=(_physicalGarageCatalog??new PhysicalGarageCatalog(_designLibrary!,App.RepositoryRoot)).Create(variant+" installed example",variant=="BRZ");_assemblyExpectedDof.Text="5";LoadAssembly(_designLibrary!.LoadAssembly(setup.RootAssembly.AssetId,setup.RootAssembly.RevisionId)!,setup.ParameterValues??[]);_assemblyViewport!.Preset("Isometric");});left.Children.Insert(Math.Min(8,left.Children.Count),installed);
         }
         var panel=new StackPanel {Margin=new Thickness(10)};panel.Children.Add(new TextBlock {Text="Explicit twins mechanism preview",FontWeight=FontWeights.Bold});
         panel.Children.Add(new TextBlock {Text="Load the explicit twins example first. Travel is imposed for kinematic inspection. Spring forces and loaded ride height are not solved here.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8)});

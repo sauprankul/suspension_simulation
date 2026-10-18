@@ -10,7 +10,9 @@ public partial class MainWindow
     private void OpenBumpStudio()
     {
         if(_bumpStudio is not null) {_bumpStudio.Activate();return;}
-        _bumpStudio=new BumpStudioWindow(_designLibrary!.Root) {Owner=this};_bumpStudio.Closed+=(_,_)=>_bumpStudio=null;_bumpStudio.Show();
+        _bumpStudio=new BumpStudioWindow(_designLibrary!.Root) {Owner=this};
+        _bumpStudio.ComponentCreated+=component=>{RefreshComponentLibrary();RefreshAssemblyCatalog();};
+        _bumpStudio.Closed+=(_,_)=>_bumpStudio=null;_bumpStudio.Show();
     }
     internal async void RunBumpStudioProof()
     {

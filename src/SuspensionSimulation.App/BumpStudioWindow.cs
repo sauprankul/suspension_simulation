@@ -15,7 +15,10 @@ internal sealed class BumperFaceRow
 {
     public int FaceTag {get;set;}public string ExtentMm {get;set;}="";public BumperFaceRole Role {get;set;}
 }
-internal sealed record BumpStudioDraft(string? InspectionHash,string? RecipeHash,Dictionary<string,string> Fields,string MaterialId,BumperFaceRow[] Faces,bool Shaft,bool LowerBonded,bool UpperBonded,bool DimensionsConfirmed,string PrintRepresentation);
+internal sealed record BumpStudioDraft(string? InspectionHash,string? RecipeHash,Dictionary<string,string> Fields,string MaterialId,BumperFaceRow[] Faces,bool Shaft,bool LowerBonded,bool UpperBonded,bool DimensionsConfirmed,string PrintRepresentation)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] public string? LastJobId {get;init;}
+}
 
 /// <summary>Actual CAD/fixture/material preparation. A verified numerical worker is deliberately a separate integration gate.</summary>
 internal sealed partial class BumpStudioWindow : Window
@@ -26,7 +29,7 @@ internal sealed partial class BumpStudioWindow : Window
     private readonly ComboBox _material=new(){ItemsSource=BumpStudioContracts.MaterialCatalog(),DisplayMemberPath="Name",SelectedValuePath="Id",SelectedIndex=9};
     private readonly ComboBox _printRepresentation=new(){ItemsSource=Enum.GetValues<PrintedGeometryRepresentation>(),SelectedIndex=0};
     private readonly TextBlock _status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8)},_cadInfo=new(){TextWrapping=TextWrapping.Wrap},_materialInfo=new(){TextWrapping=TextWrapping.Wrap};
-    private readonly CheckBox _shaft=new(){Content="Include rigid shaft",IsChecked=false},_lowerBonded=new(){Content="Bond lower selected faces"},_upperBonded=new(){Content="Bond upper selected faces"},_confirmed=new(){Content="I checked the imported dimensions and units",Margin=new Thickness(0,8,0,8)};
+    private readonly CheckBox _shaft=new(){Content="Include rigid shaft",IsChecked=false},_lowerBonded=new(){Content="Bond lower selected faces",IsChecked=true},_upperBonded=new(){Content="Bond upper selected faces"},_confirmed=new(){Content="I checked the imported dimensions and units",Margin=new Thickness(0,8,0,8)};
     private readonly Button _cancel=new(){Content="Cancel import",IsEnabled=false};private readonly DataGrid _faceGrid;private CancellationTokenSource? _importCancellation;
     private readonly TabControl _tabs;
     private readonly System.Windows.Threading.DispatcherTimer _verificationTimer=new(){Interval=TimeSpan.FromSeconds(2)};
@@ -34,30 +37,31 @@ internal sealed partial class BumpStudioWindow : Window
     private BumperCadInspection? _cad;private string? _recipeHash,_inspectionHash;private bool _restoring;
     internal BumpStudioWindow(string libraryRoot)
     {
-        Title="Bump Stop Studio — CAD and job preparation";Width=1450;Height=900;MinWidth=1100;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        Title="Bump Stop Studio — STEP to force curve";Width=1450;Height=900;MinWidth=1100;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         ApplyTheme(this);
-        _service=new(App.RepositoryRoot,libraryRoot);
+        _service=new(App.RepositoryRoot,libraryRoot);_backend=new(App.RepositoryRoot,libraryRoot);_outputLibrary=new(libraryRoot);
         var layout=new DockPanel {Margin=new Thickness(10)};var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);layout.Children.Add(toolbar);
         void Button(string text,Action action) {var button=new Button {Content=text,Margin=new Thickness(3),Padding=new Thickness(8,4,8,4)};button.Click+=(_,_)=>Act(action);toolbar.Children.Add(button);}
-        Button("Import STEP…",ChooseStep);Button("Save preparation recipe",SaveRecipe);Button("Open recipe…",ChooseRecipe);Button("Apply orientation / fixtures",Preview);_cancel.Click+=(_,_)=>_importCancellation?.Cancel();toolbar.Children.Add(_cancel);
-        _status.Text="Prepare a STEP solid and its installation. Nonlinear worker/backend verification is still in progress; no FEA solve or force result is available here.";DockPanel.SetDock(_status,Dock.Bottom);layout.Children.Add(_status);
+        Button("Import STEP…",ChooseStep);Button("Load simple example",LoadExample);Button("Save recipe",SaveRecipe);Button("Open recipe…",ChooseRecipe);Button("Apply orientation / fixtures",Preview);_cancel.Click+=(_,_)=>_importCancellation?.Cancel();toolbar.Children.Add(_cancel);
+        _status.Text="Import a STEP solid, set its end faces and material, then run a coarse estimated compression job.";_status.Height=48;_status.TextTrimming=TextTrimming.CharacterEllipsis;DockPanel.SetDock(_status,Dock.Bottom);layout.Children.Add(_status);
         var grid=new Grid();grid.ColumnDefinitions.Add(new());grid.ColumnDefinitions.Add(new(){Width=new GridLength(445)});grid.Children.Add(_viewport);layout.Children.Add(grid);
         var tabs=_tabs=new TabControl {Margin=new Thickness(10,0,0,0)};Grid.SetColumn(tabs,1);grid.Children.Add(tabs);
         StackPanel Tab(string title) {var panel=new StackPanel {Margin=new Thickness(10)};tabs.Items.Add(new TabItem {Header=title,Content=new ScrollViewer {Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}});return panel;}
         TextBox Field(Panel panel,string key,string label,string value) {panel.Children.Add(new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,7,0,2)});var box=new TextBox {Text=value};_fields.Add(key,box);panel.Children.Add(box);box.TextChanged+=(_,_)=>SaveDraft();return box;}
-        var source=Tab("STEP");source.Children.Add(new TextBlock {Text="Surface inspection only",FontWeight=FontWeights.Bold});source.Children.Add(new TextBlock {Text="Original STEP bytes and CAD face identities are preserved. Surface facets are for inspection/picking; the future solver requires a separately checked volume mesh. Explicit healing, sewing and solid reconstruction are disabled.",TextWrapping=TextWrapping.Wrap});
+        var source=Tab("STEP");source.Children.Add(new TextBlock {Text="Original STEP and face selection",FontWeight=FontWeights.Bold});source.Children.Add(new TextBlock {Text="Original STEP bytes and CAD face identities are preserved. Inspection facets are for picking; each job creates its own quadratic volume mesh. Healing, sewing and solid reconstruction are disabled.",TextWrapping=TextWrapping.Wrap});
         source.Children.Add(new TextBlock {Text="Confirm the STEP source length unit before import",Margin=new Thickness(0,8,0,2)});source.Children.Add(_units);Field(source,"previewSize","Inspection facet size (mm)","4");source.Children.Add(_cadInfo);source.Children.Add(_confirmed);
         source.Children.Add(new TextBlock {Text="The initial importer accepts one solid with explicit millimetre/metre units. Unsupported units, open/nonmanifold boundaries and multiple solids reject. Self-intersection, duplicates/slivers and later mesh quality still require further checks; importing a volume alone does not certify a solvable model.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
         var orientation=Tab("Orientation");Field(orientation,"name","Recipe name","New bumper preparation");
         void Vector(Panel panel,string key,string caption,string[] values) {panel.Children.Add(new TextBlock {Text=caption,Margin=new Thickness(0,8,0,2)});var row=new System.Windows.Controls.Primitives.UniformGrid {Columns=3};panel.Children.Add(row);for(var n=0;n<3;n++) {var cell=new StackPanel {Margin=new Thickness(n==0?0:5,0,0,0)};row.Children.Add(cell);Field(cell,key+n,"XYZ"[n].ToString(),values[n]);}}
         Vector(orientation,"origin","Compression-frame origin in CAD (mm)",["0","0","0"]);Vector(orientation,"axis","Frame +Z, lower → upper (unit direction)",["0","0","1"]);Vector(orientation,"reference","Frame +X (unit reference, perpendicular to +Z)",["1","0","0"]);
-        orientation.Children.Add(new TextBlock {Text="Driven fixture motion is along frame −Z. Orientation changes the recipe and fixture preview; the CAD source coordinates remain unchanged.",TextWrapping=TextWrapping.Wrap});Field(orientation,"freeLength","Free reference length (mm)","40");Field(orientation,"compression","Requested shortening (mm)","20");Field(orientation,"meshSize","Future quadratic volume-mesh target (mm)","3");
-        var contacts=Tab("Faces / fixtures");contacts.Children.Add(new TextBlock {Text="Click a solid face or select a row; assign the actual contact role. No faces are assigned automatically.",TextWrapping=TextWrapping.Wrap});
+        orientation.Children.Add(new TextBlock {Text="Driven fixture motion is along frame −Z. Orientation changes the recipe and fixture preview; the CAD source coordinates remain unchanged.",TextWrapping=TextWrapping.Wrap});Field(orientation,"freeLength","Free reference length (mm)","40");Field(orientation,"compression","Requested shortening (mm)","8");Field(orientation,"meshSize","Coarse quadratic volume-mesh target (mm)","8");
+        var contacts=Tab("Faces / fixtures");contacts.Children.Add(new TextBlock {Text="Click a solid face or select a row; assign its actual contact role. The end-face action selects planar caps in the current compression frame.",TextWrapping=TextWrapping.Wrap});
+        var caps=new Button {Content="Set planar end faces / fixtures",Margin=new Thickness(0,6,0,6)};caps.Click+=(_,_)=>Act(ConfigureEndFaces);contacts.Children.Add(caps);
         _faceGrid=new DataGrid {ItemsSource=_faces,AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Height=220,SelectionMode=DataGridSelectionMode.Single};
         _faceGrid.Columns.Add(new DataGridTextColumn {Header="CAD face",Binding=new System.Windows.Data.Binding("FaceTag"),IsReadOnly=true});_faceGrid.Columns.Add(new DataGridTextColumn {Header="Z extent (mm)",Binding=new System.Windows.Data.Binding("ExtentMm"),IsReadOnly=true});_faceGrid.Columns.Add(new DataGridComboBoxColumn {Header="Contact role",ItemsSource=Enum.GetValues<BumperFaceRole>(),SelectedItemBinding=new System.Windows.Data.Binding("Role")});contacts.Children.Add(_faceGrid);
         _faceGrid.SelectionChanged+=(_,_)=>{if(_faceGrid.SelectedItem is BumperFaceRow face) _viewport.HighlightCadFaces([face.FaceTag]);};_viewport.CadFacePicked+=tag=>_faceGrid.SelectedItem=_faces.Single(f=>f.FaceTag==tag);
         Field(contacts,"plateOuter","Platen outer radius (mm)","30");Field(contacts,"plateInner","Platen central-hole radius (mm)","0");Field(contacts,"lowerGap","Lower fixture gap (mm; negative = interference)","0");Field(contacts,"upperGap","Upper fixture gap (mm; negative = interference)","0");Field(contacts,"friction","Fixture friction coefficient","0");contacts.Children.Add(_lowerBonded);contacts.Children.Add(_upperBonded);contacts.Children.Add(_shaft);Field(contacts,"shaftRadius","Shaft radius (mm)","3.95");Field(contacts,"shaftOffset","Shaft starting offset along frame +Z (mm)","-10");Field(contacts,"shaftLength","Shaft length (mm)","60");
-        contacts.Children.Add(new TextBlock {Text="FoldSlave/FoldMaster select the two CAD surface sets that can close against each other. Shaft contacts require explicit bore-face selection. Negative gaps describe an installation step; the verified worker must resolve it before compression.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
+        contacts.Children.Add(new TextBlock {Text="Coarse jobs currently require a bonded lower cap and zero initial gaps. Upper contact can slide or be bonded. An optional shaft needs explicit bore faces. FoldSlave/FoldMaster define one contact pair; general automatic self-contact and interference installation remain future work.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
         var materials=Tab("Material");materials.Children.Add(_material);materials.Children.Add(_materialInfo);Field(materials,"condition","Material / test conditions","Not supplied");Field(materials,"materialSource","Material source / notes","Needs calibration; no fitted compression data supplied");
         Field(materials,"law0","Coefficient 1: TPU C1 / foam cp (MPa)","0");Field(materials,"law1","Coefficient 2: TPU C2 / foam c1 (MPa)","0");Field(materials,"law2","Coefficient 3: TPU bulk K (MPa) / foam exponent m1","0");
         materials.Children.Add(new TextBlock {Text="Preset selection copies Estimated coefficients into this recipe. Edit any coefficient; shared catalog values remain unchanged. TPU uses an isotropic tensile-based estimate; foam uses approximate manufacturer guide-curve scales. No measured calibration or backend approval is implied.",TextWrapping=TextWrapping.Wrap});
@@ -66,11 +70,12 @@ internal sealed partial class BumpStudioWindow : Window
         Field(materials,"grade","Manufacturer and exact filament grade","Not supplied");Vector(materials,"layerNormal","Layer normal in CAD (unit direction)",["0","0","1"]);
         foreach(var entry in new[]{("layer","Layer height (mm)","0.2"),("nozzle","Nozzle diameter (mm)","0.4"),("lineWidth","Line width (mm)","0.45"),("walls","Wall count","3"),("wallThickness","Wall thickness (mm)","1.35"),("topLayers","Top layers","4"),("bottomLayers","Bottom layers","4"),("infill","Infill pattern / modeled structure","Explicit CAD internal geometry"),("infillPercent","Infill (%)","100"),("processing","Print processing / temperatures / orientation","Not supplied"),("conditioning","Print conditioning","Not supplied")}) Field(materials,entry.Item1,entry.Item2,entry.Item3);
         materials.Children.Add(new TextBlock {Text="Infill percentage is recorded metadata. It never scales material stiffness. Explicit internal CAD geometry and effective printed-structure cards are distinct representations; missing data remain Needs calibration.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
-        var verification=Tab("Verification");verification.Children.Add(new TextBlock {Text="Live numerical benchmark status",FontWeight=FontWeights.Bold});verification.Children.Add(new TextBlock {Text="This is the separate backend feasibility study, not a job using this preparation recipe. A partial benchmark is not an accepted force curve. The fraction below is of the benchmark's requested stroke.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});verification.Children.Add(_verificationStatus);
+        BuildJobPanel(Tab("Run / curve"));
+        var verification=Tab("Research");verification.Children.Add(new TextBlock {Text="Separate numerical benchmark status",FontWeight=FontWeights.Bold});verification.Children.Add(new TextBlock {Text="The advanced folding/convergence study is separate from the coarse product jobs. A partial benchmark is not an accepted force curve.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});verification.Children.Add(_verificationStatus);
         var resultButton=new Button {Content="Inspect exported deformation / force result…",Margin=new Thickness(0,8,0,0)};resultButton.Click+=(_,_)=>Act(OpenDiagnosticViewer);verification.Children.Add(resultButton);
         _verificationTimer.Tick+=(_,_)=>ReadVerificationStatus();_verificationTimer.Start();ReadVerificationStatus();
         Content=layout;_material.SelectionChanged+=(_,_)=>{UpdateMaterial();SaveDraft();};foreach(var box in new[]{_shaft,_lowerBonded,_upperBonded,_confirmed}) {box.Checked+=(_,_)=>SaveDraft();box.Unchecked+=(_,_)=>SaveDraft();}_faceGrid.CellEditEnding+=(_,_)=>Dispatcher.BeginInvoke(SaveDraft);_printRepresentation.SelectionChanged+=(_,_)=>SaveDraft();UpdateMaterial();
-        Loaded+=(_,_)=>_viewport.SetActive(true);Closed+=(_,_)=>{_verificationTimer.Stop();_importCancellation?.Cancel();SaveDraft();_viewport.Dispose();};
+        Loaded+=(_,_)=>_viewport.SetActive(true);Closed+=(_,_)=>{_verificationTimer.Stop();_importCancellation?.Cancel();CancelJob();SaveDraft();_diagnosticViewer?.Close();_viewport.Dispose();};
         RestoreDraft();
     }
     internal static void ApplyTheme(Window window)
@@ -115,7 +120,7 @@ internal sealed partial class BumpStudioWindow : Window
         var contacts=new List<BumperContactPair> {new("lower",Faces(BumperFaceRole.LowerPlaten),[],"lower",friction,_lowerBonded.IsChecked==true),new("upper",Faces(BumperFaceRole.UpperPlaten),[],"upper",friction,_upperBonded.IsChecked==true)};
         if(_shaft.IsChecked==true) contacts.Add(new("shaft",Faces(BumperFaceRole.Shaft),[],"shaft",friction,false));else if(Faces(BumperFaceRole.Shaft).Length>0) throw new ArgumentException("Shaft faces are selected but the shaft fixture is disabled.");
         if(Faces(BumperFaceRole.FoldSlave).Length>0||Faces(BumperFaceRole.FoldMaster).Length>0) contacts.Add(new("fold",Faces(BumperFaceRole.FoldSlave),Faces(BumperFaceRole.FoldMaster),null,friction,false));
-        return new(_fields["name"].Text,_inspectionHash!,ReadFrame(),Metres("freeLength"),Metres("compression"),[..contacts],ReadFixtures(),ReadMaterial(),new(Metres("meshSize"),2,true));
+        return new(_fields["name"].Text,_inspectionHash!,ReadFrame(),Metres("freeLength"),Metres("compression"),[..contacts],ReadFixtures(),ReadMaterial(),new(Metres("meshSize"),2,false),BudgetSeconds:checked((int)Number("budget"))) {Quality=BumperSolveQuality.CoarseEstimate};
     }
     private void Preview() {if(_cad is null) return;_viewport.SetCadInspection(_cad,ReadFrame(),ReadFixtures());_viewport.Preset("Fit / reset");SaveDraft();}
     private async void ChooseStep()
@@ -136,7 +141,7 @@ internal sealed partial class BumpStudioWindow : Window
         _inspectionHash=BumpStudioContracts.Hash(cad);
         _units.SelectedItem=cad.SourceUnit;
         var size=cad.Bounds.MaximumM-cad.Bounds.MinimumM;_cadInfo.Text=$"\n{cad.SourceFileName}\n{size.X*1000:0.###} × {size.Y*1000:0.###} × {size.Z*1000:0.###} mm\n{cad.Faces.Length} CAD faces · {cad.Triangles.Length} inspection facets\nSource SHA {cad.SourceSha256}\nHealing: disabled\n"+string.Join("\n",cad.Warnings);
-        _fields["freeLength"].Text=DesignerNumbers.Mm(size.Z);_fields["compression"].Text=DesignerNumbers.Mm(size.Z*.5);_fields["origin2"].Text=DesignerNumbers.Mm(cad.Bounds.MinimumM.Z);
+        _fields["freeLength"].Text=DesignerNumbers.Mm(size.Z);_fields["compression"].Text=DesignerNumbers.Mm(size.Z*.2);_fields["origin2"].Text=DesignerNumbers.Mm(cad.Bounds.MinimumM.Z);
     }
     private void ReadVerificationStatus()
     {
@@ -169,12 +174,12 @@ internal sealed partial class BumpStudioWindow : Window
     }
     internal void SaveRecipe()
     {
-        var recipe=ReadRecipe();PreservePresetEvidence(recipe.Material);_recipeHash=_service.SaveRecipe(recipe);_status.Text="Preparation recipe saved: "+_service.RecipePath(_recipeHash)+"\n"+recipe.Material.Readiness+" · backend folding/contact verification and worker wiring remain required before solving.";SaveDraft();App.Log("Bumper preparation recipe saved: "+_recipeHash,"CAD");
+        var recipe=ReadRecipe();PreservePresetEvidence(recipe.Material);_recipeHash=_service.SaveRecipe(recipe);_status.Text="Frozen coarse recipe saved. "+recipe.Material.Readiness+" material · run it from Run / curve.";SaveDraft();App.Log("Bumper preparation recipe saved: "+_recipeHash,"CAD");
     }
     private void ChooseRecipe() {var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Saved preparation recipe (*.json)|*.json",InitialDirectory=Path.Combine(_service.Root,"recipes")};if(dialog.ShowDialog(this)!=true) return;OpenRecipe(Path.GetFileNameWithoutExtension(dialog.FileName));}
     internal void OpenRecipe(string hash)
     {
-        var recipe=_service.LoadRecipe(hash);_cad=_service.LoadInspection(recipe.InspectionSha256);_recipeHash=hash;FillCad();
+        var recipe=_service.LoadRecipe(hash);_cad=_service.LoadInspection(recipe.InspectionSha256);_recipeHash=hash;FillCad();_fields["budget"].Text=recipe.BudgetSeconds.ToString(CultureInfo.InvariantCulture);
         _fields["name"].Text=recipe.Name;SetVector("origin",recipe.CompressionFrameInCad.OriginM,true);SetVector("axis",recipe.CompressionFrameInCad.Axis);SetVector("reference",recipe.CompressionFrameInCad.ReferenceDirection);_fields["freeLength"].Text=DesignerNumbers.Mm(recipe.FreeLengthM);_fields["compression"].Text=DesignerNumbers.Mm(recipe.RequestedCompressionM);_fields["meshSize"].Text=DesignerNumbers.Mm(recipe.Mesh.TargetElementSizeM);
         _material.ItemsSource=BumpStudioContracts.MaterialCatalog().Where(c=>c.Id!=recipe.Material.Id).Append(recipe.Material).ToArray();_material.SelectedValue=recipe.Material.Id;
         var upper=recipe.Fixtures.Single(f=>f.Driven);var lower=recipe.Fixtures.Single(f=>f.Id=="lower");_fields["plateInner"].Text=DesignerNumbers.Mm(upper.InnerRadiusM);_fields["plateOuter"].Text=DesignerNumbers.Mm(upper.OuterRadiusM);
@@ -189,8 +194,8 @@ internal sealed partial class BumpStudioWindow : Window
     }
     private void SetVector(string key,DesignVector v,bool mm=false) {var values=new[]{v.X,v.Y,v.Z};for(var i=0;i<3;i++) _fields[key+i].Text=(values[i]*(mm?1000:1)).ToString("R",CultureInfo.InvariantCulture);}
     private void ApplyPrint(BumperPrintRecipe? p) {if(p is null) return;_printRepresentation.SelectedItem=p.Representation;_fields["grade"].Text=p.ManufacturerGrade;SetVector("layerNormal",p.LayerNormalInCad);foreach(var field in new[]{("layer",p.LayerHeightM*1000),("nozzle",p.NozzleDiameterM*1000),("lineWidth",p.LineWidthM*1000),("walls",(double)p.WallCount),("wallThickness",p.WallThicknessM*1000),("topLayers",(double)p.TopLayers),("bottomLayers",(double)p.BottomLayers),("infillPercent",p.InfillPercent)}) _fields[field.Item1].Text=field.Item2.ToString("R",CultureInfo.InvariantCulture);_fields["infill"].Text=p.InfillPattern;_fields["processing"].Text=p.Processing;_fields["conditioning"].Text=p.Conditioning;}
-    internal object CaptureState()=>new {preparationOnly=true,inspectionHash=_inspectionHash,recipeHash=_recipeHash,status=_status.Text,draft=CaptureDraft(),diagnostic=_diagnosticViewer?.CaptureState()};
-    private BumpStudioDraft CaptureDraft()=>new(_inspectionHash,_recipeHash,_fields.ToDictionary(f=>f.Key,f=>f.Value.Text),_material.SelectedValue as string??"",_faces.ToArray(),_shaft.IsChecked==true,_lowerBonded.IsChecked==true,_upperBonded.IsChecked==true,_confirmed.IsChecked==true,_printRepresentation.SelectedItem?.ToString()??"");
+    internal object CaptureState()=>new {preparationOnly=false,inspectionHash=_inspectionHash,recipeHash=_recipeHash,status=_status.Text,draft=CaptureDraft(),job=CaptureJobState(),diagnostic=_diagnosticViewer?.CaptureState()};
+    private BumpStudioDraft CaptureDraft()=>new(_inspectionHash,_recipeHash,_fields.ToDictionary(f=>f.Key,f=>f.Value.Text),_material.SelectedValue as string??"",_faces.ToArray(),_shaft.IsChecked==true,_lowerBonded.IsChecked==true,_upperBonded.IsChecked==true,_confirmed.IsChecked==true,_printRepresentation.SelectedItem?.ToString()??"") {LastJobId=_jobFolder is null?null:Path.GetFileName(_jobFolder)};
     private string DraftPath=>Path.Combine(_service.Root,"preparation-draft.json");
     private void SaveDraft() {if(_restoring||!IsLoaded) return;try {Directory.CreateDirectory(_service.Root);var path=DraftPath+".tmp";File.WriteAllText(path,DesignJson.Serialize(CaptureDraft()));File.Move(path,DraftPath,true);}catch(Exception error) {App.LogException("Bumper preparation draft",error);}}
     private void RestoreDraft()
@@ -198,7 +203,7 @@ internal sealed partial class BumpStudioWindow : Window
         if(!File.Exists(DraftPath)) return;_restoring=true;
         try {var draft=DesignJson.Deserialize<BumpStudioDraft>(File.ReadAllText(DraftPath));if(draft.RecipeHash is {} recipe) OpenRecipe(recipe);else if(draft.InspectionHash is {} inspection) {_cad=_service.LoadInspection(inspection);FillCad();}
             _material.SelectedValue=draft.MaterialId;foreach(var field in draft.Fields) if(_fields.TryGetValue(field.Key,out var box)) box.Text=field.Value;foreach(var face in draft.Faces) if(_faces.SingleOrDefault(f=>f.FaceTag==face.FaceTag) is {} row) row.Role=face.Role;
-            _shaft.IsChecked=draft.Shaft;_lowerBonded.IsChecked=draft.LowerBonded;_upperBonded.IsChecked=draft.UpperBonded;_confirmed.IsChecked=draft.DimensionsConfirmed;if(Enum.TryParse<PrintedGeometryRepresentation>(draft.PrintRepresentation,out var representation)) _printRepresentation.SelectedItem=representation;_faceGrid.Items.Refresh();Act(Preview);
+            _shaft.IsChecked=draft.Shaft;_lowerBonded.IsChecked=draft.LowerBonded;_upperBonded.IsChecked=draft.UpperBonded;_confirmed.IsChecked=draft.DimensionsConfirmed;if(Enum.TryParse<PrintedGeometryRepresentation>(draft.PrintRepresentation,out var representation)) _printRepresentation.SelectedItem=representation;_faceGrid.Items.Refresh();Act(Preview);RestoreJob(draft.LastJobId);
         }catch(Exception error) {_status.Text="Draft recovery conflict: "+error.Message;App.LogException("Bumper preparation recovery",error);}finally {_restoring=false;}
     }
     internal void ConfigureProofFaces() {foreach(var face in _faces) {var f=_cad!.Faces.Single(x=>x.Tag==face.FaceTag);if(Math.Abs(f.Bounds.MinimumM.Z)<1e-6&&Math.Abs(f.Bounds.MaximumM.Z)<1e-6) face.Role=BumperFaceRole.LowerPlaten;else if(Math.Abs(f.Bounds.MinimumM.Z-.04)<1e-6&&Math.Abs(f.Bounds.MaximumM.Z-.04)<1e-6) face.Role=BumperFaceRole.UpperPlaten;}_faceGrid.Items.Refresh();_confirmed.IsChecked=true;}

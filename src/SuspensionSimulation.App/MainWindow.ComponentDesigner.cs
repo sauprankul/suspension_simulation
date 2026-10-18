@@ -143,6 +143,7 @@ public partial class MainWindow
         foreach(var grid in _componentGrids) {grid.CommitEdit();grid.CommitEdit();}
         var kind=(ComponentKind)_componentKind.SelectedItem;
         _componentMass=ReadComponentMass();
+        if(kind==ComponentKind.Chassis) return ReadChassisComponent();
         if(!_componentCustom && kind is ComponentKind.Spring or ComponentKind.Damper or ComponentKind.AntiRollBar) return ApplyComponentParameterTemplate(CreateElasticComponent(kind) with {Mass=_componentMass});
         if(!_componentCustom&&kind==ComponentKind.Wheel) return ApplyComponentParameterTemplate(ComponentAuthoring.CreateWheel(ComponentIdentity(),PhysicalMetres("wheelRadius"),PhysicalMetres("wheelWidth")) with {Mass=_componentMass});
         if(!_componentCustom) return ApplyComponentParameterTemplate(ComponentAuthoring.Create(ComponentIdentity(),kind,new(DesignerNumbers.Metres(_componentLength.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentWidth.Text),kind==ComponentKind.RigidLink?0:DesignerNumbers.Metres(_componentHeight.Text))) with {Mass=_componentMass,AxialGauge=_componentMetadataSeed?.AxialGauge,Rack=_componentMetadataSeed?.Rack,Adjustments=_componentMetadataSeed?.Adjustments});
@@ -164,7 +165,7 @@ public partial class MainWindow
         var picks=rendered.Points.Select(x=>new DesignerPick(x.Name,x.PositionM)).Concat(rendered.Frames.Select(x=>new DesignerPick("Port/frame · "+x.Name,x.Frame.OriginM))).ToArray();
         _measureA.ItemsSource=picks;_measureB.ItemsSource=picks;_measureA.SelectedIndex=0;_measureB.SelectedIndex=Math.Min(1,picks.Length-1);
         _measureFrame.ItemsSource=new[]{new DesignerFrameChoice("Component/world",null)}.Concat(rendered.Frames.Select(x=>new DesignerFrameChoice(x.Name,x.Frame))).ToArray();_measureFrame.SelectedIndex=0;
-        _componentStatus.Text=(_componentCustom?"Custom coordinates":"Template dimensions")+" · valid preview; publish to save a revision.";ScheduleComponentDraft();
+        _componentStatus.Text=(component.Chassis is not null?"Chassis source dimensions and rigidities (Mechanics tab)":_componentCustom?"Custom coordinates":"Template dimensions")+" · valid preview; publish to save a revision.";ScheduleComponentDraft();
     }
     private void FillComponentTables(ComponentDefinition component)
     {
@@ -175,7 +176,10 @@ public partial class MainWindow
             _componentFrames.Clear();foreach(var item in component.Frames) _componentFrames.Add(DesignerFrameRow.From(item));
             _componentPorts.Clear();foreach(var item in component.Ports) _componentPorts.Add(DesignerPortRow.From(item));
             _componentEdges.Clear();foreach(var item in component.VisualEdges) _componentEdges.Add(new(){Id=item.Id,StartPointId=item.StartPointId,EndPointId=item.EndPointId});
-            foreach(var grid in _componentGrids) grid.IsReadOnly=!_componentCustom;
+            foreach(var grid in _componentGrids) grid.IsReadOnly=!_componentCustom||component.Chassis is not null;
+            foreach(var box in new[]{_componentLength,_componentWidth,_componentHeight})
+            {box.Visibility=component.Chassis is null?Visibility.Visible:Visibility.Collapsed;if(box.Parent is Panel parent&&parent.Children.IndexOf(box) is var index&&index>0) parent.Children[index-1].Visibility=box.Visibility;}
+            if(_componentLength.Parent is Panel controls) foreach(var button in controls.Children.OfType<Button>().Where(b=>b.Content as string=="Edit custom coordinates")) button.IsEnabled=component.Chassis is null;
             _componentLength.IsEnabled=!_componentCustom;_componentWidth.IsEnabled=_componentHeight.IsEnabled=!_componentCustom&&component.Kind!=ComponentKind.RigidLink;
             if(!ComponentAuthoring.RigidTemplates.Contains(component.Kind)) _componentLength.IsEnabled=_componentWidth.IsEnabled=_componentHeight.IsEnabled=false;
             FillComponentMechanics(component);
@@ -210,8 +214,9 @@ public partial class MainWindow
         var metadata=_workspaceDrafts[Workspace.ComponentDesigner];metadata.Name.Text=component.Identity.Name;metadata.Notes.Text=component.Identity.Provenance.Note;_componentKind.SelectedItem=component.Kind;
         if(component.Template is {} spec) {_componentLength.Text=DesignerNumbers.Mm(spec.LengthM);_componentWidth.Text=DesignerNumbers.Mm(spec.WidthM);_componentHeight.Text=DesignerNumbers.Mm(spec.HeightM);}
         FillImportedBumpEvidence(component.BumpCurveEvidence);FillComponentTables(component);_componentUndo.Clear();_componentRedo.Clear();_componentAcceptedRaw=null;
-        if((component.Parameters??[]).Length>0) {_componentDefinition=component;_componentViewport!.SetScene(ComponentScene(component));_componentStatus.Text="Opened source definition. Enter a temporary importer configuration on Parameters to preview; no owner values are stored.";ScheduleComponentDraft();return;}
+        if((component.Parameters??[]).Length>0) {_componentDefinition=component;_componentViewport!.SetScene(ComponentScene(component));_componentViewport.RequestSceneFit();_componentStatus.Text="Opened source definition. Enter a temporary importer configuration on Parameters to preview; no owner values are stored.";ScheduleComponentDraft();return;}
         ApplyComponentPreview(false);
+        _componentViewport!.RequestSceneFit();
         _componentStatus.Text="Opened revision "+component.Identity.RevisionId[..12];
     }
     private void PublishComponent()

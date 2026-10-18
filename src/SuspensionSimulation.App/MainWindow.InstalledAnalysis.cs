@@ -137,12 +137,16 @@ public partial class MainWindow
         ARcb.Text=InstalledSigned(a.RollMetrics.RollCoupleBiasPercentagePoints," pp");BRcb.Text=InstalledSigned(b.RollMetrics.RollCoupleBiasPercentagePoints," pp");
         ARsd.ToolTip=BRsd.ToolTip="Front share of installed elastic roll tangent with grounded wheel heights held, including preload curvature. Active rigid limits have infinite loading stiffness. Balance is undefined when both axles are rigid or a tire loses contact.";
         AStateSummary.Text=InstalledSummary(a);BStateSummary.Text=InstalledSummary(b);AStateSummary.Height=BStateSummary.Height=100;AStateSummary.FontSize=BStateSummary.FontSize=11;
-        DrawInstalledCar(ACarCanvas,a.State,Brushes.DeepSkyBlue);DrawInstalledCar(BCarCanvas,b.State,Brushes.Orange);
+        DrawInstalledCar(ACarCanvas,a,Brushes.DeepSkyBlue);DrawInstalledCar(BCarCanvas,b,Brushes.Orange);
         DeltaHeadline.Text="B − A RCB  "+InstalledSigned(a.RollMetrics.RollCoupleBiasPercentagePoints is {} av&&b.RollMetrics.RollCoupleBiasPercentagePoints is {} bv?bv-av:null," pp");
         var rows=new List<ComparisonRow>();
         void Add(string label,double x,double y,string unit)=>rows.Add(Row(label,x,y,unit));
         Add("Total mass",a.State.TotalMassKg,b.State.TotalMassKg,"kg");Add("CG height",a.State.CenterOfMassWorldM.Z*1000,b.State.CenterOfMassWorldM.Z*1000,"mm");
         Add("Body heave",a.State.Chassis.HeaveM*1000,b.State.Chassis.HeaveM*1000,"mm");Add("Body roll",Degrees(a.State.Chassis.RollRad),Degrees(b.State.Chassis.RollRad),"deg");Add("Body pitch",Degrees(a.State.Chassis.PitchRad),Degrees(b.State.Chassis.PitchRad),"deg");
+        if(a.State.Motion.ChassisFlex is not null||b.State.Motion.ChassisFlex is not null)
+        {
+            Add("Chassis twist",Degrees(a.State.Motion.ChassisFlex?.TwistRad??0),Degrees(b.State.Motion.ChassisFlex?.TwistRad??0),"deg");Add("Chassis longitudinal / vertical bend",Degrees(a.State.Motion.ChassisFlex?.VerticalBendRad??0),Degrees(b.State.Motion.ChassisFlex?.VerticalBendRad??0),"deg");Add("Chassis lateral bend",Degrees(a.State.Motion.ChassisFlex?.LateralBendRad??0),Degrees(b.State.Motion.ChassisFlex?.LateralBendRad??0),"deg");Add("Chassis strain energy",a.State.ChassisStrainEnergyJ,b.State.ChassisStrainEnergyJ,"J");
+        }
         foreach(var axle in new[]{"front","rear"})
         {
             var x=a.RollMetrics.Axles.Single(t=>t.Axle==axle);var y=b.RollMetrics.Axles.Single(t=>t.Axle==axle);
@@ -183,10 +187,17 @@ public partial class MainWindow
         var state=side.State;var limits=state.RigidReactions.Count(r=>r.ForceN>1e-5);var loose=state.Mechanics.Elements.Count(e=>e.Unseated);
         return $"Roll {Degrees(state.Chassis.RollRad):0.000}° · pitch {Degrees(state.Chassis.PitchRad):0.000}°\nMass {state.TotalMassKg:0.0} kg · CG {state.CenterOfMassWorldM.Z*1000:0.0} mm\nForce residual {state.ForceResidualN.Length:0.00E+0} N\nMoment residual {state.MomentResidualNm.Length:0.00E+0} N·m\nRigid {limits} · lifted {state.NormalLoadsN.Count(n=>n<1e-5)} · loose springs {loose}";
     }
-    private static void DrawInstalledCar(Canvas canvas,InstalledEquilibriumResult result,Brush accent)
+    private static void DrawInstalledCar(Canvas canvas,InstalledAnalysisSide side,Brush accent)
     {
+        var result=side.State;
         canvas.Children.Clear();var w=Math.Max(200,canvas.ActualWidth);var h=Math.Max(200,canvas.ActualHeight);
-        Add(canvas,new Rectangle {Width=w*.32,Height=h*.62,RadiusX=25,RadiusY=25,Fill=Brushes.DarkSlateGray,Stroke=accent,StrokeThickness=2},w*.34,h*.12);
+        var chassis=InstalledScene(side).Segments.Where(s=>s.Corner=="chassis").ToArray();
+        if(chassis.Length==0) Add(canvas,new Rectangle {Width=w*.32,Height=h*.62,RadiusX=25,RadiusY=25,Fill=Brushes.DarkSlateGray,Stroke=accent,StrokeThickness=2},w*.34,h*.12);
+        else
+        {
+            var front=result.Wheels.Take(2).Average(p=>p.CenterM.X);var rear=result.Wheels.Skip(2).Average(p=>p.CenterM.X);var span=Math.Max(.1,front-rear);var middle=(front+rear)/2;var track=Math.Max(.1,result.Wheels.Max(p=>p.CenterM.Y)-result.Wheels.Min(p=>p.CenterM.Y));
+            foreach(var segment in chassis) canvas.Children.Add(new Line {X1=w*.5-segment.StartM.Y*w*.63/track,Y1=h*.5-(segment.StartM.X-middle)*h*.48/span,X2=w*.5-segment.EndM.Y*w*.63/track,Y2=h*.5-(segment.EndM.X-middle)*h*.48/span,Stroke=accent,StrokeThickness=segment.Id.Contains("rack-crossmember",StringComparison.Ordinal)?3:2,ToolTip=segment.Label});
+        }
         for(var i=0;i<4;i++)
         {
             var left=i%2==0;var front=i<2;var x=w*(left?.13:.76);var y=h*(front?.15:.63);var wheel=result.Wheels[i];
@@ -198,7 +209,7 @@ public partial class MainWindow
     private static InspectionScene InstalledScene(InstalledAnalysisSide side,bool neutral=false)
     {
         var source=AssemblyGraphResolver.OpenBundle(side.Source);var graph=GarageSetupResolver.Freeze(source,side.Entry.Configuration!);var result=neutral?side.Static:side.State;
-        var scene=InstalledWorldScene(AssemblyScene(graph,new ConstraintMechanism(graph),result.Motion.Pose),result.Chassis);
+        var scene=InstalledWorldScene(AssemblyScene(graph,InstalledMechanism(graph,result),result.Motion.Pose),result.Chassis);
         string Layer(string path)=>path.StartsWith("front-bar",StringComparison.Ordinal)||path.StartsWith("rear-bar",StringComparison.Ordinal)?"bars":path.Contains("chassis",StringComparison.Ordinal)||path.EndsWith("/guide",StringComparison.Ordinal)?"chassis":path.StartsWith("front",StringComparison.Ordinal)||path.StartsWith('F')?"front":"rear";
         string Caption(string path)
         {

@@ -43,7 +43,7 @@ public sealed class InstalledAnalysisEngine(IDesignAssetSource source)
             }
             var result=ax==0&&ay==0&&steering==0?gravity:solver.Solve(new(setup.Mass,ax,ay,steering),prior?.SetupSha256==hash?prior.State:gravity,cancellation);
             var metrics=InstalledRollMetricCalculator.Calculate(graph,result,gravity,cancellation);
-            var referenceMotion=steering==0?gravity.Motion:new TwinsKinematics(graph).Solve(gravity.Motion.Travel,steering,gravity.Motion);
+            var referenceMotion=steering==0?gravity.Motion:new TwinsKinematics(graph).Solve(gravity.Motion.Travel,steering,gravity.Motion,chassisFlex:gravity.Motion.ChassisFlex);
             var reference=referenceMotion.Wheels.Select(w=>
             {var forward=gravity.Chassis.Rotate(w.Forward);var outward=gravity.Chassis.Rotate(w.Outward);return w with {Forward=forward,Outward=outward,CenterM=gravity.Chassis.World(w.CenterM),HeadingRad=Math.Atan2(forward.Y,forward.X),CamberRad=-Math.Atan2(outward.Z,Math.Sqrt(outward.X*outward.X+outward.Y*outward.Y))};}).ToImmutableArray();
             return new(entry,bundle,gravity,result,metrics,hash,reference);

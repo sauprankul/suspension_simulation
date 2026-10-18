@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SuspensionSimulation.Solvers\SuspensionSimulation.Solvers.csproj" />
     <ProjectReference Include="..\SuspensionSimulation.Core\SuspensionSimulation.Core.csproj" />
+    <Compile Include="..\SuspensionSimulation.App\LiveStatusSnapshot.cs" Link="LiveStatusSnapshot.cs" />
   </ItemGroup>
 
   <PropertyGroup>

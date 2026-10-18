@@ -71,6 +71,7 @@ public partial class App : Application
             if(e.Args.Contains("--bump-curve-proof")) window.RunBumpCurveProof();
             if(e.Args.Contains("--bumper-integration-proof")) window.RunBumperIntegrationProof();
             if(e.Args.Contains("--bump-studio-proof")) window.RunBumpStudioProof();
+            if(e.Args.Contains("--fea-diagnostic-proof")) window.RunFeaDiagnosticProof();
             window.Activate();
             Log("MainWindow shown.");
             _liveDiagnostics.Publish("running");

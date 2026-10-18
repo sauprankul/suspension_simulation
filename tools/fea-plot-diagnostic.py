@@ -40,7 +40,7 @@ def uint(data):
     return struct.unpack("<I",data)[0]
 
 
-def read_plot(folder,maximum_time=1.):
+def read_plot(folder,maximum_time=1.,on_frame=None):
     model_bytes=(folder/"case.feb").read_bytes()
     journal=json.loads((folder/"process.json").read_text())
     raw_sha=hashlib.sha256(model_bytes).hexdigest()
@@ -89,14 +89,21 @@ def read_plot(folder,maximum_time=1.):
                 time_value=struct.unpack("<f",one(one(data,0x02010000),0x02010002))[0]
                 if time_value>maximum_time+1e-7: continue
                 nodal=one(one(data,0x02020000),0x02020300)
+                found=False
                 for kind,item in blocks(nodal):
                     if kind!=0x02020001: raise ValueError("Unexpected state variable")
                     if uint(one(item,0x02020002))!=variable: continue
+                    if found: raise ValueError("Duplicate displacement state")
+                    found=True
                     region=one(one(item,0x02020003),0)
                     if len(region)!=len(ids)*12: raise ValueError("Displacement count differs from mesh")
                     displacement=np.frombuffer(region,dtype="<f4").reshape((-1,3)).astype(float)
                     if not np.all(np.isfinite(displacement)): raise ValueError("Non-finite displacement")
+                    if not np.isfinite(time_value) or time_value<0 or (latest is not None and time_value<=latest[0]):
+                        raise ValueError("Displacement states are not finite and strictly ordered")
                     latest=(time_value,displacement);count+=1
+                    if on_frame is not None: on_frame(count-1,time_value,displacement)
+                if not found: raise ValueError("Complete plot state lacks displacement")
     if latest is None: raise ValueError("No complete checked displacement state")
     return model,ids,coordinates,latest[1],{"plotVersion":version,"completeFramesRead":count,"normalizedTime":latest[0],"inputFileSha256":raw_sha,"legacyWindowsLineEndings":expected_input_sha is None and raw_sha!=canonical_sha}
 

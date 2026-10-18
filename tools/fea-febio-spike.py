@@ -84,14 +84,14 @@ def outward_face(nodes, kind, vertices, face):
     return {3:"tri3",4:"quad4",6:"tri6"}[len(indices)], indices
 
 
-def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10, guarded_line_search=False, bulk_modulus=1e8):
+def make_model(nodes, groups, sets, surfaces, fraction, height, coupon=False, contact=True, increment=.025, penalty=1e12, max_updates=0, opt_iterations=10, guarded_line_search=False, bulk_modulus=1e8, line_search_tolerance=.9):
     root = ET.Element("febio_spec", version="4.0")
     add(root, "Module", type="solid")
     control = add(root, "Control")
     add(control,"analysis","STATIC")
     add(control,"time_steps",round(1/increment)); add(control,"step_size",increment)
     solver = add(control,"solver")
-    for key,value in {"max_refs":35,"diverge_reform":1,"reform_each_time_step":1,"symmetric_stiffness":0,"dtol":1e-5,"etol":1e-5,"rtol":0,"lstol":.9}.items():
+    for key,value in {"max_refs":35,"diverge_reform":1,"reform_each_time_step":1,"symmetric_stiffness":0,"dtol":1e-5,"etol":1e-5,"rtol":0,"lstol":line_search_tolerance}.items():
         add(solver,key,value)
     if guarded_line_search:
         # FEBio can backtrack an inverted trial configuration instead of cutting
@@ -211,16 +211,15 @@ def invoke(folder, model, timeout=240, cancel_after=None):
                 if records: state["lastConvergedNormalizedTime"]=float(records[-1])
                 break
         ccx.journal(folder,state)
-        current=OUT/"current-job.tmp.json"
-        current.write_text(json.dumps(state,indent=2))
-        current.replace(OUT/"current-job.json")
+        ccx.write_json_atomic(OUT/"current-job.json",state)
     with (folder/"stdout.log").open("w") as stdout,(folder/"stderr.log").open("w") as stderr:
         previous=ctypes.windll.kernel32.SetErrorMode(0x0001|0x0002|0x8000)
         try:
             process=subprocess.Popen([str(EXE),"-i",str(folder/"case.feb"),"-noconfig","-nosplash"],cwd=folder,env=env,stdout=stdout,stderr=stderr,creationflags=subprocess.CREATE_NO_WINDOW)
         finally: ctypes.windll.kernel32.SetErrorMode(previous)
-        state["pid"]=process.pid;heartbeat();monitor=psutil.Process(process.pid)
+        state["pid"]=process.pid;monitor=psutil.Process(process.pid)
         try:
+            heartbeat()
             while process.poll() is None:
                 try: peak=max(peak,monitor.memory_info().rss)
                 except psutil.NoSuchProcess: pass
@@ -340,8 +339,7 @@ def validation_status(folder, state, **details):
     ccx.journal(folder,status)
     path=OUT/"current-job.json"
     if path.exists() and json.loads(path.read_text()).get("folder")==str(folder):
-        temporary=OUT/"current-job.tmp.json"
-        temporary.write_text(json.dumps(status,indent=2));temporary.replace(path)
+        ccx.write_json_atomic(path,status)
 
 
 def recovery():
@@ -382,11 +380,12 @@ if __name__=="__main__":
     parser.add_argument("--max-updates",type=int,default=0)
     parser.add_argument("--opt-iterations",type=int,default=10)
     parser.add_argument("--guarded-line-search",action="store_true",help="Backtrack inverted trial states and reform after contact augmentation; unchanged physical model and acceptance tolerances.")
+    parser.add_argument("--line-search-tolerance",type=float,default=.9,help="FEBio lstol; zero uses the full Newton step. Accepted displacement/energy/contact thresholds are unchanged.")
     parser.add_argument("--timeout-hours",type=float,default=8,help="Wall-clock budget per solve; default eight hours. Numerical/contact acceptance is unchanged.")
     parser.add_argument("--fold-contact",action="store_true")
     parser.add_argument("--guide-shaft",action="store_true")
     args=parser.parse_args()
-    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.opt_iterations<=0 or not math.isfinite(args.timeout_hours) or not 0<args.timeout_hours<=8:
+    if not 0<args.compression<1 or not 0<args.increment<=1 or not math.isfinite(args.penalty) or args.penalty<=0 or args.max_updates<0 or args.opt_iterations<=0 or not math.isfinite(args.timeout_hours) or not 0<args.timeout_hours<=8 or not math.isfinite(args.line_search_tolerance) or not 0<=args.line_search_tolerance<=1:
         parser.error("Require 0<compression<1, 0<increment<=1, positive finite penalty, nonnegative updates, positive optimal iterations and 0<timeout-hours<=8")
     if args.case=="recovery":
         recovery()
@@ -405,7 +404,7 @@ if __name__=="__main__":
                         material="C1=500000 Pa; C2=0; K="+("1e9" if args.case=="rubber" else "1e8")+" Pa; pressure_model=2")
     else:
         nodes,groups,sets,surfaces=coupon(args.case=="contact")
-    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case in ("step","rubber") else .02,coupon=args.case not in ("step","rubber"),contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations,guarded_line_search=args.guarded_line_search,bulk_modulus=1e9 if args.case=="rubber" else 1e8)
+    model=make_model(nodes,groups,sets,surfaces,args.compression,.04 if args.case in ("step","rubber") else .02,coupon=args.case not in ("step","rubber"),contact=args.case!="coupon",increment=args.increment,penalty=args.penalty,max_updates=args.max_updates,opt_iterations=args.opt_iterations,guarded_line_search=args.guarded_line_search,bulk_modulus=1e9 if args.case=="rubber" else 1e8,line_search_tolerance=args.line_search_tolerance)
     key=f"{args.case}-{args.mesh}-{args.compression:.2f}-"+hashlib.sha256(model.encode()).hexdigest()[:12]
     # Each attempt retains its own deck, source code, settings, history and outcome.
     # Raising the budget must never overwrite the previous rejected benchmark.

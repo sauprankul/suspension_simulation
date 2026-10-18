@@ -208,6 +208,7 @@ internal sealed partial class InspectionViewport : UserControl, IDisposable
         }
         foreach(var point in scene.Points)
         {
+            if(point.Id.StartsWith("inspection.bounds.",StringComparison.Ordinal)&&point.Id.EndsWith(".fit-only",StringComparison.Ordinal)) continue;
             var pointLayer=physical?scene.Segments.FirstOrDefault(s=>s.Corner==point.Corner)?.Layer??"chassis":point.Corner.StartsWith("F")?"front":"rear";
             if(point.Id.EndsWith(".springUpper")||point.Id.EndsWith(".springLower")||point.Id.EndsWith(".stroke-marker"))
             {

@@ -26,6 +26,7 @@ if(args.Contains("--check-imported-bump")) {try {SuspensionSimulation.Tests.Impo
 if(args.Contains("--check-bumper-integration")) {try {SuspensionSimulation.Tests.ImportedBumperIntegrationChecks.Verify();Console.WriteLine("Imported bumper integration checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-elastic-authoring")) {try {SuspensionSimulation.Tests.ElasticAuthoringChecks.Verify();Console.WriteLine("Elastic authoring checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 if(args.Contains("--check-bump-studio")) {try {SuspensionSimulation.Tests.BumpStudioPreparationChecks.Verify();Console.WriteLine("Bump Studio preparation checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
+if(args.Contains("--check-fea-diagnostic")) {try {SuspensionSimulation.Tests.FeaDiagnosticChecks.VerifyActualExports();Console.WriteLine("FEA diagnostic viewing checks passed.");}catch(Exception error) {Console.Error.WriteLine(error);Environment.ExitCode=1;}return;}
 
 var failures = new List<string>();
 var totalChecks = 0;
@@ -41,6 +42,7 @@ Run("installed analysis freezes source equipment and settings with physical roll
 Run("imported bump curves preserve units raw evidence bounds and mounted equilibrium behavior",SuspensionSimulation.Tests.ImportedBumpCurveChecks.Verify);
 Run("saved imported bumper assemblies propagate revisions through installed analysis and reject invalid sources without changing frozen replay",SuspensionSimulation.Tests.ImportedBumperIntegrationChecks.Verify);
 Run("bumper preparation contracts preserve CAD face identities fixture hashes bounded jobs and honest uncalibrated printed materials",SuspensionSimulation.Tests.BumpStudioPreparationChecks.VerifyContracts);
+Run("FEA diagnostic data retain converged geometry signed force tangents work and explicit incomplete identities",SuspensionSimulation.Tests.FeaDiagnosticChecks.Verify);
 Run("Garage named entries round-trip independently with revisions archive recovery and conflict protection",SuspensionSimulation.Tests.GarageChecks.Persistence);
 Run("design contracts preserve SI geometry and separate driving dimensions from measurements",SuspensionSimulation.Tests.DesignContractChecks.RoundTrip);
 Run("Garage contracts reject geometry alignment rate overrides and double mass accounting",SuspensionSimulation.Tests.DesignContractChecks.Ownership);

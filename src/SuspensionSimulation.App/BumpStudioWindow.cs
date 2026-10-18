@@ -18,7 +18,7 @@ internal sealed class BumperFaceRow
 internal sealed record BumpStudioDraft(string? InspectionHash,string? RecipeHash,Dictionary<string,string> Fields,string MaterialId,BumperFaceRow[] Faces,bool Shaft,bool LowerBonded,bool UpperBonded,bool DimensionsConfirmed,string PrintRepresentation);
 
 /// <summary>Actual CAD/fixture/material preparation. A verified numerical worker is deliberately a separate integration gate.</summary>
-internal sealed class BumpStudioWindow : Window
+internal sealed partial class BumpStudioWindow : Window
 {
     private readonly StepBumperPreparation _service;private readonly InspectionViewport _viewport=new(false);
     private readonly Dictionary<string,TextBox> _fields=new();private readonly ObservableCollection<BumperFaceRow> _faces=new();
@@ -30,12 +30,12 @@ internal sealed class BumpStudioWindow : Window
     private readonly Button _cancel=new(){Content="Cancel import",IsEnabled=false};private readonly DataGrid _faceGrid;private CancellationTokenSource? _importCancellation;
     private readonly TabControl _tabs;
     private readonly System.Windows.Threading.DispatcherTimer _verificationTimer=new(){Interval=TimeSpan.FromSeconds(2)};
-    private readonly TextBox _verificationStatus=new(){IsReadOnly=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MinHeight=300};
+    private readonly TextBox _verificationStatus=new(){IsReadOnly=true,Text="Waiting for a readable benchmark status snapshot…",TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Height=420};
     private BumperCadInspection? _cad;private string? _recipeHash,_inspectionHash;private bool _restoring;
     internal BumpStudioWindow(string libraryRoot)
     {
         Title="Bump Stop Studio — CAD and job preparation";Width=1450;Height=900;MinWidth=1100;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
-        ApplyTheme();
+        ApplyTheme(this);
         _service=new(App.RepositoryRoot,libraryRoot);
         var layout=new DockPanel {Margin=new Thickness(10)};var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);layout.Children.Add(toolbar);
         void Button(string text,Action action) {var button=new Button {Content=text,Margin=new Thickness(3),Padding=new Thickness(8,4,8,4)};button.Click+=(_,_)=>Act(action);toolbar.Children.Add(button);}
@@ -65,14 +65,15 @@ internal sealed class BumpStudioWindow : Window
         foreach(var entry in new[]{("layer","Layer height (mm)","0.2"),("nozzle","Nozzle diameter (mm)","0.4"),("lineWidth","Line width (mm)","0.45"),("walls","Wall count","3"),("wallThickness","Wall thickness (mm)","1.35"),("topLayers","Top layers","4"),("bottomLayers","Bottom layers","4"),("infill","Infill pattern / modeled structure","Explicit CAD internal geometry"),("infillPercent","Infill (%)","100"),("processing","Print processing / temperatures / orientation","Not supplied"),("conditioning","Print conditioning","Not supplied")}) Field(materials,entry.Item1,entry.Item2,entry.Item3);
         materials.Children.Add(new TextBlock {Text="Infill percentage is recorded metadata. It never scales material stiffness. Explicit internal CAD geometry and effective printed-structure cards are distinct representations; missing data remain Needs calibration.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
         var verification=Tab("Verification");verification.Children.Add(new TextBlock {Text="Live numerical benchmark status",FontWeight=FontWeights.Bold});verification.Children.Add(new TextBlock {Text="This is the separate backend feasibility study, not a job using this preparation recipe. A partial benchmark is not an accepted force curve. The fraction below is of the benchmark's requested stroke.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,8)});verification.Children.Add(_verificationStatus);
+        var resultButton=new Button {Content="Inspect exported deformation / force result…",Margin=new Thickness(0,8,0,0)};resultButton.Click+=(_,_)=>Act(OpenDiagnosticViewer);verification.Children.Add(resultButton);
         _verificationTimer.Tick+=(_,_)=>ReadVerificationStatus();_verificationTimer.Start();ReadVerificationStatus();
         Content=layout;_material.SelectionChanged+=(_,_)=>{UpdateMaterial();SaveDraft();};foreach(var box in new[]{_shaft,_lowerBonded,_upperBonded,_confirmed}) {box.Checked+=(_,_)=>SaveDraft();box.Unchecked+=(_,_)=>SaveDraft();}_faceGrid.CellEditEnding+=(_,_)=>Dispatcher.BeginInvoke(SaveDraft);_printRepresentation.SelectionChanged+=(_,_)=>SaveDraft();UpdateMaterial();
         Loaded+=(_,_)=>_viewport.SetActive(true);Closed+=(_,_)=>{_verificationTimer.Stop();_importCancellation?.Cancel();SaveDraft();_viewport.Dispose();};
         RestoreDraft();
     }
-    private void ApplyTheme()
+    internal static void ApplyTheme(Window window)
     {
-        Background=new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17,20,25));Foreground=System.Windows.Media.Brushes.White;
+        window.Background=new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(17,20,25));window.Foreground=System.Windows.Media.Brushes.White;
         var resources=(ResourceDictionary)System.Windows.Markup.XamlReader.Parse("""
             <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
               <Style TargetType="TextBox"><Setter Property="Background" Value="#0E1217"/><Setter Property="Foreground" Value="#F5F8FA"/><Setter Property="BorderBrush" Value="#536171"/><Setter Property="Padding" Value="5,4"/><Setter Property="MinWidth" Value="0"/></Style>
@@ -85,7 +86,7 @@ internal sealed class BumpStudioWindow : Window
               <Style TargetType="DataGrid"><Setter Property="Background" Value="#11161C"/><Setter Property="Foreground" Value="#EDF2F6"/><Setter Property="RowBackground" Value="#171D24"/><Setter Property="AlternatingRowBackground" Value="#1D242D"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="BorderBrush" Value="#3E4A57"/></Style>
               <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#26313D"/><Setter Property="Foreground" Value="#EAF0F5"/><Setter Property="Padding" Value="6,3"/></Style>
             </ResourceDictionary>
-            """);Resources.MergedDictionaries.Add(resources);
+            """);window.Resources.MergedDictionaries.Add(resources);
     }
     private void Act(Action action) {try {action();}catch(Exception error) {_status.Text=error.Message;App.LogException("Bump Stop Studio preparation",error);}}
     private double Number(string key)=>DesignerNumbers.Number(_fields[key].Text);private double Metres(string key)=>Number(key)/1000;
@@ -141,16 +142,18 @@ internal sealed class BumpStudioWindow : Window
             var folder=Path.Combine(App.RepositoryRoot,"artifacts/febio-verification");var path=Path.Combine(folder,"current-job.json");var text="No local benchmark job status is available.";
             if(File.Exists(path))
             {
-                using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);using var json=JsonDocument.Parse(stream);var root=json.RootElement;
+                using var json=LiveStatusSnapshot.Read(path);var root=json.RootElement;
                 string Value(string name)=>root.TryGetProperty(name,out var property)?property.ToString():"unavailable";
-                var fraction=root.TryGetProperty("lastConvergedNormalizedTime",out var f)&&f.TryGetDouble(out var q)?(q*100).ToString("0.###",CultureInfo.InvariantCulture)+"%":"unavailable";
-                double Numeric(string name)=>root.TryGetProperty(name,out var property)&&property.TryGetDouble(out var value)?value:double.NaN;
+                var fraction=root.TryGetProperty("lastConvergedNormalizedTime",out var f)&&f.ValueKind==JsonValueKind.Number&&f.TryGetDouble(out var q)&&double.IsFinite(q)?(q*100).ToString("0.###",CultureInfo.InvariantCulture)+"%":"unavailable";
+                double Numeric(string name)=>root.TryGetProperty(name,out var property)&&property.ValueKind==JsonValueKind.Number&&property.TryGetDouble(out var value)?value:double.NaN;
                 string Duration(double seconds)=>double.IsFinite(seconds)?seconds>=3600?$"{seconds/3600:0.00} h":$"{seconds/60:0.0} min":"unavailable";
                 var memory=Numeric("peakWorkingSetBytes");text=$"State: {Value("state")}\nElapsed / budget: {Duration(Numeric("seconds"))} / {Duration(Numeric("timeoutSeconds"))}\nAccepted fraction of requested stroke: {fraction}\nCurve accepted: {Value("curveAccepted")}\nPeak RAM: {(double.IsFinite(memory)?(memory/1048576).ToString("0.0",CultureInfo.InvariantCulture)+" MiB":"unavailable")}\nWorker PID: {Value("pid")}\nUpdated UTC: {Value("updatedAtUtc")}\n\nJob folder (input and logs):\n{Value("folder")}\n\nRaw diagnostic status:\n{path}";
             }
-            var study=Path.Combine(folder,"feasibility-study.json");if(File.Exists(study)) {using var stream=new FileStream(study,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);using var json=JsonDocument.Parse(stream);var studyRoot=json.RootElement;string Value(string name)=>studyRoot.TryGetProperty(name,out var value)?value.ToString():"unavailable";text+=$"\n\nStudy stage: {Value("state")}\nBackend gate passed: {Value("backendGatePassed")}\nProduction curve published: {Value("productionCurvePublished")}\nStudy details:\n{study}";}_verificationStatus.Text=text;
+            var study=Path.Combine(folder,"feasibility-study.json");if(File.Exists(study)) {using var json=LiveStatusSnapshot.Read(study);var studyRoot=json.RootElement;string Value(string name)=>studyRoot.TryGetProperty(name,out var value)?value.ToString():"unavailable";text+=$"\n\nStudy stage: {Value("state")}\nBackend gate passed: {Value("backendGatePassed")}\nProduction curve published: {Value("productionCurvePublished")}\nStudy details:\n{study}";}_verificationStatus.Text=text;
         }
-        catch(Exception error) when(error is IOException or JsonException) {_verificationStatus.Text="Status update is being written or unavailable: "+error.Message;}
+        // The writer can replace either journal between polls. Keep the last complete display
+        // through a transient write/replace rather than moving controls or presenting half a poll.
+        catch(Exception error) when(error is IOException or UnauthorizedAccessException or JsonException) { }
     }
     private void UpdateMaterial() {if(_material.SelectedItem is BumperMaterialCard card) {_materialInfo.Text=$"{card.Readiness}\n{card.SourceNote}\n"+(card.Law is null?"No constitutive coefficients are supplied. A preparation recipe can be saved; no worker solve can use this card yet.":"Law "+card.Law.ModelKey+" · imported evidence is retained; worker support must be independently verified.");if(_fields.ContainsKey("condition")) {_fields["condition"].Text=card.Conditions;_fields["materialSource"].Text=card.SourceNote;}}}
     private void ImportMaterialCard()
@@ -183,7 +186,7 @@ internal sealed class BumpStudioWindow : Window
     }
     private void SetVector(string key,DesignVector v,bool mm=false) {var values=new[]{v.X,v.Y,v.Z};for(var i=0;i<3;i++) _fields[key+i].Text=(values[i]*(mm?1000:1)).ToString("R",CultureInfo.InvariantCulture);}
     private void ApplyPrint(BumperPrintRecipe? p) {if(p is null) return;_printRepresentation.SelectedItem=p.Representation;_fields["grade"].Text=p.ManufacturerGrade;SetVector("layerNormal",p.LayerNormalInCad);foreach(var field in new[]{("layer",p.LayerHeightM*1000),("nozzle",p.NozzleDiameterM*1000),("lineWidth",p.LineWidthM*1000),("walls",(double)p.WallCount),("wallThickness",p.WallThicknessM*1000),("topLayers",(double)p.TopLayers),("bottomLayers",(double)p.BottomLayers),("infillPercent",p.InfillPercent)}) _fields[field.Item1].Text=field.Item2.ToString("R",CultureInfo.InvariantCulture);_fields["infill"].Text=p.InfillPattern;_fields["processing"].Text=p.Processing;_fields["conditioning"].Text=p.Conditioning;}
-    internal object CaptureState()=>new {preparationOnly=true,inspectionHash=_inspectionHash,recipeHash=_recipeHash,status=_status.Text,draft=CaptureDraft()};
+    internal object CaptureState()=>new {preparationOnly=true,inspectionHash=_inspectionHash,recipeHash=_recipeHash,status=_status.Text,draft=CaptureDraft(),diagnostic=_diagnosticViewer?.CaptureState()};
     private BumpStudioDraft CaptureDraft()=>new(_inspectionHash,_recipeHash,_fields.ToDictionary(f=>f.Key,f=>f.Value.Text),_material.SelectedValue as string??"",_faces.ToArray(),_shaft.IsChecked==true,_lowerBonded.IsChecked==true,_upperBonded.IsChecked==true,_confirmed.IsChecked==true,_printRepresentation.SelectedItem?.ToString()??"");
     private string DraftPath=>Path.Combine(_service.Root,"preparation-draft.json");
     private void SaveDraft() {if(_restoring||!IsLoaded) return;try {Directory.CreateDirectory(_service.Root);var path=DraftPath+".tmp";File.WriteAllText(path,DesignJson.Serialize(CaptureDraft()));File.Move(path,DraftPath,true);}catch(Exception error) {App.LogException("Bumper preparation draft",error);}}

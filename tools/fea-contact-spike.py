@@ -31,10 +31,23 @@ class JobCancelled(RuntimeError):
     pass
 
 
+def write_json_atomic(path: Path, data: dict) -> None:
+    """Publish a whole snapshot, tolerating brief Windows reader/AV sharing locks."""
+    temporary=path.with_suffix(".tmp.json")
+    temporary.write_bytes(json.dumps(data,indent=2,allow_nan=False).encode("utf-8"))
+    deadline=time.monotonic()+3
+    while True:
+        try:
+            temporary.replace(path)
+            return
+        except OSError as error:
+            if os.name!="nt" or getattr(error,"winerror",None) not in (5,32,33) or time.monotonic()>=deadline:
+                raise
+            time.sleep(.025)
+
+
 def journal(folder: Path, data: dict) -> None:
-    temporary=folder/"process.tmp.json"
-    temporary.write_text(json.dumps(data,indent=2))
-    temporary.replace(folder/"process.json")
+    write_json_atomic(folder/"process.json",data)
 
 
 def invoke(folder: Path, deck: str, timeout: float = 120, cancel_after: float|None = None) -> dict:
@@ -57,8 +70,8 @@ def invoke(folder: Path, deck: str, timeout: float = 120, cancel_after: float|No
             ctypes.windll.kernel32.SetErrorMode(previous_mode)
         monitor = psutil.Process(process.pid)
         status={"state":"running","pid":process.pid,"threads":4,"memoryLimitBytes":2*1024**3,"timeoutSeconds":timeout,"solverSha256":CCX_SHA}
-        journal(folder,status)
         try:
+            journal(folder,status)
             while process.poll() is None:
                 try:
                     peak = max(peak, monitor.memory_info().rss)

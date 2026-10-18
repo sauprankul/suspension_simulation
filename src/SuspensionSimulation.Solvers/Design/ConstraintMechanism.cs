@@ -16,10 +16,17 @@ public sealed class ConstraintMechanism
     private readonly Dictionary<string,int> _lookup;
     private readonly Dictionary<string,ResolvedBody> _bodies;
     private readonly (ResolvedBody Body,DesignVector Axis,DesignVector Normal)[] _gauges;
+    private readonly int _jointResidualRows;
     public int GaugeCount=>_gauges.Length;
     public ConstraintMechanism(ResolvedAssemblyGraph graph)
     {
         Graph=graph;FreeBodies=graph.Bodies.Where(x=>!graph.GroundedBodies.Contains(x.Path)).ToArray();
+        _jointResidualRows=graph.Joints.Sum(j=>j.Kind switch
+        {
+            JointKind.Fixed=>6,JointKind.Spherical=>3,JointKind.Revolute=>5,JointKind.Prismatic=>5,
+            JointKind.Cylindrical=>4,JointKind.Universal=>4,JointKind.RigidDistance=>1,
+            _=>throw new ArgumentException("Unsupported joint.")
+        });
         _lookup=FreeBodies.Select((body,index)=>(body.Path,index)).ToDictionary(x=>x.Path,x=>x.index,StringComparer.Ordinal);_bodies=graph.Bodies.ToDictionary(x=>x.Path,StringComparer.Ordinal);
         var datum=graph.Bodies.FirstOrDefault()?.Transform.Origin??new DesignVector(0,0,0);
         LengthScaleM=Math.Max(.1,graph.Bodies.SelectMany(b=>b.Component.Points.Select(p=>(b.Transform.Point(p.PositionM)-datum).Length)).DefaultIfEmpty(.1).Max());
@@ -53,7 +60,11 @@ public sealed class ConstraintMechanism
     }
     public double[] Residual(double[] q,IReadOnlyList<MechanismDriver>? drivers=null)
     {
-        var rows=new List<double>();void Vector(DesignVector v) {rows.Add(v.X);rows.Add(v.Y);rows.Add(v.Z);}
+        // Every finite-difference sample has the same row layout. Fill its exact-sized
+        // output directly instead of growing a List and allocating a second array.
+        var rows=new double[_jointResidualRows+_gauges.Length+(drivers?.Count??0)];var row=0;
+        void Add(double value)=>rows[row++]=value;
+        void Vector(DesignVector v) {Add(v.X);Add(v.Y);Add(v.Z);}
         foreach(var joint in Graph.Joints)
         {
             var a=Frame(joint.First,q);var b=Frame(joint.Second,q);var d=(b.OriginM-a.OriginM)/LengthScaleM;var x=a.ReferenceDirection;var y=a.Axis.Cross(x);
@@ -61,11 +72,11 @@ public sealed class ConstraintMechanism
             {
                 case JointKind.Fixed:Vector(d);Vector(DesignTransform.RotationError(a,b));break;
                 case JointKind.Spherical:Vector(d);break;
-                case JointKind.Revolute:Vector(d);rows.Add(a.Axis.Dot(b.ReferenceDirection));rows.Add(a.Axis.Dot(b.Axis.Cross(b.ReferenceDirection)));break;
-                case JointKind.Prismatic:rows.Add(d.Dot(x));rows.Add(d.Dot(y));Vector(DesignTransform.RotationError(a,b));break;
-                case JointKind.Cylindrical:rows.Add(d.Dot(x));rows.Add(d.Dot(y));rows.Add(a.Axis.Dot(b.ReferenceDirection));rows.Add(a.Axis.Dot(b.Axis.Cross(b.ReferenceDirection)));break;
-                case JointKind.Universal:Vector(d);rows.Add(a.Axis.Dot(b.Axis));break;
-                case JointKind.RigidDistance:rows.Add(d.Length-joint.DistanceM!.Value/LengthScaleM);break;
+                case JointKind.Revolute:Vector(d);Add(a.Axis.Dot(b.ReferenceDirection));Add(a.Axis.Dot(b.Axis.Cross(b.ReferenceDirection)));break;
+                case JointKind.Prismatic:Add(d.Dot(x));Add(d.Dot(y));Vector(DesignTransform.RotationError(a,b));break;
+                case JointKind.Cylindrical:Add(d.Dot(x));Add(d.Dot(y));Add(a.Axis.Dot(b.ReferenceDirection));Add(a.Axis.Dot(b.Axis.Cross(b.ReferenceDirection)));break;
+                case JointKind.Universal:Vector(d);Add(a.Axis.Dot(b.Axis));break;
+                case JointKind.RigidDistance:Add(d.Length-joint.DistanceM!.Value/LengthScaleM);break;
                 default:throw new ArgumentException("Unsupported joint.");
             }
         }
@@ -75,14 +86,14 @@ public sealed class ConstraintMechanism
             var axis=Direction(body.Path,axisLocal,q);var normal=Direction(body.Path,normalLocal,q);var cross=axis0.Cross(axis);var sine=cross.Length;var cosine=axis0.Dot(axis);
             if(cosine<-.999999) throw new InvalidOperationException("Axial rod gauge crossed its 180 degree chart boundary; continue from a closer pose.");
             var transported=sine<1e-14?normal0:DesignTransform.Rotate(normal0,cross/sine*Math.Atan2(sine,cosine));
-            rows.Add(normal.Dot(axis.Cross(transported)));
+            Add(normal.Dot(axis.Cross(transported)));
         }
         if(drivers is not null) foreach(var driver in drivers)
         {
             if(!driver.UnitDirection.IsFinite||Math.Abs(driver.UnitDirection.Length-1)>1e-9||!double.IsFinite(driver.TargetCoordinateM)) throw new ArgumentException("Invalid operating driver.");
-            rows.Add((Point(driver.BodyPath,driver.PointId,q).Dot(driver.UnitDirection)-driver.TargetCoordinateM)/LengthScaleM);
+            Add((Point(driver.BodyPath,driver.PointId,q).Dot(driver.UnitDirection)-driver.TargetCoordinateM)/LengthScaleM);
         }
-        return rows.ToArray();
+        return rows;
     }
     public static double[,] Jacobian(Func<double[],double[]> residual,double[] q)
     {

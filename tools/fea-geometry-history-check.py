@@ -45,12 +45,15 @@ def run():
             if reason not in str(error): raise AssertionError(f"Wrong rejection: {error}") from error
             rejected.append(label)
         else: raise AssertionError("Accepted invalid geometry history: "+label)
-    # The real failed run contains rounded duplicate float32 plot times. Never
-    # invent chronology or silently omit states to make a verification pass.
-    reject("ambiguous-native-times",INCOMPLETE,"strictly ordered")
+    # The failed run can now retain its actual ordered states by using the
+    # independently recorded reaction times, but still cannot pass a full solve.
+    times=geometry.plot.accepted_times(INCOMPLETE)
+    _,_,_,_,bound=geometry.plot.read_plot(INCOMPLETE,accepted_time_values=times)
+    assert bound["completeFramesRead"]==len(times) and bound["roundedPlotTimeDuplicates"]>0
+    reject("incomplete-native-stroke",INCOMPLETE,"complete requested stroke")
     with tempfile.TemporaryDirectory(prefix="fea-geometry-history-") as temporary:
         folder=Path(temporary)
-        for name in ("case.feb","case.xplt","process.json"):
+        for name in ("case.feb","case.xplt","process.json","PLATEN.txt"):
             shutil.copyfile(SOURCE/name,folder/name)
         data=bytearray((folder/"case.xplt").read_bytes())
         states=[(a,b) for key,a,b in children(data,4,len(data)) if key==0x02000000]
@@ -77,7 +80,7 @@ def run():
         # Removing the final actual state must not count as a complete solve.
         data=(folder/"case.xplt").read_bytes()
         (folder/"case.xplt").write_bytes(data[:states[-1][0]-8])
-        reject("missing-final-state",folder,"complete requested stroke")
+        reject("missing-final-state",folder,"Plot state count differs")
     print(json.dumps({"status":"passed","actualFramesChecked":good["framesChecked"],
                       "minimumSampledRelativeJacobian":good["minimumSampledRelativeJacobian"],"rejected":rejected}))
 

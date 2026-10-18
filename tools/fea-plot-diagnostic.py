@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import struct
 import xml.etree.ElementTree as ET
 
@@ -40,7 +41,44 @@ def uint(data):
     return struct.unpack("<I",data)[0]
 
 
-def read_plot(folder,maximum_time=1.,on_frame=None):
+def accepted_times(folder):
+    """Read the benchmark's actual consecutive major-step reaction times.
+
+    The pinned writer emits one plot state and one reaction record per accepted
+    major step. Text time is %.9lg; plot time is float32. Neither is synthesized.
+    """
+    model=ET.fromstring((folder/"case.feb").read_bytes())
+    driven="PLATEN" if model.find("Mesh/NodeSet[@name='PLATEN']") is not None else "TOP"
+    name=driven+".txt"
+    record=model.find(f"Output/logfile/node_data[@file='{name}']")
+    if record is None or record.attrib.get("data")!="Rx;Ry;Rz":
+        raise ValueError("Expected the benchmark's driven-face reaction log")
+    times=[];pending=None
+    with (folder/name).open() as stream:
+        for line in stream:
+            if line.startswith("*Step"):
+                match=re.fullmatch(r"\*Step\s*=\s*(\d+)\s*",line)
+                if match is None or pending is not None: raise ValueError("Invalid accepted step header")
+                pending=int(match[1])
+            elif line.startswith("*Time"):
+                match=re.fullmatch(r"\*Time\s*=\s*([-+\d.Ee]+)\s*",line)
+                if match is None or pending!=len(times): raise ValueError("Reaction steps are not consecutive from the actual origin")
+                value=float(match[1])
+                if not np.isfinite(value) or not 0<=value<=1 or (times and value<=times[-1]):
+                    raise ValueError("Reaction times are not finite and strictly ordered")
+                times.append(value);pending=None
+                if len(times)>200000: raise ValueError("Accepted time history exceeds the diagnostic budget")
+    if not times or times[0]!=0 or pending is not None: raise ValueError("Missing complete accepted time headers/origin")
+    return times
+
+
+def read_plot(folder,maximum_time=1.,on_frame=None,accepted_time_values=None):
+    if not np.isfinite(maximum_time) or not 0<=maximum_time<=1: raise ValueError("Maximum diagnostic time must be finite and between zero and one")
+    if accepted_time_values is not None:
+        values=np.asarray(accepted_time_values,dtype=float)
+        if values.ndim!=1 or len(values)==0 or len(values)>200000 or not np.all(np.isfinite(values)) or values[0]!=0 or np.any(np.diff(values)<=0) or values[-1]>1:
+            raise ValueError("Accepted times must be finite and strictly ordered from the actual origin")
+        if list(values)!=accepted_times(folder): raise ValueError("Supplied times differ from the native accepted reaction steps")
     model_bytes=(folder/"case.feb").read_bytes()
     journal=json.loads((folder/"process.json").read_text())
     raw_sha=hashlib.sha256(model_bytes).hexdigest()
@@ -54,6 +92,7 @@ def read_plot(folder,maximum_time=1.,on_frame=None):
     input_nodes={int(n.attrib["id"]):tuple(map(float,n.text.split(","))) for n in model.findall("Mesh/Nodes/node")}
     plot=folder/"case.xplt";limit=plot.stat().st_size
     ids=coordinates=None;variable=None;latest=None;count=0;version=None;mesh_seen=False
+    source_count=0;previous_plot_time=None;rounded_duplicates=0;maximum_time_error=0.
     with plot.open("rb") as stream:
         if uint(stream.read(4))!=0x00464542: raise ValueError("Unsupported plot magic/byte order")
         while stream.tell()+8<=limit:
@@ -86,7 +125,24 @@ def read_plot(folder,maximum_time=1.,on_frame=None):
                     raise ValueError("Plot/input reference coordinates or units disagree")
             elif tag==0x02000000:
                 if ids is None or variable is None: raise ValueError("State precedes checked mesh/dictionary")
-                time_value=struct.unpack("<f",one(one(data,0x02010000),0x02010002))[0]
+                header=one(data,0x02010000)
+                time_value=plot_time=struct.unpack("<f",one(header,0x02010002))[0]
+                if uint(one(header,0x02010003))!=0: raise ValueError("Plot state is not an accepted major-step state")
+                if accepted_time_values is not None:
+                    if source_count>=len(values): raise ValueError("More plot states than accepted reaction steps")
+                    if not np.isfinite(plot_time) or plot_time<0 or (previous_plot_time is not None and plot_time<previous_plot_time):
+                        raise ValueError("Native plot timestamps decrease or are invalid")
+                    if previous_plot_time==plot_time: rounded_duplicates+=1
+                    previous_plot_time=plot_time
+                    time_value=float(values[source_count])
+                    error=abs(time_value-plot_time)
+                    # One float32 ULP plus the text writer's nine-significant-
+                    # digit representation. Frame identity comes from order and
+                    # exact counts; this tolerance never merges adjacent states.
+                    if error>max(1e-9,abs(float(np.spacing(np.float32(plot_time))))):
+                        raise ValueError("Plot timestamp disagrees with its accepted reaction step")
+                    maximum_time_error=max(maximum_time_error,error)
+                source_count+=1
                 if time_value>maximum_time+1e-7: continue
                 nodal=one(one(data,0x02020000),0x02020300)
                 found=False
@@ -105,7 +161,10 @@ def read_plot(folder,maximum_time=1.,on_frame=None):
                     if on_frame is not None: on_frame(count-1,time_value,displacement)
                 if not found: raise ValueError("Complete plot state lacks displacement")
     if latest is None: raise ValueError("No complete checked displacement state")
-    return model,ids,coordinates,latest[1],{"plotVersion":version,"completeFramesRead":count,"normalizedTime":latest[0],"inputFileSha256":raw_sha,"legacyWindowsLineEndings":expected_input_sha is None and raw_sha!=canonical_sha}
+    if accepted_time_values is not None and source_count!=len(values): raise ValueError("Plot state count differs from accepted reaction steps")
+    return model,ids,coordinates,latest[1],{"plotVersion":version,"completeFramesRead":count,"normalizedTime":latest[0],"inputFileSha256":raw_sha,"legacyWindowsLineEndings":expected_input_sha is None and raw_sha!=canonical_sha,
+        "timeIdentity":"Consecutive native reaction steps matched one-to-one to accepted plot states" if accepted_time_values is not None else "Strictly increasing native float32 plot times",
+        "roundedPlotTimeDuplicates":rounded_duplicates,"maximumPlotTimeRepresentationError":maximum_time_error}
 
 
 def check_fixture(model,ids,displacement,time_value):
@@ -138,7 +197,7 @@ def self_check():
     print(json.dumps({"status":"Pinned plot reader passes independent homogeneous deformation and prescribed-fixture checks","maximumPositionErrorM":coupon_error,"maximumFixtureErrorM":error}))
 
 
-def draw(folder,maximum_time=None):
+def draw(folder,maximum_time=None,match_reaction_times=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -147,7 +206,7 @@ def draw(folder,maximum_time=None):
     state=json.loads((folder/"process.json").read_text())
     source_time=state.get("lastConvergedNormalizedTime",1)
     maximum_time=source_time if maximum_time is None else min(maximum_time,source_time)
-    model,ids,xyz,u,info=read_plot(folder,maximum_time)
+    model,ids,xyz,u,info=read_plot(folder,maximum_time,accepted_time_values=accepted_times(folder) if match_reaction_times else None)
     prefix=info["normalizedTime"]<source_time-1e-7
     info.update(maximumFixtureErrorM=check_fixture(model,ids,u,info["normalizedTime"]),curveAccepted=state.get("curveAccepted",False) and not prefix,sourceModelSha256=state["modelSha256"],sourceLastAcceptedTime=source_time,earlierPrefix=prefix,requestedMaximumTime=maximum_time)
     lookup={int(n):i for i,n in enumerate(ids)}
@@ -179,7 +238,7 @@ def draw(folder,maximum_time=None):
         for axis in (ax.xaxis,ax.yaxis,ax.zaxis): axis.set_major_locator(MaxNLocator(3,prune="both"))
     fig.suptitle("Synthetic bumper deformation — diagnostic only"+(" — earlier prefix" if prefix else "" )+("" if state.get("curveAccepted",False) else " — solve incomplete"),fontsize=13)
     fig.text(.5,.025,"Displacement scale 1×. Quadratic faces tessellated for display. No physical-material correlation claimed.",ha="center",fontsize=9)
-    stem="deformation-diagnostic"+(f"-prefix-{maximum_time:.8f}" if prefix else "")
+    stem="deformation-diagnostic"+("-native-times" if match_reaction_times else "")+(f"-prefix-{maximum_time:.8f}" if prefix else "")
     fig.tight_layout(rect=(0,.04,1,.95));output=folder/(stem+".png");fig.savefig(output,dpi=150);plt.close(fig)
     (folder/(stem+".json")).write_text(json.dumps(info,indent=2));print(json.dumps(info|{"image":str(output)}))
 
@@ -187,8 +246,9 @@ def draw(folder,maximum_time=None):
 if __name__=="__main__":
     parser=argparse.ArgumentParser();parser.add_argument("--self-check",action="store_true");parser.add_argument("--folder",type=Path)
     parser.add_argument("--maximum-time",type=float,help="Inspect only an earlier unambiguous normalized-time prefix; never repairs or accepts a failed curve.")
+    parser.add_argument("--match-reaction-times",action="store_true",help="Match all accepted plot states one-to-one to the native consecutive reaction steps; supports rounded float32 plot timestamps")
     args=parser.parse_args()
     if args.maximum_time is not None and (not np.isfinite(args.maximum_time) or not 0<=args.maximum_time<=1): parser.error("--maximum-time must be finite and between zero and one")
     if args.self_check: self_check()
-    elif args.folder: draw(args.folder.resolve(),args.maximum_time)
+    elif args.folder: draw(args.folder.resolve(),args.maximum_time,args.match_reaction_times)
     else: parser.error("Choose --self-check or --folder")

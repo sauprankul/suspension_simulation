@@ -82,7 +82,8 @@ def self_check():
 
 def check_history(folder):
     """Check every complete tet10 state, without interpolating or repairing it."""
-    model, ids, xyz, _, info = plot.read_plot(folder)
+    times=plot.accepted_times(folder)
+    model, ids, xyz, _, info = plot.read_plot(folder,accepted_time_values=times)
     if abs(info["normalizedTime"]-1)>1e-7:
         raise ValueError("Full geometry verification requires the complete requested stroke")
     frames=[]
@@ -94,13 +95,15 @@ def check_history(folder):
                        "minimumSampledRelativeJacobian":result["minimumSampledRelativeJacobian"],
                        "minimumFourPointQuadratureRelativeJacobian":result["minimumFourPointQuadratureRelativeJacobian"],
                        "maximumFixtureErrorM":plot.check_fixture(model,ids,displacement,time_value)})
-    plot.read_plot(folder,on_frame=check)
+    plot.read_plot(folder,on_frame=check,accepted_time_values=times)
     if not frames or abs(frames[0]["normalizedTime"])>1e-8:
         raise ValueError("Full geometry verification requires the actual initial frame")
     return {"inputFileSha256":info["inputFileSha256"],"framesChecked":len(frames),
             "tetrahedra":len(model.findall("Mesh/Elements[@type='tet10']/elem")),"locationsPerTet":15,
             "minimumSampledRelativeJacobian":min(f["minimumSampledRelativeJacobian"] for f in frames),
             "maximumFixtureErrorM":max(f["maximumFixtureErrorM"] for f in frames),"frames":frames,
+            "timeIdentity":info["timeIdentity"],"roundedPlotTimeDuplicates":info["roundedPlotTimeDuplicates"],
+            "maximumPlotTimeRepresentationError":info["maximumPlotTimeRepresentationError"],
             "claim":"Positive sampled Jacobians and prescribed-fixture motion at every stored state; not a proof of global bijectivity or general collision coverage"}
 
 
@@ -109,6 +112,7 @@ if __name__ == "__main__":
     parser.add_argument("--folder", type=Path)
     parser.add_argument("--self-check", action="store_true")
     parser.add_argument("--history", action="store_true", help="Check all states through the complete requested stroke; reject sampled inversion or ambiguous plot times")
+    parser.add_argument("--match-reaction-times", action="store_true", help="Match plot states to native consecutive reaction times for a single-state diagnostic")
     args = parser.parse_args()
     if args.self_check:
         self_check()
@@ -121,8 +125,8 @@ if __name__ == "__main__":
         print(json.dumps({k:v for k,v in result.items() if k!="frames"}))
         raise SystemExit(0)
     journal = json.loads((args.folder / "process.json").read_text())
-    model, ids, xyz, u, info = plot.read_plot(args.folder, journal.get("lastConvergedNormalizedTime", 1.))
+    model, ids, xyz, u, info = plot.read_plot(args.folder, journal.get("lastConvergedNormalizedTime", 1.),accepted_time_values=plot.accepted_times(args.folder) if args.match_reaction_times else None)
     result = sample(model, ids, xyz, u) | info
     result["maximumFixtureErrorM"] = plot.check_fixture(model, ids, u, info["normalizedTime"])
-    (args.folder / "mesh-diagnostic.json").write_text(json.dumps(result, indent=2))
+    (args.folder / ("mesh-diagnostic-native-times.json" if args.match_reaction_times else "mesh-diagnostic.json")).write_text(json.dumps(result, indent=2))
     print(json.dumps(result))

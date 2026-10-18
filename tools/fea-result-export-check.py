@@ -18,6 +18,21 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("exporter",ROOT/"tools/fea-result-export.py")
 exporter=importlib.util.module_from_spec(spec);spec.loader.exec_module(exporter)
 SOURCE=ROOT/"artifacts/febio-verification/coupon-0_0060-0.30-896b952b8506"
+ROUNDED=ROOT/"artifacts/febio-verification/step-0_0060-0.60-24204a4f1561/run-20261018T021330Z-3f1e4ad9"
+
+
+def children(data,start,end):
+    while start<end:
+        tag,size=struct.unpack_from("<II",data,start)
+        yield tag,start+8,start+8+size
+        start+=8+size
+    assert start==end
+
+
+def child(data,start,end,tag):
+    matches=[(a,b) for key,a,b in children(data,start,end) if key==tag]
+    assert len(matches)==1
+    return matches[0]
 
 
 def run():
@@ -44,6 +59,20 @@ def run():
                 raise ValueError("Exported actual force/deformation fails independent analytic coupon")
         assert result["frames"][0]["normalizedTime"]==0 and result["curve"][0]=={"compressionM":0.,"forceN":0.}
         assert result["complete"] and not result["curveAccepted"]  # Legacy verification is not promoted.
+
+        # Real adaptive steps round to duplicate plot times. Bind every native
+        # accepted state to its consecutive reaction record without interpolation.
+        with contextlib.redirect_stdout(io.StringIO()): rounded=exporter.export(ROUNDED,work/"rounded.json")
+        native_times=exporter.reader.accepted_times(ROUNDED)
+        manifest=json.loads((work/"rounded.manifest.json").read_text())
+        assert manifest["completeFramesRead"]==len(native_times)==132 and manifest["roundedPlotTimeDuplicates"]>0
+        assert not rounded["complete"] and not rounded["curveAccepted"]
+        actual={p["compressionM"]:p["forceN"] for p in rounded["curve"]}
+        assert all(frame["normalizedTime"] in native_times and frame["forceN"]==actual[frame["compressionM"]] for frame in rounded["frames"])
+        assert rounded["frames"][-1]["normalizedTime"]==native_times[-1]
+        try: exporter.reader.read_plot(ROUNDED)
+        except ValueError as error: assert "strictly ordered" in str(error)
+        else: raise AssertionError("Unbound ambiguous float32 times were accepted")
 
         def reject(label,mutation):
             folder=work/label;shutil.copytree(coupon,folder);mutation(folder)
@@ -78,7 +107,22 @@ def run():
             if not last: raise AssertionError("No plot state")
             path.write_bytes(data+last)
         reject("duplicate-plot-time",repeated_state)
-    print(json.dumps({"status":"passed","actualFramesChecked":len(errors),"maximumIndependentPositionErrorM":max(errors),"rejected":rejected}))
+
+        def wrong_step(folder):
+            path=folder/"TOP.txt";lines=path.read_text().splitlines()
+            at=[i for i,line in enumerate(lines) if line.startswith("*Step")][1]
+            lines[at]="*Step = 2";path.write_text("\n".join(lines))
+        reject("missing-native-step",wrong_step)
+
+        def plot_header(folder,tag,value):
+            path=folder/"case.xplt";data=bytearray(path.read_bytes())
+            states=[(a,b) for key,a,b in children(data,4,len(data)) if key==0x02000000]
+            a,b=child(data,*states[1],0x02010000);a,b=child(data,a,b,tag)
+            struct.pack_into("<f" if tag==0x02010002 else "<I",data,a,value)
+            path.write_bytes(data)
+        reject("wrong-plot-time",lambda folder:plot_header(folder,0x02010002,.125))
+        reject("unconverged-plot-state",lambda folder:plot_header(folder,0x02010003,2))
+    print(json.dumps({"status":"passed","actualFramesChecked":len(errors),"maximumIndependentPositionErrorM":max(errors),"actualRoundedTimeFramesBound":len(native_times),"rejected":rejected}))
 
 
 if __name__=="__main__": run()

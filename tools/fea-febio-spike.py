@@ -365,7 +365,7 @@ def verify_results(folder, report, metadata, args, sets):
         geometry=importlib.util.module_from_spec(geometry_spec);geometry_spec.loader.exec_module(geometry)
         checked=geometry.check_history(folder)
         # Geometry and reaction records must describe the same accepted states.
-        if len(checked["frames"])!=len(top) or any(abs(a["normalizedTime"]-b["time"])>1e-7 for a,b in zip(checked["frames"],top)):
+        if len(checked["frames"])!=len(top) or any(a["normalizedTime"]!=b["time"] for a,b in zip(checked["frames"],top)):
             raise ValueError("Geometry and reaction accepted frames disagree")
         report["geometryHistory"]={k:v for k,v in checked.items() if k!="frames"}
         report["geometryHistory"]["checkerSourceSha256"]=hashlib.sha256(geometry_path.read_bytes()).hexdigest()

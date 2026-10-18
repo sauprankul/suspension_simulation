@@ -13,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -108,29 +109,28 @@ def export(folder,output=None,maximum_frames=61):
     if state["state"]=="solver_succeeded" and "inputFileSha256" in state:
         raise ValueError("Wait for the wrapper's terminal verification outcome before exporting")
     plot_sha=sha(folder/"case.xplt");input_sha=sha(folder/"case.feb")
-    model,ids,xyz,_,info=reader.read_plot(folder,state.get("lastConvergedNormalizedTime",1))
-    if len(ids)>100000 or len(ids)==0: raise ValueError("Node budget exceeded")
+    model=ET.fromstring((folder/"case.feb").read_bytes())
     top,stroke=linear_loading(model)
     node_set=model.find(f"Mesh/NodeSet[@name='{top}']")
     reaction_path=folder/(top+".txt");reaction_sha=sha(reaction_path)
     times,forces=reactions(reaction_path,set(map(int,node_set.text.split(","))))
+    if list(times)!=reader.accepted_times(folder): raise ValueError("Reaction time/step identities disagree")
+    model,ids,xyz,_,info=reader.read_plot(folder,state.get("lastConvergedNormalizedTime",1),accepted_time_values=times)
+    if len(ids)>100000 or len(ids)==0: raise ValueError("Node budget exceeded")
     # Retain the full native reaction curve; only complete plot frames can be shown.
     maximum_time=min(float(times[-1]),info["normalizedTime"])
-    _,_,_,_,info=reader.read_plot(folder,maximum_time)
+    _,_,_,_,info=reader.read_plot(folder,maximum_time,accepted_time_values=times)
     indices=({info["completeFramesRead"]-1} if maximum_frames==1 else
              set(np.linspace(0,info["completeFramesRead"]-1,min(maximum_frames,info["completeFramesRead"])).round().astype(int)))
     frames=[];errors=[]
     def keep(index,time_value,displacement):
         if index not in indices: return
-        if time_value<times[0]-1e-7 or time_value>times[-1]+1e-7 or min(abs(times-time_value))>1e-7:
+        if index>=len(times) or time_value!=times[index]:
             raise ValueError("Plot frame lacks a matching converged reaction record")
-        # XPLT time is float32 whereas text histories retain decimal precision.
-        # Interpolate only that representation difference on the untouched curve.
-        frame_time=min(float(times[-1]),max(float(times[0]),time_value))
         errors.append(reader.check_fixture(model,ids,displacement,time_value))
-        frames.append({"normalizedTime":time_value,"compressionM":stroke*frame_time,
-                       "forceN":float(np.interp(frame_time,times,forces)),"displacementsM":[vector(v) for v in displacement]})
-    reader.read_plot(folder,maximum_time,on_frame=keep)
+        frames.append({"normalizedTime":time_value,"compressionM":stroke*time_value,
+                       "forceN":float(forces[index]),"displacementsM":[vector(v) for v in displacement]})
+    reader.read_plot(folder,maximum_time,on_frame=keep,accepted_time_values=times)
     parts,triangles=boundary(model,set(map(int,ids)))
     complete=bool(abs(frames[-1]["normalizedTime"]-1)<1e-7 and abs(times[-1]-1)<1e-8)
     # Only current explicit verification can claim the declared numerical case.
@@ -163,7 +163,8 @@ def export(folder,output=None,maximum_frames=61):
     output.with_suffix(".reader.py").write_bytes((ROOT/"tools/fea-plot-diagnostic.py").read_bytes())
     manifest={"sourceFolder":str(folder),"exporterSha256":sha(Path(__file__)),"readerSha256":sha(ROOT/"tools/fea-plot-diagnostic.py"),
               "reactionFileSha256":reaction_sha,"processFileSha256":process_sha,"diagnosticFileSha256":hashlib.sha256(data).hexdigest(),
-              "maximumFixtureErrorM":max(errors),"actualInitialFrame":frames[0]["normalizedTime"]==0,"completeFramesRead":info["completeFramesRead"],"exportedFrames":len(frames),"complete":complete,"curveAccepted":accepted}
+              "maximumFixtureErrorM":max(errors),"actualInitialFrame":frames[0]["normalizedTime"]==0,"completeFramesRead":info["completeFramesRead"],"exportedFrames":len(frames),"complete":complete,"curveAccepted":accepted,
+              "timeIdentity":info["timeIdentity"],"roundedPlotTimeDuplicates":info["roundedPlotTimeDuplicates"],"maximumPlotTimeRepresentationError":info["maximumPlotTimeRepresentationError"]}
     output.with_suffix(".manifest.json").write_text(json.dumps(manifest,indent=2))
     print(json.dumps({"output":str(output),"nodes":len(ids),"triangles":len(triangles),"bytes":len(data),**manifest}))
     return result

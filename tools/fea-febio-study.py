@@ -52,7 +52,9 @@ def verified(folder):
             raise ValueError("Archived reaction verification no longer matches native histories")
         recheck={"verifierSourceSha256":hashlib.sha256((ROOT/"tools/fea-febio-spike.py").read_bytes()).hexdigest(),
                  "inputFileSha256":raw,"forceN":checked["forceN"],"imbalanceN":checked["imbalanceN"],"completeReactionAndContactHistories":True}
-        (folder/("study-recheck-"+recheck["verifierSourceSha256"][:12]+".json")).write_text(json.dumps(recheck,indent=2))
+        if "geometryHistory" in checked: recheck["geometryHistory"]=checked["geometryHistory"]
+        identity=hashlib.sha256(json.dumps(recheck,sort_keys=True).encode()).hexdigest()[:12]
+        (folder/("study-recheck-"+identity+".json")).write_text(json.dumps(recheck,indent=2))
     return report
 
 
